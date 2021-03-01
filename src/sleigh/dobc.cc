@@ -1,9 +1,7 @@
 ﻿
 
-#include "sleigh_arch.hh"
+//#include "sleigh_arch.hh"
 #include "sleigh.hh"
-#include "funcdata.hh"
-#include "flow.hh"
 #include "dobc.hh"
 #include <iostream>
 #include <assert.h>

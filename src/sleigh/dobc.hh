@@ -1,6 +1,8 @@
 ﻿
 #include "mcore/mcore.h"
 #include "elfloadimage.hh"
+#include "types.h"
+#include "heritage.hh"
 
 typedef struct funcdata     funcdata;
 typedef struct pcodeop      pcodeop;
@@ -1311,7 +1313,7 @@ struct dobc {
 
     ContextDatabase *context = NULL;
     Translate *trans = NULL;
-    TypeFactory *types;
+    //TypeFactory *types;
 
     struct {
         int counts = 0;
