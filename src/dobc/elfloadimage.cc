@@ -27,7 +27,7 @@ ElfLoadImage::~ElfLoadImage()
     file_unload((char *)filedata);
 }
 
-void ElfLoadImage::loadFill(uint1 *ptr, int size, const Address &addr) 
+int ElfLoadImage::loadFill(uint1 *ptr, int size, const Address &addr) 
 {
     unsigned start = (unsigned)addr.getOffset();
     if ((start + size) > filelen) {
@@ -37,7 +37,7 @@ void ElfLoadImage::loadFill(uint1 *ptr, int size, const Address &addr)
         ptr[1] = 0x22;
         ptr[2] = 0x33;
         ptr[3] = 0x44;
-        return;
+        return 0;
     }
 
     /* FIXME: .got表我没有生成，这里直接根据IDA的结构，手动写了*/
@@ -46,10 +46,11 @@ void ElfLoadImage::loadFill(uint1 *ptr, int size, const Address &addr)
         ptr[1] = 0x57;
         ptr[2] = 0x08;
         ptr[3] = 0x00;
-        return;
+        return 0;
     }
 
     memcpy(ptr, filedata + start, size);
+    return 0;
 }
 
 bool ElfLoadImage::getNextSymbol(LoadImageFunc &record) 

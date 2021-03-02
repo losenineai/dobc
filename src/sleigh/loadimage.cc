@@ -79,7 +79,7 @@ void RawLoadImage::adjustVma(long adjust)
   vma += adjust;
 }
 
-void RawLoadImage::loadFill(uint1 *ptr,int4 size,const Address &addr)
+int RawLoadImage::loadFill(uint1 *ptr,int4 size,const Address &addr)
 
 {
   uintb curaddr = addr.getOffset();
@@ -92,7 +92,7 @@ void RawLoadImage::loadFill(uint1 *ptr,int4 size,const Address &addr)
       if (offset == 0)		// Initial address not within file
 	break;
       memset(ptr+offset,0,size); // Fill out the rest of the buffer with 0
-      return;
+      return 0;
     }
     readsize = size;
     if (curaddr + readsize > filesize) // Adjust to biggest possible read
@@ -109,4 +109,6 @@ void RawLoadImage::loadFill(uint1 *ptr,int4 size,const Address &addr)
     addr.printRaw(errmsg);
     throw DataUnavailError(errmsg.str());
   }
+
+  return 0;
 }

@@ -22,7 +22,7 @@ public:
     标识是否是数据还是代码 */
     int markData(int offset);
     bool isData(const Address &a);
-    virtual void loadFill(uint1 *ptr,int4 size,const Address &addr);
+    virtual int loadFill(uint1 *ptr,int4 size,const Address &addr);
     virtual string getArchType(void) const { return is64bit?"Elf64":"Elf32"; }
     virtual bool getNextSymbol(LoadImageFunc &record); 
     virtual void adjustVma(long adjust) { }
