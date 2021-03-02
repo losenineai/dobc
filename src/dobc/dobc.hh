@@ -1291,6 +1291,8 @@ struct funcdata {
     /* 标注程序中的堆栈中，某些360的重要字段，方便分析，这个只是在前期的debug有用，
     实际优化中是用不到的，所以它不属于硬编码 */
     void        vmp360_marker(pcodeop *op);
+
+    int         ollvm_deshell();
 };
 
 struct func_call_specs {
@@ -1319,6 +1321,10 @@ struct dobc {
         int counts = 0;
         funcdata *list = NULL;
     } funcs;
+
+#define PROTECT_OLLVM           0
+#define PROTECT_360FREE         1
+    int protect_type = -1;
 
     int max_basetype_size;
     int min_funcsymbol_size;
@@ -1361,6 +1367,7 @@ struct dobc {
     bool        is_cpu_base_reg(const Address &addr) { return cpu_base_regs.find(addr) != cpu_base_regs.end();  }
 
     void    plugin_dvmp360();
+    void    plugin_ollvm();
 
     void gen_sh(void);
     void init_abbrev();

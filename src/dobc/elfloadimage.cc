@@ -9,15 +9,6 @@ ElfLoadImage::ElfLoadImage(const char *filename):LoadImageB(filename)
         exit(0);
     }
 
-#if 1
-    // FIXME:我们静态载入elf的时候，没有填got表，这里直接手动填一个了
-    // 我们对所有访问got区段的值，都放回
-    filedata[0xfe8c] = 0x28;
-    filedata[0xfe8c + 1] = 0x60;
-    filedata[0xfe8c + 2] = 0x09;
-    filedata[0xfe8c + 3] = 0x00;
-#endif
-
     //isdata = bitset_new(filelen);
     cur_sym = -1;
 }

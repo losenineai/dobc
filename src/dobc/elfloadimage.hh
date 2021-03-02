@@ -22,6 +22,8 @@ public:
     标识是否是数据还是代码 */
     int markData(int offset);
     bool isData(const Address &a);
+#define DATA_IN_CODE            0
+#define DATA_IN_BSS             1
     virtual int loadFill(uint1 *ptr,int4 size,const Address &addr);
     virtual string getArchType(void) const { return is64bit?"Elf64":"Elf32"; }
     virtual bool getNextSymbol(LoadImageFunc &record); 

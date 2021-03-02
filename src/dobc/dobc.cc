@@ -26,7 +26,7 @@
 #define print_level		3
 
 static char help[] = {
-    "dobc [.sla filename] [filename]"
+    "dobc [.sla filename] [-type (360free|ollvm)] [filename]"
 };
 
 static dobc *g_dobc = NULL;
@@ -273,20 +273,10 @@ int valuetype::cmp(const valuetype &b) const
 // LoadImageB的，而不是ElfLoadImage的···
 void dobc::run()
 {
-
-#if 0
-    LoadImageFunc sym;
-    while (loader->getNextSymbol(sym)) {
-        if (!sym.size) continue;
-
-        dump_function(sym, 1);
-    }
-#else
-    //dump_function("_Z10__fun_a_18Pcj");
-    //dump_function("_Z9__arm_a_0v");
-    //dump_function("_Z10__arm_a_21v");
-    plugin_dvmp360();
-#endif
+    if (protect_type == PROTECT_OLLVM)
+        plugin_ollvm();
+    else if (protect_type == PROTECT_360FREE)
+        plugin_dvmp360();
 }
 
 void dobc::init_abbrev()
@@ -361,6 +351,13 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
     }
 
     return NULL;
+}
+
+void dobc::plugin_ollvm()
+{
+    funcdata *fd_main = find_func("JNI_OnLoad");
+
+
 }
 
 void dobc::plugin_dvmp360()
@@ -574,7 +571,7 @@ funcdata* dobc::find_func_by_alias(const string &alias)
 #if defined(DOBC)
 int main(int argc, char **argv)
 {
-    if (argc != 3) {
+    if (argc != 4) {
         puts(help);
         return 0;
     }
@@ -2947,6 +2944,36 @@ int         funcdata::vmp360_detect_framework_info()
 
     if (vmp360_detect_safezone())
         throw LowlevelError("vmp360_detect_safezone() failure ");
+
+    return 0;
+}
+
+int         funcdata::ollvm_deshell()
+{
+    int i;
+    unsigned int tick = mtime_tick();
+
+    heritage();
+
+    for (i = 0; get_vmhead(); i++) {
+        loop_unrolling4(get_vmhead(), i, _NOTE_VMBYTEINDEX);
+        dead_code_elimination(bblocks.blist, RDS_UNROLL0);
+#if defined(DCFG_CASE)
+        dump_cfg(name, _itoa(i, buf, 10), 1);
+#endif
+    }
+
+    dump_exe();
+
+    dump_cfg(name, "final", 1);
+    dump_pcode("1");
+    dump_djgraph("1", 1);
+    //fd_main->dump_phi_placement(17, 5300);
+    dump_store_info("1");
+    dump_loop("1");
+
+	printf("deshell spent %u ms\n", mtime_tick() - tick);
+
 
     return 0;
 }
