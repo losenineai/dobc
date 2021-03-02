@@ -11,7 +11,9 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 include_directories(${PROJECT_SOURCE_DIR}/src/)
+include_directories(${PROJECT_SOURCE_DIR}/src/sleigh)
 
 add_subdirectory(${PROJECT_SOURCE_DIR}/src/mcore)
 add_subdirectory(${PROJECT_SOURCE_DIR}/src/sleigh)
+add_subdirectory(${PROJECT_SOURCE_DIR}/src/dobc)
 
