@@ -18,16 +18,12 @@
     "done\n" 
 
 #define ENABLE_DUMP_INST                1
-#define ENABLE_DUMP_PCODE               0
+//#define ENABLE_DUMP_PCODE               1
 
 #define func_format_s					"%s"
 #define func_format()					""
 #undef print_level
 #define print_level		3
-
-static char help[] = {
-    "dobc [.sla filename] [-type (360free|ollvm)] [filename]"
-};
 
 static dobc *g_dobc = NULL;
 
@@ -36,7 +32,7 @@ static dobc *g_dobc = NULL;
 #define COLOR_ASM_ADDR                  "#33A2FF"               
 #define COLOR_ASM_STACK_DEPTH           "green"
 
-#if 0
+#if 1
 #define DCFG_COND_INLINE                
 #define DCFG_BEFORE               
 #define DCFG_AFTER               
@@ -273,9 +269,9 @@ int valuetype::cmp(const valuetype &b) const
 // LoadImageB的，而不是ElfLoadImage的···
 void dobc::run()
 {
-    if (protect_type == PROTECT_OLLVM)
+    if (shelltype == SHELL_OLLVM)
         plugin_ollvm();
-    else if (protect_type == PROTECT_360FREE)
+    else if (shelltype == SHELL_360FREE)
         plugin_dvmp360();
 }
 
@@ -315,17 +311,35 @@ void dobc::init_plt()
     funcdata *fd;
     int i;
 
-    for (i = 0; i < count_of_array(pltlist); i++) {
-        struct pltentry *entry = &pltlist[i];
+    if (shelltype == SHELL_360FREE) {
+        for (i = 0; i < count_of_array(pltlist); i++) {
+            struct pltentry *entry = &pltlist[i];
 
-        Address addr(trans->getDefaultCodeSpace(), entry->addr);
-        fd = new funcdata(entry->name, addr, 0, this);
-        fd->set_exit(entry->exit);
-        fd->funcp.set_side_effect(entry->side_effect);
-        fd->funcp.inputs = entry->input;
-        fd->funcp.output = 1;
+            Address addr(trans->getDefaultCodeSpace(), entry->addr);
+            fd = new funcdata(entry->name, addr, 0, this);
+            fd->set_exit(entry->exit);
+            fd->funcp.set_side_effect(entry->side_effect);
+            fd->funcp.inputs = entry->input;
+            fd->funcp.output = 1;
+            add_func(fd);
+        }
+    }
+    else {
+        Address addr(trans->getDefaultCodeSpace(), stack_check_fail_addr);
+        fd = new funcdata("__stack_check_fail", addr, 0, this);
+        fd->set_exit(1);
         add_func(fd);
     }
+}
+
+void        dobc::set_shelltype(char *st)
+{
+    if (!strcmp(st, "ollvm"))
+        shelltype = SHELL_OLLVM;
+    else if (!strcmp(st, "360free"))
+        shelltype = SHELL_360FREE;
+    else
+        throw LowlevelError("not support shell type" );
 }
 
 const string& dobc::get_abbrev(const string &name)
@@ -357,7 +371,7 @@ void dobc::plugin_ollvm()
 {
     funcdata *fd_main = find_func("JNI_OnLoad");
 
-
+    fd_main->ollvm_deshell();
 }
 
 void dobc::plugin_dvmp360()
@@ -493,6 +507,7 @@ dobc::dobc(const char *sla, const char *bin)
     Element *sleighroot = docstorage.openDocument(slafilename)->getRoot();
     docstorage.registerTag(sleighroot);
     trans->initialize(docstorage); // Initialize the translator
+    //trans->setContextDefault("LRset", 0);
 
     loader->setCodeSpace(trans->getDefaultCodeSpace());
 
@@ -513,7 +528,6 @@ dobc::dobc(const char *sla, const char *bin)
     argument_regs.push_back(&r2_addr);
     argument_regs.push_back(&r3_addr);
 
-    init();
 }
 
 dobc::~dobc()
@@ -568,18 +582,46 @@ funcdata* dobc::find_func_by_alias(const string &alias)
 #define CSPEC_FILE          "../../../Processors/ARM/data/languages/ARM.cspec"
 #define TEST_SO             "../../../data/vmp/360_1/libjiagu.so"
 
+static char help[] = {
+    "dobc [-s .sla filename] [-st (360free|ollvm)] [-i filename] [-stack_check_fail addr]"
+};
+
 #if defined(DOBC)
 int main(int argc, char **argv)
 {
-    if (argc != 4) {
-        puts(help);
-        return 0;
+    int i;
+    char *sla = NULL, *filename = NULL, *st = NULL;
+    intb stack_check_fail_addr = 0;
+
+    for (i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "-s")) {
+            sla = argv[++i];
+        }
+        else if (!strcmp(argv[i], "-st")) {
+            st = argv[++i];
+        }
+        else if (!strcmp(argv[i], "-i")) {
+            filename = argv[++i];
+        }
+        else if (!strcmp(argv[i], "-stack_check_fail")) {
+            stack_check_fail_addr = strtol(argv[++i], NULL, 16);
+        }
     }
 
-    dobc d(argv[1], argv[2]);
+    if (!sla || !st || !filename || !stack_check_fail_addr) {
+        printf("argument error\n");
+        puts(help);
+        return -1;
+    }
+
+    dobc d(sla, filename);
+
+    d.set_shelltype(st);
+    d.stack_check_fail_addr = stack_check_fail_addr;
 
     g_dobc = &d;
 
+    d.init();
     d.run();
 
     return 0;
@@ -2952,11 +2994,19 @@ int         funcdata::ollvm_deshell()
 {
     int i;
     unsigned int tick = mtime_tick();
+    char buf[16];
+
+    AssemblyRaw assem;
+    Address addr(d->trans->getDefaultCodeSpace(), 0x3442);
+
+    follow_flow();
 
     heritage();
 
+    dump_cfg(name, "orig", 1);
+
     for (i = 0; get_vmhead(); i++) {
-        loop_unrolling4(get_vmhead(), i, _NOTE_VMBYTEINDEX);
+        loop_unrolling4(get_vmhead(), i, _DUMP_ORIG_CASE);
         dead_code_elimination(bblocks.blist, RDS_UNROLL0);
 #if defined(DCFG_CASE)
         dump_cfg(name, _itoa(i, buf, 10), 1);
@@ -3998,7 +4048,7 @@ bool        funcdata::process_instruction(const Address &curaddr, bool &startbas
         --oiter;
     }
 
-    //d->trans->printAssembly(assem, curaddr);
+    d->trans->printAssembly(assem, curaddr);
     step = d->trans->oneInstruction(emitter, curaddr);
 
     VisitStat &stat(visited[curaddr]);
@@ -4150,7 +4200,14 @@ void        funcdata::analysis_jmptable(pcodeop *op)
 
 void        funcdata::generate_ops_start()
 {
-    addrlist.push_back(startaddr);
+    if (startaddr.getOffset() & 1) {
+        d->trans->setContextDefault("TMode", 1);
+        addrlist.push_back(Address(startaddr.getSpace(), startaddr.getOffset() - 1));
+    }
+    else {
+        d->trans->setContextDefault("TMode", 0);
+        addrlist.push_back(startaddr);
+    }
 
     generate_ops();
 }

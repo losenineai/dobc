@@ -1,4 +1,4 @@
-file(GLOB srclist *.cc *.c *.hh)
+file(GLOB srclist *.cc *.c *.hh *.h)
 #add_executable(sleighexample ${srclist})
 add_executable(dobc ${srclist})
 

@@ -1322,15 +1322,17 @@ struct dobc {
         funcdata *list = NULL;
     } funcs;
 
-#define PROTECT_OLLVM           0
-#define PROTECT_360FREE         1
-    int protect_type = -1;
+#define SHELL_OLLVM           0
+#define SHELL_360FREE         1
+    int shelltype = -1;
 
     int max_basetype_size;
     int min_funcsymbol_size;
     int max_instructions;
     map<string, string>     abbrev;
     test_cond_inline_fn test_cond_inline;
+
+    intb    stack_check_fail_addr;
 
     Address     sp_addr;
     Address     r0_addr;
@@ -1352,6 +1354,7 @@ struct dobc {
     void init();
     /* 初始化位置位置无关代码，主要时分析原型 */
     void        init_plt(void);
+    void        set_shelltype(char *shelltype);
 
     void        run();
     void        dump_function(char *name);
