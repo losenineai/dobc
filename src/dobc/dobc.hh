@@ -762,6 +762,7 @@ struct funcdata {
 		1. 一种是快速但不完全，可以做peephole，不能做register allocation
 		2. 一种是慢速但完全，可以参与所有优化 */
 		unsigned enable_complete_liverange : 1;
+        unsigned thumb : 1;
     } flags = { 0 };
 
     enum {

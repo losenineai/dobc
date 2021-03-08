@@ -507,6 +507,9 @@ dobc::dobc(const char *sla, const char *bin)
     Element *sleighroot = docstorage.openDocument(slafilename)->getRoot();
     docstorage.registerTag(sleighroot);
     trans->initialize(docstorage); // Initialize the translator
+    // FIXME:别动这一行，会导致在某些情况下，thumb指向的代码，会解析成arm
+    // 你怎么改TMode都没用
+    trans->allowContextSet(false); 
     //trans->setContextDefault("LRset", 0);
 
     loader->setCodeSpace(trans->getDefaultCodeSpace());
@@ -3337,6 +3340,8 @@ funcdata::funcdata(const char *nm, const Address &a, int size, dobc *d1)
 
     emitter.fd = this;
 
+    flags.thumb = a.getOffset() & 1;
+
     memstack.size = 256 * 1024;
     memstack.bottom = (u1 *)malloc(sizeof (u1) * memstack.size);
     memstack.top = memstack.bottom + memstack.size;
@@ -4048,6 +4053,13 @@ bool        funcdata::process_instruction(const Address &curaddr, bool &startbas
         --oiter;
     }
 
+    //d->trans->setContextDefault("TMode", flags.thumb);
+    d->context->setVariableDefault("TMode", flags.thumb);
+
+    if (curaddr.getOffset() == 0x355e) {
+        printf("aaa\n");
+    }
+
     d->trans->printAssembly(assem, curaddr);
     step = d->trans->oneInstruction(emitter, curaddr);
 
@@ -4200,14 +4212,7 @@ void        funcdata::analysis_jmptable(pcodeop *op)
 
 void        funcdata::generate_ops_start()
 {
-    if (startaddr.getOffset() & 1) {
-        d->trans->setContextDefault("TMode", 1);
-        addrlist.push_back(Address(startaddr.getSpace(), startaddr.getOffset() - 1));
-    }
-    else {
-        d->trans->setContextDefault("TMode", 0);
-        addrlist.push_back(startaddr);
-    }
+    addrlist.push_back(startaddr - flags.thumb);
 
     generate_ops();
 }
