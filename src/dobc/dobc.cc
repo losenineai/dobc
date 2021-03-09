@@ -17,7 +17,7 @@
     "   dot -Tsvg -o ${filename%.*}.svg $filename\n" \
     "done\n" 
 
-#define ENABLE_DUMP_INST                1
+//#define ENABLE_DUMP_INST                1
 //#define ENABLE_DUMP_PCODE               1
 
 #define func_format_s					"%s"
@@ -196,6 +196,8 @@ void pcodeemit2::dump(const Address &addr, OpCode opc, VarnodeData *outvar, Varn
         op = fd->newop(isize, addr);
 
     fd->op_set_opcode(op, opc);
+
+    op->flags.itblock = itblock;
 
     i = 0;
     /* CPUI_CBRANCH的第一个节点，指明当条件为真时的跳转地址，不清楚为什么在IPTR_PROCESSOR内
@@ -507,9 +509,9 @@ dobc::dobc(const char *sla, const char *bin)
     Element *sleighroot = docstorage.openDocument(slafilename)->getRoot();
     docstorage.registerTag(sleighroot);
     trans->initialize(docstorage); // Initialize the translator
-    // FIXME:别动这一行，会导致在某些情况下，thumb指向的代码，会解析成arm
-    // 你怎么改TMode都没用
-    trans->allowContextSet(false); 
+    // 开启这一行，会导致it指令的上下切换出错
+    //trans->allowContextSet(false); 
+    trans->setContextDefault("TMode", 1);
     //trans->setContextDefault("LRset", 0);
 
     loader->setCodeSpace(trans->getDefaultCodeSpace());
@@ -1673,10 +1675,15 @@ int             pcodeop::compute(int inslot, flowblock **branch)
                 int r = (int)in1->get_val();
                 int o;
 
-                o = l - r;
-                if (MSB4(o) != MSB4(l)) {
-                    e = 0;
+                if (MSB4(l) != MSB4(r)) {
                     out->set_val(1);
+                }
+                else {
+                    o = l + r;
+                    if (MSB4(o) != MSB4(l)) {
+                        e = 0;
+                        out->set_val(1);
+                    }
                 }
             }
             else {
@@ -1878,6 +1885,27 @@ int             pcodeop::compute(int inslot, flowblock **branch)
     if ((this == parent->last_op()) && (parent->out.size() == 1))
         *branch = parent->get_out(0);
 
+    return ret;
+}
+
+void            pcodeop::to_constant(void)
+{
+    funcdata *fd = parent->fd;
+
+    while (num_input() > 0)
+        fd->op_remove_input(this, 0);
+
+    fd->op_set_opcode(this, CPUI_COPY);
+    fd->op_set_input(this, fd->create_constant_vn(output->get_val(), output->size), 0);
+}
+
+void            pcodeop::to_constant1(void)
+{
+    funcdata *fd = parent->fd;
+    int i;
+    varnode *vn, *out = output;
+    pcodeop *op;
+
     /*
     非trace条件才能开启常量持久化
     */
@@ -1926,21 +1954,6 @@ int             pcodeop::compute(int inslot, flowblock **branch)
             }
         }
     }
-
-    /* 计算sp */
-
-    return ret;
-}
-
-void            pcodeop::to_constant(void)
-{
-    funcdata *fd = parent->fd;
-
-    while (num_input() > 0)
-        fd->op_remove_input(this, 0);
-
-    fd->op_set_opcode(this, CPUI_COPY);
-    fd->op_set_input(this, fd->create_constant_vn(output->get_val(), output->size), 0);
 }
 
 void            pcodeop::to_rel_constant()
@@ -2936,6 +2949,30 @@ void        funcdata::remove_calculated_loops()
     heritage();
 }
 
+int         funcdata::cmp_itblock_cbranch_conditions(pcodeop *cbr1, pcodeop* cbr2)
+{
+    list<pcodeop *>::iterator it1 = cbr1->insertiter;
+    list<pcodeop *>::iterator it2 = cbr2->insertiter;
+
+    pcodeop *p1 = *--it1;
+    pcodeop *pp1 = *--it1;
+
+    pcodeop *p2 = *--it2;
+    pcodeop *pp2 = *--it2;
+
+    /* 这个复杂的表达式，只是模拟ssa的效果，保证du链，确保我们是在比较同一个东西 */
+    if ((p1->opcode == CPUI_BOOL_NEGATE) && (p2->opcode == CPUI_BOOL_NEGATE) && (pp1->opcode == pp2->opcode)
+        && p1->output->get_addr() == cbr1->get_in(1)->get_addr()
+        && pp1->output->get_addr() == p1->get_in(0)->get_addr()
+        && p2->output->get_addr() == cbr2->get_in(1)->get_addr()
+        && pp2->output->get_addr() == p2->get_in(0)->get_addr()
+        && (pp1->get_in(0)->get_addr() == pp2->get_in(0)->get_addr())) {
+        return 0;
+    }
+
+    return -1;
+}
+
 bool        funcdata::vmp360_detect_vmeip()
 {
     flowblock *vmhead = get_vmhead(), *exit = NULL;
@@ -3008,7 +3045,9 @@ int         funcdata::ollvm_deshell()
 
     dump_cfg(name, "orig", 1);
 
-    for (i = 0; get_vmhead(); i++) {
+    //for (i = 0; get_vmhead(); i++) 
+    for (i = 0; i < 1; i++) 
+    {
         loop_unrolling4(get_vmhead(), i, _DUMP_ORIG_CASE);
         dead_code_elimination(bblocks.blist, RDS_UNROLL0);
 #if defined(DCFG_CASE)
@@ -4053,14 +4092,19 @@ bool        funcdata::process_instruction(const Address &curaddr, bool &startbas
         --oiter;
     }
 
-    //d->trans->setContextDefault("TMode", flags.thumb);
-    d->context->setVariableDefault("TMode", flags.thumb);
+    d->context->setVariable("TMode", curaddr, flags.thumb);
 
-    if (curaddr.getOffset() == 0x355e) {
-        printf("aaa\n");
+    if (d->context->getVariable("condit", curaddr)) {
+        emitter.enter_itblock();
+    }
+    else {
+        emitter.exit_itblock();
     }
 
+#if ENABLE_DUMP_INST
     d->trans->printAssembly(assem, curaddr);
+#endif
+
     step = d->trans->oneInstruction(emitter, curaddr);
 
     VisitStat &stat(visited[curaddr]);
@@ -4291,7 +4335,7 @@ void        funcdata::collect_edges()
 
     iter = deadlist.begin();
     iterend = deadlist.end();
-    while (iter != iterend) {
+    for (; iter != iterend; ) {
         op = *iter++;
         if (iter == iterend)
             nextstart = true;
@@ -4343,6 +4387,25 @@ void        funcdata::collect_edges()
             break;
 
         case CPUI_CBRANCH:
+            if (op->flags.itblock) {
+                list<pcodeop *>::const_iterator it = iter, next_it;
+
+                for (; (it != deadlist.end()) && (*it)->flags.itblock; it = next_it) {
+                    pcodeop *p = *it;
+                    next_it = ++it;
+
+                    if (p->opcode == CPUI_CBRANCH) {
+                        if (cmp_itblock_cbranch_conditions(op, p))
+                            break;
+                        else {
+                            op_unset_input(op, 0);
+                            op_set_input(op, clone_varnode(p->get_in(0)), 0);
+                            op_destroy_raw(p);
+                        }
+                    }
+                }
+            }
+
             target_op = fallthru_op(op);
             block_edge.push_back(new op_edge(op, target_op));
 
@@ -4368,6 +4431,7 @@ void        funcdata::collect_edges()
             }
             break;
         }
+
     }
 }
 
@@ -5595,6 +5659,7 @@ cp_label1:
         }
 
         r = op->compute(-1, &b);
+        op->to_constant1();
         if (r == ERR_FREE_SELF) continue;
         ret |= r;
 

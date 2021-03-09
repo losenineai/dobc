@@ -24,9 +24,12 @@ class pcodeemit2 : public PcodeEmit {
 public:
     funcdata *fd = NULL;
     FILE *fp = stdout;
+    int itblock = 0;
     virtual void dump(const Address &address, OpCode opc, VarnodeData *outvar, VarnodeData *vars, int size);
 
     void set_fp(FILE *f) { fp = f;  }
+    void enter_itblock() { itblock = 1;  }
+    void exit_itblock() { itblock = 0;  }
 };
 
 enum ARMInstType {
@@ -295,6 +298,7 @@ struct pcodeop {
             */
         unsigned val_from_sp_alloc : 1;     // 这个load的值并非来自于store，而是来自于sp的内存分配行为
 		unsigned uncalculated_store : 1;	// 这个store节点是不可计算的
+        unsigned itblock : 1;
     } flags = { 0 };
 
     OpCode opcode;
@@ -380,6 +384,7 @@ struct pcodeop {
     intb            get_call_offset() { return get_in(0)->get_addr().getOffset(); }
     /* 当自己的结果值为output时，把自己整个转换成copy形式的constant */
     void            to_constant(void);
+    void            to_constant1(void);
     void            to_rel_constant(void);
     void            to_copy(varnode *in);
     /* 转换成nop指令 */
@@ -689,7 +694,7 @@ typedef struct jmptable     jmptable;
 struct op_edge {
     pcodeop *from;
     pcodeop *to;
-    int t = 0;
+    int t = 0; // true flag
 
     op_edge(pcodeop *from, pcodeop *to);
     ~op_edge();
@@ -1260,6 +1265,8 @@ struct funcdata {
     void        remove_calculated_loop(flowblock *lheader);
     void        remove_calculated_loops();
 
+    int         cmp_itblock_cbranch_conditions(pcodeop *cbr1, pcodeop* cbr2);
+
     /* 针对不同的加壳程序生成不同的vmeip检测代码 */
     bool        vmp360_detect_vmeip();
     /* FIXME:应该算是代码中最重的硬编码，有在尝试去理解整个VMP框架的堆栈部分，
@@ -1292,6 +1299,7 @@ struct funcdata {
     /* 标注程序中的堆栈中，某些360的重要字段，方便分析，这个只是在前期的debug有用，
     实际优化中是用不到的，所以它不属于硬编码 */
     void        vmp360_marker(pcodeop *op);
+    pcodeop*    lastop() { return deadlist.back(); }
 
     int         ollvm_deshell();
 };
