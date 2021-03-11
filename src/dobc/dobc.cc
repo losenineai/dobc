@@ -6528,6 +6528,115 @@ flowblock*       funcdata::loop_unrolling(flowblock *h, flowblock *end, uint32_t
     return cur;
 }
 
+flowblock*  funcdata::loop_dfa_connect(flowblock *h, flowblock *end, uint32_t flags)
+{
+    int i, inslot, ret;
+    flowblock *start,  *cur, *prev, *br, *tmpb, *exit = NULL;
+    list<pcodeop *>::const_iterator it;
+    pcodeop *p, *op;
+    varnode *iv = NULL;
+    vector<flowblock *> propchain;
+
+    printf("\n\nloop_unrolling sub_%llx \n", h->get_start().getOffset());
+
+    iv = detect_induct_variable(h, exit);
+
+    inslot = 0;
+
+    prev = start = loop_pre_get(h, 0);
+    trace.push_back((pcodeop *)inslot);
+    cur = h;
+
+    if (flags & _NOTE_VMBYTEINDEX) {
+        iv = detect_induct_variable(h, exit);
+    }
+
+    do {
+        printf("\tprocess flowblock sub_%llx\n", cur->get_start().getOffset());
+
+        it = cur->ops.begin();
+        inslot = cur->get_inslot(prev);
+        assert(inslot >= 0);
+
+        for (; it != cur->ops.end(); it++) {
+            p = *it;
+
+            br = NULL;
+            p->set_trace();
+            ret = p->compute(inslot, &br);
+
+            if (flags & _DUMP_PCODE) {
+                char buf[256];
+                p->dump(buf, PCODE_DUMP_SIMPLE & ~PCODE_HTML_COLOR);
+                printf("%s\n", buf);
+            }
+
+            trace_push(p);
+        }
+
+        if ((cur->out.size() > 1) && (ret != ERR_MEET_CALC_BRANCH)) {
+            printf("found undefined-bcond in block[%x]\n", cur->sub_id());
+            break;
+        }
+
+        prev = cur;
+        cur = br;
+
+    } while (cur != end);
+
+    /* 把刚才走过的路径复制出来，剔除jmp节点，最后一个节点的jmp保留 */
+    br = trace.back()->parent;
+    cur = bblocks.new_block_basic(this);
+
+    if (flags & _NOTE_VMBYTEINDEX) {
+        if (!iv->is_constant())
+            throw LowlevelError("vm  byteindex must be constant");
+        cur->vm_byteindex = iv->get_val();
+        printf("def op = %d, val = %d, opcode = %s\n", iv->def->start.getTime(), cur->vm_byteindex, get_opname(iv->def->opcode));
+    }
+
+    user_offset += user_step;
+    Address addr(d->get_code_space(), user_offset);
+    /* 进入节点抛弃 */
+    for (i = 0; trace[i]->parent == start; i++);
+    /* 从主循环开始 */
+    for (; i < trace.size(); i++) {
+        funcdata *callfd = NULL;
+        p = trace[i];
+
+        if ((p->opcode == CPUI_CALLIND) && p->get_in(0)->is_constant()) {
+            Address addr(d->get_code_space(), p->get_in(0)->get_val());
+            callfd = d->find_func(addr);
+        }
+
+        /* 最后一个节点的jmp指令不删除 */
+        if (((i != (trace.size() - 1)) 
+            && ((p->opcode == CPUI_BRANCH) || (p->opcode == CPUI_CBRANCH) || (p->opcode == CPUI_INDIRECT) || (p->opcode == CPUI_MULTIEQUAL) || (p->opcode == CPUI_BRANCHIND))))
+            continue;
+
+        Address addr2(d->get_code_space(), user_offset + p->get_addr().getOffset());
+        const SeqNum sq(addr2, op_uniqid++);
+        op = cloneop(p, sq);
+        op_insert(op, cur, cur->ops.end());
+
+        /* 假如trace以后，发现某个函数可以被计算，把他加入trace列表 */
+        if (callfd && !op->callfd) {
+            add_callspec(op, callfd);
+        }
+    }
+
+    for (i = 0; i < trace.size(); i++) {
+        pcodeop *p = trace[i];
+        p->clear_trace();
+        p->compute(-1, &tmpb);
+    }
+
+    cur->set_initial_range(addr, addr);
+    trace_clear();
+
+    return cur;
+}
+
 int         funcdata::collect_blocks_to_node(vector<flowblock *> &blks, flowblock *start, flowblock *end)
 {
     vector<flowblock *> stack;
@@ -7120,6 +7229,85 @@ pcodeop*    funcdata::get_vmcall(flowblock *b)
     }
 
     return NULL;
+}
+
+flowblock*  funcdata::ollvm_get_head(void)
+{
+    int i, max_count = -1, t;
+    flowblock *max = NULL;
+
+    if (ollvm.head) 
+        return ollvm.head ? NULL : ollvm.head;
+
+    for (i = 0; i < bblocks.blist.size(); i++) {
+        t = bblocks.blist[i]->get_back_edge_count();
+        if (t  > max_count) {
+            max_count = t;
+            max = bblocks.blist[i];
+        }
+    }
+
+    return (ollvm.head = max);
+}
+
+int         funcdata::ollvm_detect_frameworkinfo()
+{
+    if (ollvm_get_head())
+        throw LowlevelError("ollvm get head failure");
+
+    printf("ollvm head [%llx]\n", ollvm.head->get_start().getOffset());
+
+    if (ollvm_detect_fsm())
+        throw LowlevelError("ollvm detect fsm failure");
+
+    printf("ollvm fsm1[%llx] fsm2[%llx]\n", ollvm.st1.getOffset(), ollvm.st2.getOffset());
+
+    return 0;
+}
+
+int         funcdata::ollvm_detect_propchain(vector<flowblock *> &chain)
+{
+    chain.clear();
+
+    return 0;
+}
+
+int         funcdata::ollvm_detect_fsm()
+{
+    flowblock *h = ollvm_get_head();
+    list<pcodeop *>::reverse_iterator it;
+    varnode *in0, *in1, *in;
+
+    for (it = h->ops.rbegin(); it != h->ops.rend(); it++) {
+        pcodeop *p = *it;
+
+        /* 这个地方有点硬编码了，直接扫描sub指令，这个是因为当前的测试用例中的核心VM，用了cmp指令以后
+        生成了sub，这个地方可能更好的方式是匹配更复杂的pattern */
+        if (p->opcode == CPUI_INT_SUB) {
+            in0 = p->get_in(0);
+            in1 = p->get_in(1);
+
+            if (!in0->is_constant() && !in1->is_constant())
+                throw LowlevelError("ollvm_detect_fsm not support two state");
+
+            in = in0->is_constant() ? in1 : in0;
+
+            Address s = in->get_addr();
+
+            for (++it; it != h->ops.rend(); it++) {
+                p = *it;
+                if ((p->opcode == CPUI_COPY) && p->output->get_addr() == s) {
+                    ollvm.st1 = p->get_in(0)->get_addr();
+                    return 0;
+                }
+            }
+
+            break;
+        }
+    }
+
+    throw LowlevelError("ollvm detect fsm error");
+    return 0;
 }
 
 bool        funcdata::use_outside(varnode *vn)

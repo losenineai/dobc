@@ -815,7 +815,9 @@ struct funcdata {
 
     map<Address,VisitStat> visited;
     dobc *d = NULL;
+
     flowblock * vmhead = NULL;
+    Address *iv = NULL;
 
     /* vbank------------------------- */
     struct {
@@ -885,6 +887,13 @@ struct funcdata {
     list<rangenode *> safezone;
     intb     vmeip = 0;
     /* vmp360  end--------- */
+
+    /* ollvm */
+    struct {
+        Address     st1;
+        Address     st2;
+        flowblock*  head;
+    } ollvm;
 
     vector<Address>     addrlist;
     /* 常量cbranch列表 */
@@ -1155,6 +1164,7 @@ struct funcdata {
                 当循环粘展开到最后一个节点，跳出循环时，终止节点就变成了exit节点
     */
     flowblock*  loop_unrolling(flowblock *h, flowblock *end, uint32_t flags, int &meet_exit);
+    flowblock*  loop_dfa_connect(flowblock *h, flowblock *end, uint32_t flags);
     /* 这里的dce加了一个数组参数，用来表示只有当删除的pcode在这个数组里才允许删除 这个是为了方便调试以及还原 */
 #define RDS_0           1
 #define RDS_UNROLL0     2
@@ -1163,6 +1173,12 @@ struct funcdata {
     flowblock*  get_vmhead(void);
     flowblock*  get_vmhead_unroll(void);
     pcodeop*    get_vmcall(flowblock *b);
+    Address&    get_vmhead_iv();
+
+    flowblock*  ollvm_get_head(void);
+    int         ollvm_detect_frameworkinfo();
+    int         ollvm_detect_propchain(vector<flowblock *> &chain);
+    int         ollvm_detect_fsm();
 
     bool        use_outside(varnode *vn);
     void        use2undef(varnode *vn);
