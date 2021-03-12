@@ -6531,7 +6531,7 @@ flowblock*       funcdata::loop_unrolling(flowblock *h, flowblock *end, uint32_t
 flowblock*  funcdata::loop_dfa_connect(flowblock *h, flowblock *end, uint32_t flags)
 {
     int i, inslot, ret;
-    flowblock *start,  *cur, *prev, *br, *tmpb, *exit = NULL;
+    flowblock *start, *cur, *prev, *br, *tmpb, *last;
     list<pcodeop *>::const_iterator it;
     pcodeop *p, *op;
     varnode *iv = NULL;
@@ -6539,24 +6539,16 @@ flowblock*  funcdata::loop_dfa_connect(flowblock *h, flowblock *end, uint32_t fl
 
     printf("\n\nloop_unrolling sub_%llx \n", h->get_start().getOffset());
 
-    iv = detect_induct_variable(h, exit);
+    ollvm_detect_propchain(propchain);
 
-    inslot = 0;
-
-    prev = start = loop_pre_get(h, 0);
-    trace.push_back((pcodeop *)inslot);
-    cur = h;
-
-    if (flags & _NOTE_VMBYTEINDEX) {
-        iv = detect_induct_variable(h, exit);
-    }
+    prev = propchain[0];
+    cur = propchain[1];
 
     do {
         printf("\tprocess flowblock sub_%llx\n", cur->get_start().getOffset());
 
         it = cur->ops.begin();
         inslot = cur->get_inslot(prev);
-        assert(inslot >= 0);
 
         for (; it != cur->ops.end(); it++) {
             p = *it;
@@ -6581,19 +6573,11 @@ flowblock*  funcdata::loop_dfa_connect(flowblock *h, flowblock *end, uint32_t fl
 
         prev = cur;
         cur = br;
-
     } while (cur != end);
 
     /* 把刚才走过的路径复制出来，剔除jmp节点，最后一个节点的jmp保留 */
-    br = trace.back()->parent;
+    last = trace.back()->parent;
     cur = bblocks.new_block_basic(this);
-
-    if (flags & _NOTE_VMBYTEINDEX) {
-        if (!iv->is_constant())
-            throw LowlevelError("vm  byteindex must be constant");
-        cur->vm_byteindex = iv->get_val();
-        printf("def op = %d, val = %d, opcode = %s\n", iv->def->start.getTime(), cur->vm_byteindex, get_opname(iv->def->opcode));
-    }
 
     user_offset += user_step;
     Address addr(d->get_code_space(), user_offset);
@@ -6633,6 +6617,13 @@ flowblock*  funcdata::loop_dfa_connect(flowblock *h, flowblock *end, uint32_t fl
 
     cur->set_initial_range(addr, addr);
     trace_clear();
+
+    bblocks.remove_edge(propchain[0], propchain[1]);
+    bblocks.add_edge(propchain[0], cur);
+    bblocks.add_edge(cur, last);
+
+    heritage_clear();
+    heritage();
 
     return cur;
 }
@@ -7268,6 +7259,20 @@ int         funcdata::ollvm_detect_frameworkinfo()
 int         funcdata::ollvm_detect_propchain(vector<flowblock *> &chain)
 {
     chain.clear();
+
+    flowblock *h = ollvm_get_head(), *pre;
+    int inslot;
+    pcodeop *p = h->find_pcode_def(ollvm.st1);
+    if (p->opcode != CPUI_MULTIEQUAL)
+        throw LowlevelError("ollvm state must be multiequal node");
+
+    pre = loop_pre_get(h, 0);
+
+    inslot = h->get_inslot(pre);
+
+    if (p->get_in(inslot)->is_constant()) {
+    }
+
 
     return 0;
 }
