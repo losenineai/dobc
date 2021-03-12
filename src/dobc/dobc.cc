@@ -3045,10 +3045,12 @@ int         funcdata::ollvm_deshell()
 
     dump_cfg(name, "orig", 1);
 
+    ollvm_detect_frameworkinfo();
+
     //for (i = 0; get_vmhead(); i++) 
     for (i = 0; i < 1; i++) 
     {
-        loop_unrolling4(get_vmhead(), i, _DUMP_ORIG_CASE);
+        loop_dfa_connect(_DUMP_PCODE);
         dead_code_elimination(bblocks.blist, RDS_UNROLL0);
 #if defined(DCFG_CASE)
         dump_cfg(name, _itoa(i, buf, 10), 1);
@@ -6528,10 +6530,10 @@ flowblock*       funcdata::loop_unrolling(flowblock *h, flowblock *end, uint32_t
     return cur;
 }
 
-flowblock*  funcdata::loop_dfa_connect(flowblock *h, flowblock *end, uint32_t flags)
+flowblock*  funcdata::loop_dfa_connect(uint32_t flags)
 {
     int i, inslot, ret;
-    flowblock *start, *cur, *prev, *br, *tmpb, *last;
+    flowblock *cur, *prev, *br, *tmpb, *last, *h = ollvm_get_head();
     list<pcodeop *>::const_iterator it;
     pcodeop *p, *op;
     varnode *iv = NULL;
@@ -6543,6 +6545,8 @@ flowblock*  funcdata::loop_dfa_connect(flowblock *h, flowblock *end, uint32_t fl
 
     prev = propchain[0];
     cur = propchain[1];
+
+    trace_push(prev->last_op());
 
     do {
         printf("\tprocess flowblock sub_%llx\n", cur->get_start().getOffset());
@@ -6573,7 +6577,11 @@ flowblock*  funcdata::loop_dfa_connect(flowblock *h, flowblock *end, uint32_t fl
 
         prev = cur;
         cur = br;
-    } while (cur != end);
+    /* 有2种情况会退出循环，
+    
+    1. 走出循环以后
+    2. 碰到无法识别的cbranch节点 */
+    } while (bblocks.in_loop(h, cur));
 
     /* 把刚才走过的路径复制出来，剔除jmp节点，最后一个节点的jmp保留 */
     last = trace.back()->parent;
@@ -6582,7 +6590,7 @@ flowblock*  funcdata::loop_dfa_connect(flowblock *h, flowblock *end, uint32_t fl
     user_offset += user_step;
     Address addr(d->get_code_space(), user_offset);
     /* 进入节点抛弃 */
-    for (i = 0; trace[i]->parent == start; i++);
+    for (i = 0; trace[i]->parent == propchain[0]; i++);
     /* 从主循环开始 */
     for (; i < trace.size(); i++) {
         funcdata *callfd = NULL;
@@ -6621,6 +6629,8 @@ flowblock*  funcdata::loop_dfa_connect(flowblock *h, flowblock *end, uint32_t fl
     bblocks.remove_edge(propchain[0], propchain[1]);
     bblocks.add_edge(propchain[0], cur);
     bblocks.add_edge(cur, last);
+
+    structure_reset();
 
     heritage_clear();
     heritage();
@@ -7228,7 +7238,7 @@ flowblock*  funcdata::ollvm_get_head(void)
     flowblock *max = NULL;
 
     if (ollvm.head) 
-        return ollvm.head ? NULL : ollvm.head;
+        return ollvm.head->flags.f_dead ? NULL : ollvm.head;
 
     for (i = 0; i < bblocks.blist.size(); i++) {
         t = bblocks.blist[i]->get_back_edge_count();
@@ -7243,7 +7253,7 @@ flowblock*  funcdata::ollvm_get_head(void)
 
 int         funcdata::ollvm_detect_frameworkinfo()
 {
-    if (ollvm_get_head())
+    if (!ollvm_get_head())
         throw LowlevelError("ollvm get head failure");
 
     printf("ollvm head [%llx]\n", ollvm.head->get_start().getOffset());
@@ -7263,6 +7273,7 @@ int         funcdata::ollvm_detect_propchain(vector<flowblock *> &chain)
     flowblock *h = ollvm_get_head(), *pre;
     int inslot;
     pcodeop *p = h->find_pcode_def(ollvm.st1);
+    varnode *vn;
     if (p->opcode != CPUI_MULTIEQUAL)
         throw LowlevelError("ollvm state must be multiequal node");
 
@@ -7270,9 +7281,19 @@ int         funcdata::ollvm_detect_propchain(vector<flowblock *> &chain)
 
     inslot = h->get_inslot(pre);
 
-    if (p->get_in(inslot)->is_constant()) {
+    if (!(vn = p->get_in(inslot))->is_constant()) {
+        p = vn->def;
+        inslot = 0;
+        pre = p->parent->get_in(inslot);
+        h = p->parent;
     }
 
+    if (p->get_in(inslot)->is_constant()) {
+        chain.push_back(pre);
+        chain.push_back(h);
+    }
+    else
+        throw LowlevelError("not found constant state");
 
     return 0;
 }
