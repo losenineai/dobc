@@ -1672,7 +1672,7 @@ int             pcodeop::compute(int inslot, flowblock **branch)
 
             if (in0->size == 4) {
                 int l = (int)in0->get_val();
-                int r = (int)in1->get_val();
+                int r = -(int)in1->get_val();
                 int o;
 
                 if (MSB4(l) != MSB4(r)) {
@@ -3048,7 +3048,7 @@ int         funcdata::ollvm_deshell()
     ollvm_detect_frameworkinfo();
 
     //for (i = 0; get_vmhead(); i++) 
-    for (i = 0; i < 1; i++) 
+    for (i = 0; i < 2; i++) 
     {
         loop_dfa_connect(_DUMP_PCODE);
         dead_code_elimination(bblocks.blist, RDS_UNROLL0);
@@ -6008,6 +6008,7 @@ pcodeop*    funcdata::store_query(pcodeop *load, flowblock *b, varnode *pos, pco
     if (load) {
         it = load->parent->get_rev_iterator(load);
         b = load->parent;
+
     }
     else {
         it = b->ops.rbegin();
@@ -6626,14 +6627,13 @@ flowblock*  funcdata::loop_dfa_connect(uint32_t flags)
     cur->set_initial_range(addr, addr);
     trace_clear();
 
+    clear_block_phi(propchain[1]);
+
     bblocks.remove_edge(propchain[0], propchain[1]);
     bblocks.add_edge(propchain[0], cur);
     bblocks.add_edge(cur, last);
 
-    structure_reset();
-
-    heritage_clear();
-    heritage();
+    cond_constant_propagation();
 
     return cur;
 }
@@ -7687,9 +7687,9 @@ bool        funcdata::have_side_effect(pcodeop *op, varnode *pos)
 {
     funcdata *fd = op->callfd;
 
-    if (!fd) return false;
+    if (!op->is_call()) return false;
 
-    dobc *d = fd->d;
+    dobc *d = op->parent->fd->d;
 
 #if 0
     if (fd->name == "memcpy") {
@@ -7733,7 +7733,7 @@ bool        funcdata::have_side_effect(pcodeop *op, varnode *pos)
 #endif
 
 #if 1
-    if (in_safezone(pos->get_val(), pos->size) && !d->test_cond_inline(d, op->get_call_offset()))
+    if (in_safezone(pos->get_val(), pos->size) && d->test_cond_inline && !d->test_cond_inline(d, op->get_call_offset()))
         return false;
 
     return true;
