@@ -2583,6 +2583,8 @@ void        flowblock::remove_block(flowblock *bl)
     if (bl->in.size())
         throw LowlevelError("only support remove block in-size is 0");
 
+    bl->flags.f_dead = 1;
+
     for (iter = blist.begin(); iter != blist.end(); iter++) {
         if (*iter == bl) {
             blist.erase(iter);
@@ -2590,7 +2592,7 @@ void        flowblock::remove_block(flowblock *bl)
         }
     }
 
-    delete bl;
+    deadblist.push_back(bl);
 }
 
 void        flowblock::collect_reachable(vector<flowblock *> &res, flowblock *bl, bool un) const
@@ -6690,6 +6692,9 @@ flowblock*  funcdata::loop_dfa_connect(uint32_t flags)
 
     cond_constant_propagation();
 
+    if (!cbrlist.empty())
+        cond_constant_propagation();
+
     return cur;
 }
 
@@ -7312,6 +7317,7 @@ int         funcdata::ollvm_detect_frameworkinfo()
             head = new ollvmhead(bblocks.get_block(i));
             if (!ollvm_detect_fsm(head)) {
                 ollvm.heads.push_back(head);
+                head->h->mark_unsplice();
                 printf("ollvm head[%llx] fsm1[%llx] fsm2[%llx]\n", head->h->get_start().getOffset(), head->st1.getOffset(), head->st2.getOffset());
             }
             else
@@ -7351,6 +7357,8 @@ int         funcdata::ollvm_detect_propchains(flowblock *&from, blockedge *&oute
     for (i = 0; i < ollvm.heads.size(); i++) {
         ollvmhead *oh = ollvm.heads[i];
 
+        if (oh->h->flags.f_dead) continue;
+
         if (!ollvm_detect_propchain(oh, from, outedge)) return 0;
     }
 
@@ -7359,13 +7367,15 @@ int         funcdata::ollvm_detect_propchains(flowblock *&from, blockedge *&oute
 
 int         funcdata::ollvm_detect_propchain(ollvmhead *oh, flowblock *&from, blockedge *&outedge)
 {
+    if (oh->h->flags.f_dead) return -1;
+
     flowblock *h = oh->h, *pre, *cur, *h1;
     int inslot, i, j;
     pcodeop *p = h->find_pcode_def(oh->st1), *p1;
     varnode *vn;
     blockedge *e;
-    if (p->opcode != CPUI_MULTIEQUAL)
-        throw LowlevelError("ollvm state must be multiequal node");
+    if (!p || (p->opcode != CPUI_MULTIEQUAL))
+        return -1;
 
     p1 = p;
     for (i = 0; i < h->in.size(); i++) {

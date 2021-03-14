@@ -527,6 +527,7 @@ struct flowblock {
     vector<blockedge>   in;
     vector<blockedge>   out;
     vector<flowblock *> blist;
+    vector<flowblock *> deadblist;
     /* 一个函数的所有结束节点 */
     vector<flowblock *> exitlist;
     /* 有些block是不可到达的，都放到这个列表内 */
