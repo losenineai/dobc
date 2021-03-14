@@ -1,4 +1,4 @@
-/* ###
+﻿/* ###
  * IP: GHIDRA
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -46,7 +46,7 @@ class AddrSpaceManager;
 class Address {
 protected:
   AddrSpace *base;		///< Pointer to our address space
-  uintb offset;			///< Offset (in bytes)
+  uintb offset = 0; 			///< Offset (in bytes)
 public:
   /// An enum for specifying extremal addresses
   enum mach_extreme {

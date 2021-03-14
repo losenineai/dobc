@@ -2048,6 +2048,27 @@ rangenode::~rangenode()
 {
 }
 
+ollvmhead::ollvmhead(flowblock *h1)
+{
+    h = h1;
+}
+
+ollvmhead::ollvmhead(Address &a, flowblock *h1)
+    :st1(a)
+{
+    h = h1;
+}
+
+ollvmhead::ollvmhead(Address &a, Address &b, flowblock *h1)
+    : st1(a), st2(b)
+{
+    h = h1;
+}
+
+ollvmhead::~ollvmhead()
+{
+}
+
 void blockgraph::add_block(blockbasic *b)
 {
     int min = b->index;
@@ -3050,7 +3071,7 @@ int         funcdata::ollvm_deshell()
 
     h = ollvm_get_head();
     //for (i = 0; get_vmhead(); i++) 
-    for (i = 0; i < 10; i++) 
+    for (i = 0; i < 15; i++) 
     {
         printf("loop_unrolling sub_%llx %d times*********************** \n\n", h->get_start().getOffset(), i);
         loop_dfa_connect(_DUMP_PCODE);
@@ -6538,13 +6559,15 @@ flowblock*       funcdata::loop_unrolling(flowblock *h, flowblock *end, uint32_t
 flowblock*  funcdata::loop_dfa_connect(uint32_t flags)
 {
     int i, inslot, ret, end;
-    flowblock *cur, *prev, *br, *tmpb, *last, *h = ollvm_get_head(), *from;
+    flowblock *cur, *prev, *br,  *last, *h = ollvm_get_head(), *from;
     list<pcodeop *>::const_iterator it;
     pcodeop *p, *op;
     varnode *iv = NULL;
     blockedge *chain = NULL;
 
-    ollvm_detect_propchain(from, chain);
+    if (ollvm_detect_propchains(from, chain)) {
+        throw LowlevelError("ollvm not found propchain");
+    }
 
     printf("propchain===\n");
 
@@ -7266,43 +7289,56 @@ pcodeop*    funcdata::get_vmcall(flowblock *b)
 
 flowblock*  funcdata::ollvm_get_head(void)
 {
-    int i, max_count = -1, t;
-    flowblock *max = NULL;
+    int i;
 
-    if (ollvm.head) 
-        return ollvm.head->flags.f_dead ? NULL : ollvm.head;
+    for (i = 0; i < ollvm.heads.size(); i++) {
+        ollvmhead *oh = ollvm.heads[i];
 
-    for (i = 0; i < bblocks.blist.size(); i++) {
-        t = bblocks.blist[i]->get_back_edge_count();
-        if (t  > max_count) {
-            max_count = t;
-            max = bblocks.blist[i];
-        }
+        if (!oh->h->flags.f_dead) return oh->h;
     }
 
-    return (ollvm.head = max);
+    return NULL;
 }
 
 int         funcdata::ollvm_detect_frameworkinfo()
 {
-    if (!ollvm_get_head())
-        throw LowlevelError("ollvm get head failure");
+    int i, max_count = -1, t;
+    ollvmhead *head;
 
-    printf("ollvm head [%llx]\n", ollvm.head->get_start().getOffset());
-
-    if (ollvm_detect_fsm())
-        throw LowlevelError("ollvm detect fsm failure");
-
-    printf("ollvm fsm1[%llx] fsm2[%llx]\n", ollvm.st1.getOffset(), ollvm.st2.getOffset());
+    for (i = 0; i < bblocks.blist.size(); i++) {
+        t = bblocks.blist[i]->get_back_edge_count();
+        if (t > 0) {
+            head = new ollvmhead(bblocks.get_block(i));
+            if (!ollvm_detect_fsm(head)) {
+                ollvm.heads.push_back(head);
+                printf("ollvm head[%llx] fsm1[%llx] fsm2[%llx]\n", head->h->get_start().getOffset(), head->st1.getOffset(), head->st2.getOffset());
+            }
+            else
+                delete head;
+        }
+    }
 
     return 0;
 }
 
-int         funcdata::ollvm_detect_propchain(flowblock *&from, blockedge *&outedge)
+int         funcdata::ollvm_detect_propchains(flowblock *&from, blockedge *&outedge)
 {
-    flowblock *h = ollvm_get_head(), *pre, *cur, *h1;
+    int i;
+
+    for (i = 0; i < ollvm.heads.size(); i++) {
+        ollvmhead *oh = ollvm.heads[i];
+
+        if (!ollvm_detect_propchain(oh, from, outedge)) return 0;
+    }
+
+    return -1;
+}
+
+int         funcdata::ollvm_detect_propchain(ollvmhead *oh, flowblock *&from, blockedge *&outedge)
+{
+    flowblock *h = oh->h, *pre, *cur, *h1;
     int inslot, i, j;
-    pcodeop *p = h->find_pcode_def(ollvm.st1), *p1;
+    pcodeop *p = h->find_pcode_def(oh->st1), *p1;
     varnode *vn;
     blockedge *e;
     if (p->opcode != CPUI_MULTIEQUAL)
@@ -7342,14 +7378,12 @@ int         funcdata::ollvm_detect_propchain(flowblock *&from, blockedge *&outed
         return 0;
     }
 
-    throw LowlevelError("not found constant state");
-
-    return 0;
+    return -1;
 }
 
-int         funcdata::ollvm_detect_fsm()
+int         funcdata::ollvm_detect_fsm(ollvmhead *oh)
 {
-    flowblock *h = ollvm_get_head();
+    flowblock *h = oh->h;
     list<pcodeop *>::reverse_iterator it;
     varnode *in0, *in1, *in;
 
@@ -7372,17 +7406,17 @@ int         funcdata::ollvm_detect_fsm()
             for (++it; it != h->ops.rend(); it++) {
                 p = *it;
                 if ((p->opcode == CPUI_COPY) && p->output->get_addr() == s) {
-                    ollvm.st1 = p->get_in(0)->get_addr();
+                    oh->st1 = p->get_in(0)->get_addr();
                     return 0;
                 }
             }
 
-            break;
+            oh->st1 = in0->is_constant() ? in1->get_addr() : in0->get_addr();
+            return 0;
         }
     }
 
-    throw LowlevelError("ollvm detect fsm error");
-    return 0;
+    return -1;
 }
 
 bool        funcdata::use_outside(varnode *vn)

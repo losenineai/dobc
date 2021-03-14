@@ -19,6 +19,7 @@ typedef map<Address, int> version_map;
 typedef struct cover		cover;
 typedef struct valuetype    valuetype;
 typedef struct coverblock	coverblock;
+typedef struct ollvmhead    ollvmhead;
 
 class pcodeemit2 : public PcodeEmit {
 public:
@@ -753,6 +754,17 @@ struct rangenode {
     intb    end() { return start + size;  }
 };
 
+struct ollvmhead {
+    Address st1;
+    Address st2;
+    flowblock *h;
+
+    ollvmhead(flowblock *h1);
+    ollvmhead(Address &a, flowblock *h1);
+    ollvmhead(Address &a, Address &b, flowblock *h1);
+    ~ollvmhead();
+};
+
 struct funcdata {
     struct {
         unsigned blocks_generated : 1;
@@ -896,9 +908,7 @@ struct funcdata {
 
     /* ollvm */
     struct {
-        Address     st1;
-        Address     st2;
-        flowblock*  head = NULL;
+        vector<ollvmhead *>   heads;
     } ollvm;
 
     vector<Address>     addrlist;
@@ -1183,8 +1193,9 @@ struct funcdata {
 
     flowblock*  ollvm_get_head(void);
     int         ollvm_detect_frameworkinfo();
-    int         ollvm_detect_propchain(flowblock *&from, blockedge *&outedge);
-    int         ollvm_detect_fsm();
+    int         ollvm_detect_propchain(ollvmhead *oh, flowblock *&from, blockedge *&outedge);
+    int         ollvm_detect_propchains(flowblock *&from, blockedge *&outedge);
+    int         ollvm_detect_fsm(ollvmhead *oh);
 
     bool        use_outside(varnode *vn);
     void        use2undef(varnode *vn);
