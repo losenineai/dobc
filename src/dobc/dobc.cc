@@ -3035,6 +3035,7 @@ int         funcdata::ollvm_deshell()
     int i;
     unsigned int tick = mtime_tick();
     char buf[16];
+    flowblock *h;
 
     AssemblyRaw assem;
     Address addr(d->trans->getDefaultCodeSpace(), 0x3442);
@@ -3047,9 +3048,11 @@ int         funcdata::ollvm_deshell()
 
     ollvm_detect_frameworkinfo();
 
+    h = ollvm_get_head();
     //for (i = 0; get_vmhead(); i++) 
-    for (i = 0; i < 2; i++) 
+    for (i = 0; i < 10; i++) 
     {
+        printf("loop_unrolling sub_%llx %d times*********************** \n\n", h->get_start().getOffset(), i);
         loop_dfa_connect(_DUMP_PCODE);
         dead_code_elimination(bblocks.blist, RDS_UNROLL0);
 #if defined(DCFG_CASE)
@@ -3176,8 +3179,9 @@ pcodeop*    flowblock::find_pcode_def(const Address &outaddr)
     return NULL;
 }
 
-void        funcdata::remove_dead_store2(flowblock *b, map<valuetype, vector<pcodeop *> > &m)
+void        flowblock::dump()
 {
+    printf("flowblock[addr:0x%llx, index:%d, dfnum:%d]\n", get_start().getOffset(), index, dfnum);
 }
 
 void        funcdata::remove_dead_store(flowblock *b)
@@ -6533,19 +6537,22 @@ flowblock*       funcdata::loop_unrolling(flowblock *h, flowblock *end, uint32_t
 
 flowblock*  funcdata::loop_dfa_connect(uint32_t flags)
 {
-    int i, inslot, ret;
-    flowblock *cur, *prev, *br, *tmpb, *last, *h = ollvm_get_head();
+    int i, inslot, ret, end;
+    flowblock *cur, *prev, *br, *tmpb, *last, *h = ollvm_get_head(), *from;
     list<pcodeop *>::const_iterator it;
     pcodeop *p, *op;
     varnode *iv = NULL;
-    vector<flowblock *> propchain;
+    blockedge *chain = NULL;
 
-    printf("\n\nloop_unrolling sub_%llx \n", h->get_start().getOffset());
+    ollvm_detect_propchain(from, chain);
 
-    ollvm_detect_propchain(propchain);
+    printf("propchain===\n");
 
-    prev = propchain[0];
-    cur = propchain[1];
+    prev = from;
+    cur = chain->point;
+
+    prev->dump();
+    cur->dump();
 
     trace_push(prev->last_op());
 
@@ -6573,27 +6580,53 @@ flowblock*  funcdata::loop_dfa_connect(uint32_t flags)
 
         if ((cur->out.size() > 1) && (ret != ERR_MEET_CALC_BRANCH)) {
             printf("found undefined-bcond in block[%x]\n", cur->sub_id());
+
+            for (end = trace.size() - 1; trace[end]->parent == cur; end--);
+
+            /* 假如trace的最后一个节点，直接等于from，那么证明，一个分支节点都没走过去，直接禁止掉这个edge */
+            if (trace[end]->parent == from) {
+                chain->set_flag(a_unpropchain);
+
+                for (i = 0; i < trace.size(); i++) {
+                    pcodeop *p = trace[i];
+                    p->clear_trace();
+                    p->set_top();
+                }
+
+                heritage_clear();
+                heritage();
+
+                return 0;
+            }
+
             break;
         }
 
         prev = cur;
         cur = br;
+        end = trace.size() - 1;
     /* 有2种情况会退出循环，
     
     1. 走出循环以后
     2. 碰到无法识别的cbranch节点 */
     } while (bblocks.in_loop(h, cur));
 
-    /* 把刚才走过的路径复制出来，剔除jmp节点，最后一个节点的jmp保留 */
-    last = trace.back()->parent;
+    if (end == trace.size() - 1)
+        printf("found exit node[%lx]\n", cur->sub_id());
+
+
+    /* back指向的节点
+    1. 当走出循环时，back指向循环外节点
+    2. 当碰到undefined cbranch, trace.back指向了第一个无法计算的循环节点 */
+    last = (end == trace.size() - 1) ? cur:trace.back()->parent;
     cur = bblocks.new_block_basic(this);
 
     user_offset += user_step;
     Address addr(d->get_code_space(), user_offset);
     /* 进入节点抛弃 */
-    for (i = 0; trace[i]->parent == propchain[0]; i++);
+    for (i = 0; trace[i]->parent == from; i++);
     /* 从主循环开始 */
-    for (; i < trace.size(); i++) {
+    for (; i <= end; i++) {
         funcdata *callfd = NULL;
         p = trace[i];
 
@@ -6602,9 +6635,8 @@ flowblock*  funcdata::loop_dfa_connect(uint32_t flags)
             callfd = d->find_func(addr);
         }
 
-        /* 最后一个节点的jmp指令不删除 */
-        if (((i != (trace.size() - 1)) 
-            && ((p->opcode == CPUI_BRANCH) || (p->opcode == CPUI_CBRANCH) || (p->opcode == CPUI_INDIRECT) || (p->opcode == CPUI_MULTIEQUAL) || (p->opcode == CPUI_BRANCHIND))))
+        /* 删除所有中间的 跳转指令和phi节点 */
+        if (((p->opcode == CPUI_BRANCH) || (p->opcode == CPUI_CBRANCH) || (p->opcode == CPUI_INDIRECT) || (p->opcode == CPUI_MULTIEQUAL) || (p->opcode == CPUI_BRANCHIND)))
             continue;
 
         Address addr2(d->get_code_space(), user_offset + p->get_addr().getOffset());
@@ -6621,16 +6653,16 @@ flowblock*  funcdata::loop_dfa_connect(uint32_t flags)
     for (i = 0; i < trace.size(); i++) {
         pcodeop *p = trace[i];
         p->clear_trace();
-        p->compute(-1, &tmpb);
+        p->set_top();
     }
 
     cur->set_initial_range(addr, addr);
     trace_clear();
 
-    clear_block_phi(propchain[1]);
+    clear_block_phi(chain->point);
 
-    bblocks.remove_edge(propchain[0], propchain[1]);
-    bblocks.add_edge(propchain[0], cur);
+    int lab = bblocks.remove_edge(from, chain->point);
+    bblocks.add_edge(from, cur, lab & a_true_edge);
     bblocks.add_edge(cur, last);
 
     cond_constant_propagation();
@@ -7266,34 +7298,51 @@ int         funcdata::ollvm_detect_frameworkinfo()
     return 0;
 }
 
-int         funcdata::ollvm_detect_propchain(vector<flowblock *> &chain)
+int         funcdata::ollvm_detect_propchain(flowblock *&from, blockedge *&outedge)
 {
-    chain.clear();
-
-    flowblock *h = ollvm_get_head(), *pre;
-    int inslot;
-    pcodeop *p = h->find_pcode_def(ollvm.st1);
+    flowblock *h = ollvm_get_head(), *pre, *cur, *h1;
+    int inslot, i, j;
+    pcodeop *p = h->find_pcode_def(ollvm.st1), *p1;
     varnode *vn;
+    blockedge *e;
     if (p->opcode != CPUI_MULTIEQUAL)
         throw LowlevelError("ollvm state must be multiequal node");
 
-    pre = loop_pre_get(h, 0);
+    p1 = p;
+    for (i = 0; i < h->in.size(); i++) {
+        vn = p->get_in(i);
+        pre = p->parent->get_in(i);
+        cur = h;
 
-    inslot = h->get_inslot(pre);
+        if (!vn->is_constant()) {
+            p1 = vn->def;
+            h1 = p1->parent;
 
-    if (!(vn = p->get_in(inslot))->is_constant()) {
-        p = vn->def;
-        inslot = 0;
-        pre = p->parent->get_in(inslot);
-        h = p->parent;
+            if (p1->opcode != CPUI_MULTIEQUAL) continue;
+
+            for (j = 0; j < h1->in.size(); j++) {
+                vn = p1->get_in(j);
+                pre = p1->parent->get_in(j);
+                cur = p1->parent;
+
+                if (vn->is_constant()) break;
+            }
+        }
+
+        if (!vn->is_constant()) continue;
+
+        from = pre;
+        e = &pre->out[pre->get_out_index(cur)];
+
+        /* 假如已经被标记过，不可计算了 */
+        if (e->is(a_unpropchain)) continue;
+
+        outedge = e;
+
+        return 0;
     }
 
-    if (p->get_in(inslot)->is_constant()) {
-        chain.push_back(pre);
-        chain.push_back(h);
-    }
-    else
-        throw LowlevelError("not found constant state");
+    throw LowlevelError("not found constant state");
 
     return 0;
 }
@@ -7490,9 +7539,9 @@ void        funcdata::remove_empty_block(blockbasic *bl)
     flowblock *prev = bl->get_in(0);
     flowblock *next = bl->get_out(0);
 
-    bblocks.remove_edge(prev, bl);
+    int lab = bblocks.remove_edge(prev, bl);
     bblocks.remove_edge(bl, next);
-    bblocks.add_edge(prev, next);
+    bblocks.add_edge(prev, next, lab & a_true_edge);
     bblocks.remove_block(bl);
 
     if ((prev->out.size() == 2) && (prev->get_out(0) == prev->get_out(1))) {

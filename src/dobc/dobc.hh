@@ -375,6 +375,7 @@ struct pcodeop {
     int             compute(int inslot, flowblock **branch);
 	int				compute_add_sub();
     void            set_output(varnode *vn) { output = vn;  }
+    void            set_top() { if (output) output->type.height = a_top; }
 
     bool            is_dead(void) { return flags.dead;  }
     bool            have_virtualnode(void) { return inrefs.size() == 3;  }
@@ -407,9 +408,10 @@ typedef struct blockedge            blockedge;
 #define a_loop_edge             0x10
 #define a_true_edge             0x20
 #define a_mark                  0x40
+#define a_unpropchain           0x80
 
 struct blockedge {
-    int label;
+    uint32_t label;
     flowblock *point;
     int reverse_index;
 
@@ -418,6 +420,9 @@ struct blockedge {
     bool is_true() { return label & a_true_edge;  }
     void set_true(void) { label |= a_true_edge; }
     void set_false(void) { label &= a_true_edge;  }
+    void set_flag(uint32_t flag) { label |= flag;  }
+    void clear_flag(uint32_t flag) { label &= ~flag;  }
+    bool is(uint32_t flag) { return label & flag;  }
 };
 
 
@@ -672,6 +677,7 @@ struct flowblock {
     }
     /* 查找以这个变量为out的第一个pcode */
     pcodeop*    find_pcode_def(const Address &out);
+    void        dump();
 };
 
 typedef struct priority_queue   priority_queue;
@@ -1177,7 +1183,7 @@ struct funcdata {
 
     flowblock*  ollvm_get_head(void);
     int         ollvm_detect_frameworkinfo();
-    int         ollvm_detect_propchain(vector<flowblock *> &chain);
+    int         ollvm_detect_propchain(flowblock *&from, blockedge *&outedge);
     int         ollvm_detect_fsm();
 
     bool        use_outside(varnode *vn);
@@ -1254,7 +1260,6 @@ struct funcdata {
 
     新的版本，会递归删除
     */
-    void        remove_dead_store2(flowblock *b, map<valuetype, vector<pcodeop *> > &m);
     void        remove_dead_store(flowblock *b);
     void        remove_dead_stores();
     /* 打印某个节点的插入为止*/
