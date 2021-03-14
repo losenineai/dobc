@@ -1209,6 +1209,91 @@ void            pcodeop::peephole(void)
     }
 }
 
+void            pcodeop::on_MULTIEQUAL()
+{
+    varnode *vn, *cn = NULL, *vn1;
+    vector<varnode *> philist;
+    set<intb> c;
+    pcodeop_set visit;
+    pcodeop_set::iterator it;
+    int i;
+
+    visit.insert(this);
+
+    for (i = 0; i < inrefs.size(); i++) {
+        vn = get_in(i);
+        if (vn->is_constant()) {
+            c.insert(vn->get_val());
+            cn = vn;
+        }
+        else if (!vn->def || (vn->def->opcode != CPUI_MULTIEQUAL)) {
+            output->set_top();
+            return;
+        }
+        else {
+            it = visit.find(vn->def);
+            if (it == visit.end())
+                philist.push_back(vn);
+        }
+    }
+
+    /* 假如有2个常量定值进来，那么值的height必然是T */
+    if (c.size() > 1) {
+        output->type.height = a_top;
+        return;
+    }
+
+    /* 假如所有的常量的值，完全一样，而且philist节点为空，那么设置phi节点的out值为常量*/
+    if (philist.size() == 0) {
+        output->type = cn->type;
+        return;
+    }
+
+
+    /* 
+    1. 假如一个phi节点中，所有常量的值相等
+    2. 另外的非常量节点都是Phi节点
+    3. 递归的遍历其中的phi节点，重新按1,2开始
+    4. 遍历完成后，那么此phi节点也是常量
+    */
+    while (!philist.empty()) {
+        vn = philist.front();
+        philist.erase(philist.begin());
+
+        pcodeop *p = vn->def;
+        it = visit.find(p);
+        if (it != visit.end()) continue;
+
+        for (i = 0; i < p->inrefs.size(); i++) {
+            vn1 = p->get_in(i);
+
+            if (vn1->is_constant()) {
+                if (!cn) cn = vn;
+                else if (vn1->type != cn->type) {
+                    output->set_top();
+                    return;
+                }
+            }
+            else if (!vn->def || vn->def->opcode != CPUI_MULTIEQUAL) {
+                output->set_top();
+                return;
+            }
+            else {
+                it = visit.find(vn->def);
+                if (it == visit.end()) {
+                    visit.insert(vn->def);
+                    philist.push_back(vn);
+                }
+            }
+        }
+    }
+
+    if (cn)
+        output->type = cn->type;
+    else
+        output->set_top();
+}
+
 int				pcodeop::compute_add_sub()
 {
 	varnode *in0, *in1, *_in0, *_in1, *out;
@@ -1848,12 +1933,14 @@ int             pcodeop::compute(int inslot, flowblock **branch)
                 && (bb = _in1->def->parent->get_in(0))
                 && (bb->last_op()->opcode == CPUI_CBRANCH)
                 && (vn = bb->last_op()->get_in(1))
+                && vn->def
                 && (vn->def->opcode == CPUI_BOOL_NEGATE)
                 && (vn = vn->def->get_in(0))
                 && (b->last_op()->get_in(1) == vn)) {
                 output->set_val(in1->get_val());
             }
             else {
+#if 0
                 for (i = 1; i < inrefs.size(); i++) {
                     in1 = get_in(i);
                     if (in0->type != in1->type)
@@ -1864,6 +1951,9 @@ int             pcodeop::compute(int inslot, flowblock **branch)
                     output->type = in0->type;
                 else
                     output->type.height = a_top;
+#else
+                on_MULTIEQUAL();
+#endif
             }
         }
         break;
@@ -6587,7 +6677,7 @@ flowblock*  funcdata::loop_dfa_connect(uint32_t flags)
         it = cur->ops.begin();
         inslot = cur->get_inslot(prev);
 
-        for (; it != cur->ops.end(); it++) {
+        for (ret = 0; it != cur->ops.end(); it++) {
             p = *it;
 
             br = NULL;
@@ -6625,6 +6715,11 @@ flowblock*  funcdata::loop_dfa_connect(uint32_t flags)
             }
 
             break;
+        }
+
+        if ((cur->ops.size() == 0)) {
+            assert(cur->out.size() == 1);
+            br = cur->get_out(0);
         }
 
         prev = cur;

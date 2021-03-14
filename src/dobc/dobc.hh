@@ -214,6 +214,7 @@ struct varnode {
     bool            is_constant(void) const { return type.height == a_constant; }
     bool            in_constant_space() { return get_addr().isConstant(); }
     void            set_val(intb v) { type.height = a_constant;  type.v = v; }
+    void            set_top() { type.height = a_top;  }
     bool            is_rel_constant(void) { return type.height == a_rel_constant; }
     bool            is_input(void) { return flags.input; }
     void            set_rel_constant(Address &r, int v) { type.height = a_rel_constant; type.v = v;  type.rel = r; }
@@ -398,6 +399,8 @@ struct pcodeop {
     /* in的地址是否在sp alloc内存的位置 */
     bool            in_sp_alloc_range(varnode *in);
     void            peephole(void);
+
+    void            on_MULTIEQUAL();
 };
 
 typedef struct blockedge            blockedge;
