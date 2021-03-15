@@ -1384,6 +1384,16 @@ struct dobc {
     Address     r1_addr;
     Address     r2_addr;
     Address     r3_addr;
+    Address     r4_addr;
+    Address     r5_addr;
+    Address     r6_addr;
+    Address     r7_addr;
+    Address     r8_addr;
+    Address     r9_addr;
+    Address     r10_addr;
+    Address     r11_addr;
+    Address     ma_addr;
+
     Address     lr_addr;
     Address     cy_addr;
     Address     pc_addr;

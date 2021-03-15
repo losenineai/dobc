@@ -525,6 +525,16 @@ dobc::dobc(const char *sla, const char *bin)
     r1_addr = trans->getRegister("r1").getAddr();
     r2_addr = trans->getRegister("r2").getAddr();
     r3_addr = trans->getRegister("r3").getAddr();
+    r4_addr = trans->getRegister("r4").getAddr();
+    r5_addr = trans->getRegister("r5").getAddr();
+    r6_addr = trans->getRegister("r6").getAddr();
+    r7_addr = trans->getRegister("r7").getAddr();
+    r8_addr = trans->getRegister("r8").getAddr();
+    r9_addr = trans->getRegister("r9").getAddr();
+    r10_addr = trans->getRegister("r10").getAddr();
+    r11_addr = trans->getRegister("r11").getAddr();
+    ma_addr = trans->getRegister("mult_addr").getAddr();
+
     cy_addr = trans->getRegister("CY").getAddr();
     pc_addr = trans->getRegister("pc").getAddr();
 
@@ -1378,7 +1388,7 @@ int             pcodeop::compute(int inslot, flowblock **branch)
     funcdata *fd = parent->fd;
     dobc *d = fd->d;
     uint1 buf[8];
-    int i, ret = 0;
+    int ret = 0;
     pcodeop *store, *op;
     flowblock *b, *bb;
 
@@ -3158,6 +3168,7 @@ int         funcdata::ollvm_deshell()
     heritage();
 
     dump_cfg(name, "orig", 1);
+
 
     ollvm_detect_frameworkinfo();
 
@@ -7465,7 +7476,7 @@ int         funcdata::ollvm_detect_propchain(ollvmhead *oh, flowblock *&from, bl
     if (oh->h->flags.f_dead) return -1;
 
     flowblock *h = oh->h, *pre, *cur, *h1;
-    int inslot, i, j;
+    int i, j;
     pcodeop *p = h->find_pcode_def(oh->st1), *p1;
     varnode *vn;
     blockedge *e;
