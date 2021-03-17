@@ -3174,10 +3174,10 @@ int         funcdata::ollvm_deshell()
 
     h = ollvm_get_head();
     //for (i = 0; get_vmhead(); i++) 
-    for (i = 0; i < 15; i++) 
+    //for (i = 0; i < 15; i++) 
+    for (; !loop_dfa_connect(0); i++)
     {
         printf("loop_unrolling sub_%llx %d times*********************** \n\n", h->get_start().getOffset(), i);
-        loop_dfa_connect(_DUMP_PCODE);
         dead_code_elimination(bblocks.blist, RDS_UNROLL0);
 #if defined(DCFG_CASE)
         dump_cfg(name, _itoa(i, buf, 10), 1);
@@ -6669,7 +6669,8 @@ flowblock*  funcdata::loop_dfa_connect(uint32_t flags)
     blockedge *chain = NULL;
 
     if (ollvm_detect_propchains(from, chain)) {
-        throw LowlevelError("ollvm not found propchain");
+        printf("ollvm not found propchain");
+        return NULL;
     }
 
     printf("propchain===\n");
