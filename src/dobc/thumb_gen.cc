@@ -17,8 +17,11 @@
 #define istemp(vn)          ((vn)->get_addr().getSpace()->getType() == IPTR_INTERNAL)
 
 #define ANDNEQ(r1, r2)      ((r1 & ~r2) == 0)
-#define in_imm8(a)          ANDNEQ(a, 0xff)
+#define in_imm3(a)          ANDNEQ(a, 0x07)
+#define in_imm5(a)          ANDNEQ(a, 0x1f)
 #define in_imm7(a)          ANDNEQ(a, 0x7f)
+#define in_imm8(a)          ANDNEQ(a, 0xff)
+#define align4(a)           ((a & 3) == 0)
 
 thumb_gen::thumb_gen(funcdata *f)
 {
@@ -87,8 +90,40 @@ int _add(int rd, int sp, int imm, char *buf)
 
     if (sp) {
         if (in_imm8(imm) && (rd <= 7)) {
-            t16 = 0xa800 | (rd << 7) | imm;
+            t16 = 0xa800 | (rd << 8) | imm;
         }
+    }
+
+    thumb_end_copy();
+}
+
+int _ldr(int rt, int rn, int rm, int imm, char *buf)
+{
+    uint16_t t16 = 0;
+    uint32_t t32 = 0;
+
+    if (rm != -1) {
+    }
+    else if (in_imm3(rt) && in_imm3(rn)){
+        if (!align4(imm) || !in_imm5(imm >> 2)) UNPREDICITABLE();
+
+        t16 = 0x68 | ((imm >> 2) << 6) | (rn << 3) | rt;
+    }
+
+    thumb_end_copy();
+}
+
+int _str(int rt, int rn, int rm, int imm, char *buf)
+{
+    uint16_t t16 = 0;
+    uint32_t t32 = 0;
+
+    if (rm != -1) {
+    }
+    else if (in_imm3(rt) && in_imm3(rn)){
+        if (!align4(imm) || !in_imm5(imm >> 2)) UNPREDICITABLE();
+
+        t16 = 0x60 | ((imm >> 2) << 6) | (rn << 3) | rt;
     }
 
     thumb_end_copy();
@@ -120,32 +155,67 @@ pit thumb_gen::g_push(flowblock *b, pit pit)
 
 pit thumb_gen::g_add(flowblock *b, pit pit)
 {
-    pcodeop *p = *pit, *p1;
+    pcodeop *p = *pit++, *p1;
+
+    p1 = p;
 
     if (istemp(p->output)) {
-        p1 = *++pit;
+        p1 = *pit;
+
         if ((pi0a(p) == asp) && pi1(p)->is_constant() && (p1->opcode == CPUI_COPY) && a(pi1(p1)) == poa(p)) {
-            asmlen += _add(reg2index(poa(p)), 1, pi1(p)->get_val(), asmbuf);
+            asmlen += _add(reg2index(poa(p1)), 1, pi1(p)->get_val(), asmbuf);
         }
         else
             UNPREDICITABLE();
     }
+    else if ((pi0a(p) == asp) && pi1(p)->is_constant()){
+        asmlen += _add(reg2index(poa(p)), 1, pi1(p)->get_val(), asmbuf);
+    }
 
+    return pit;
+}
+
+pit thumb_gen::g_sub(flowblock *b, pit pit)
+{
+    return pit;
+}
+
+pit thumb_gen::g_ldr(flowblock *b, pit pit)
+{
+    pcodeop *p = *pit++, *p1;
+
+    p1 = *pit;
+
+    return pit;
+}
+
+pit thumb_gen::g_str(flowblock *b, pit pit)
+{
+    return pit;
+}
+
+pit thumb_gen::g_mov(flowblock *b, pit pit)
+{
+    return pit;
+}
+
+pit thumb_gen::g_blx(flowblock *b, pit pit)
+{
     return pit;
 }
 
 
 int thumb_gen::run()
 {
-    int i;
+    int i, plen;
     list<pcodeop *>::iterator it, it1;
-    pcodeop *p;
+    pcodeop *p, *p1;
     for (i = 0; i < blist.size(); i++) {
         flowblock *b = blist[i];
 
         for (it = b->ops.begin(); it != b->ops.end(); ++it) {
             p = *it;
-            it1 = it;
+            plen = asmlen;
             switch (p->opcode) {
             case CPUI_COPY:
                 if (poa(p) == ama) it = g_push(b, it);
@@ -156,14 +226,32 @@ int thumb_gen::run()
                 break;
 
             case CPUI_INT_ADD:
-                it = g_add(b, it);
+                if (istemp(p->output)) {
+                    p1 = *++it;
+                    switch (p1->opcode) {
+                    case CPUI_COPY:
+                        if ((pi0a(p) == asp) && pi1(p)->is_constant() && a(pi1(p1)) == poa(p)) 
+                            asmlen += _add(reg2index(poa(p1)), 1, pi1(p)->get_val(), asmbuf);
+                        break;
+
+                    case CPUI_STORE:
+                        if (a(pi2(p1)) == poa(p)) {
+                            //asmlen += _str();
+                        }
+                        break;
+                    }
+                }
+                else if ((pi0a(p) == asp) && pi1(p)->is_constant()){
+                    asmlen += _add(reg2index(poa(p)), 1, pi1(p)->get_val(), asmbuf);
+                }
+
                 break;
 
             default:
                 break;
             }
 
-            if (it1 == it) {
+            if (plen == asmlen) {
                 throw LowlevelError("pcodeop iterator not increment");
             }
         }

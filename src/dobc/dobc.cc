@@ -1572,13 +1572,6 @@ int             pcodeop::compute(int inslot, flowblock **branch)
         }
 #endif
 
-        if (!is_trace() && in2->is_constant() && in2->def) {
-            varnode *vn = fd->create_constant_vn(in2->get_val(), in2->size);
-
-            fd->op_unset_input(this, 2);
-            fd->op_set_input(this, vn, 2);
-        }
-
         break;
 
     case CPUI_BRANCH:
@@ -2025,8 +2018,11 @@ void            pcodeop::to_constant1(void)
         }
         /* 
         1. phi节点的in节点不能这么处理
-        2. call节点不能常量持久化in， */
-        else if ((opcode != CPUI_MULTIEQUAL) && !is_call()) {
+        2. call节点不能常量持久化in， 
+        3. store节点的in节点不能转换为常量，这个是因为thumb不支持 store 一个 imm 到一个地址上，假如我们常量化会导致不好做代码生成
+
+        */
+        else if ((opcode != CPUI_MULTIEQUAL) && (opcode != CPUI_STORE) && !is_call()) {
             for (i = 0; i < inrefs.size(); i++) {
                 vn = get_in(i);
 
@@ -3175,7 +3171,7 @@ int         funcdata::ollvm_deshell()
     h = ollvm_get_head();
     //for (i = 0; get_vmhead(); i++) 
     //for (i = 0; i < 15; i++) 
-    for (; !loop_dfa_connect(0); i++)
+    for (i = 0; loop_dfa_connect(0) >= 0; i++)
     {
         printf("loop_unrolling sub_%llx %d times*********************** \n\n", h->get_start().getOffset(), i);
         dead_code_elimination(bblocks.blist, RDS_UNROLL0);
@@ -6659,7 +6655,7 @@ flowblock*       funcdata::loop_unrolling(flowblock *h, flowblock *end, uint32_t
     return cur;
 }
 
-flowblock*  funcdata::loop_dfa_connect(uint32_t flags)
+int  funcdata::loop_dfa_connect(uint32_t flags)
 {
     int i, inslot, ret, end;
     flowblock *cur, *prev, *br,  *last, *h = ollvm_get_head(), *from;
@@ -6670,7 +6666,7 @@ flowblock*  funcdata::loop_dfa_connect(uint32_t flags)
 
     if (ollvm_detect_propchains(from, chain)) {
         printf("ollvm not found propchain");
-        return NULL;
+        return -1;
     }
 
     printf("propchain===\n");
@@ -6723,7 +6719,7 @@ flowblock*  funcdata::loop_dfa_connect(uint32_t flags)
                 heritage_clear();
                 heritage();
 
-                return 0;
+                return 1;
             }
 
             break;
@@ -6802,7 +6798,7 @@ flowblock*  funcdata::loop_dfa_connect(uint32_t flags)
     if (!cbrlist.empty())
         cond_constant_propagation();
 
-    return cur;
+    return 0;
 }
 
 int         funcdata::collect_blocks_to_node(vector<flowblock *> &blks, flowblock *start, flowblock *end)

@@ -43,4 +43,9 @@ struct thumb_gen {
 
     pit g_add(flowblock *b, pit pit);
     pit g_sub(flowblock *b, pit pit);
+
+    pit g_ldr(flowblock *b, pit pit);
+    pit g_str(flowblock *b, pit pit);
+    pit g_mov(flowblock *b, pit pit);
+    pit g_blx(flowblock *b, pit pit);
 };

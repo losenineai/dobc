@@ -1184,7 +1184,7 @@ struct funcdata {
                 当循环粘展开到最后一个节点，跳出循环时，终止节点就变成了exit节点
     */
     flowblock*  loop_unrolling(flowblock *h, flowblock *end, uint32_t flags, int &meet_exit);
-    flowblock*  loop_dfa_connect(uint32_t flags);
+    int         loop_dfa_connect(uint32_t flags);
     /* 这里的dce加了一个数组参数，用来表示只有当删除的pcode在这个数组里才允许删除 这个是为了方便调试以及还原 */
 #define RDS_0           1
 #define RDS_UNROLL0     2
