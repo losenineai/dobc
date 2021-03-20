@@ -31,6 +31,9 @@ struct thumb_gen {
     int asmlen;
     int asmsize;
 
+    unsigned char *data;
+    int ind;
+
     thumb_gen(funcdata *f);
     ~thumb_gen();
 
