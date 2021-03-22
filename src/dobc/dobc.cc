@@ -535,6 +535,7 @@ dobc::dobc(const char *sla, const char *bin)
     r11_addr = trans->getRegister("r11").getAddr();
     ma_addr = trans->getRegister("mult_addr").getAddr();
 
+    zr_addr = trans->getRegister("ZR").getAddr();
     cy_addr = trans->getRegister("CY").getAddr();
     pc_addr = trans->getRegister("pc").getAddr();
 

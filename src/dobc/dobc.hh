@@ -1395,6 +1395,7 @@ struct dobc {
     Address     ma_addr;
 
     Address     lr_addr;
+    Address     zr_addr;
     Address     cy_addr;
     Address     pc_addr;
     set<Address> cpu_regs;
