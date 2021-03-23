@@ -21,11 +21,18 @@ typedef list<pcodeop *>::iterator pit;
 #define LR          14
 #define PC          15
 
+struct fix_item {
+    int ind;
+    flowblock *b;
+
+    fix_item(int i, flowblock *b1) { ind = i; b1 = b;  }
+};
 
 struct thumb_gen {
     funcdata *fd;
     dobc *d;
     vector<flowblock *> blist;
+    vector<fix_item *> flist;
 
     char *asmbuf;
     int asmlen;
@@ -39,8 +46,11 @@ struct thumb_gen {
 
     void resort_blocks();
     int run();
+    int run_block(flowblock *b);
+    void add_fix_list(int ind, flowblock *b);
 
-    int reg2index(const Address &a);
+    uint32_t reg2index(const Address &a);
+    int     calc_code_size(flowblock *b);
 
     pit g_push(flowblock *b, pit pit);
 

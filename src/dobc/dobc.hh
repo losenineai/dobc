@@ -492,6 +492,9 @@ struct flowblock {
         /* 这个循环*/
         unsigned f_irreducible : 1;
         unsigned f_loopheader : 1;
+
+        unsigned g_flow_branch : 1;
+        unsigned g_swap_cond : 1;
     } flags = { 0 };
 
     RangeList cover;
@@ -539,6 +542,12 @@ struct flowblock {
     jmptable *jmptable = NULL;
 
     funcdata *fd;
+
+    /* code gen */
+    struct {
+        /* 自己的block生成的代码对应的具体位置 */
+        unsigned char *data;
+    }cg;
 
     flowblock(funcdata *fd);
     ~flowblock();
