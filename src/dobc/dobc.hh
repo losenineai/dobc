@@ -232,7 +232,6 @@ struct varnode {
     这2个判断liverange的代码都要重新写
     */
     bool            in_liverange(pcodeop *start, pcodeop *end);
-    bool            is_reg() { return get_addr().getSpace()->getType() == IPTR_PROCESSOR; }
 	void			add_def_point() { cover.add_def_point(this);  }
 	void			add_ref_point(pcodeop *p) { cover.add_ref_point(p, this, 0); }
 	void			add_def_point_simple();

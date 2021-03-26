@@ -2934,6 +2934,7 @@ void        funcdata::dump_exe()
 
 	heritage_clear();
 	heritage();
+
     dead_code_elimination(bblocks.blist, 0);
 	build_liverange();
 	dump_liverange("1");
@@ -6666,7 +6667,7 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
     blockedge *chain = NULL;
 
     if (ollvm_detect_propchains(from, chain)) {
-        printf("ollvm not found propchain");
+        printf("ollvm not found propchain\n");
         return -1;
     }
 
@@ -6904,17 +6905,12 @@ void        funcdata::dead_code_elimination(vector<flowblock *> blks, uint32_t f
             if (in->get_addr().isConstant()) continue;
             /* 输入节点是没有def的 */
             if (in->is_input()) continue;
-            if (!in->def) {
-                //dump_cfg(name, "check", 1);
-                //exit(1);
-                continue;
-            }
+            if (!in->def) continue;
             worklist.push_back(in->def);
         }
 
-        if (marks[op->parent->dfnum]) {
+        if (marks[op->parent->dfnum]) 
             op_destroy(op, 1);
-        }
     }
 
     flowblock *h;
@@ -7048,6 +7044,7 @@ void        funcdata::rename_recurse(blockbasic *bl, variable_stack &varstack, v
     pcodeop *op, *multiop;
     varnode *vnout, *vnin, *vnnew;
     int i, slot, set_begin = 0, order;
+    funcdata *fd1;
 
     for (oiter = bl->ops.begin(), order = 0; oiter != bl->ops.end(); oiter = next, order++) {
         op = *oiter ;
@@ -7139,13 +7136,20 @@ void        funcdata::rename_recurse(blockbasic *bl, variable_stack &varstack, v
     /*
     假如这个节点是出口节点，切变量为系统寄存器，则加入出口活跃变量集合
     */
-    if (bl->is_end()) {
+    fd1 = bl->ops.size() ?  bl->last_op()->callfd:NULL;
+    /*  对于noreturn 函数我们设置出口寄存器活跃数量为0 */
+    if (bl->is_end() && (!fd1 || !fd1->flags.exit)) {
         variable_stack::iterator it;
         for (it = varstack.begin(); it != varstack.end(); it++) {
             vector<varnode *> &stack = it->second;
             pair<pcodeop_def_set::iterator, bool> check;
             varnode *v;
-			if (!stack.empty() && (v = stack.back())->is_reg() && v->def) {
+            /*
+            理论上所有的cpu寄存器都可以出口活跃的，不过为了减少代码量，
+            1. 我们只处理了r0-r15寄存器
+            */
+
+			if (!stack.empty() && d->is_cpu_base_reg((v = stack.back())->get_addr())  && v->def) {
                 topname.insert(v->def);
 				v->add_ref_point_simple(bl->last_op());
 			}
