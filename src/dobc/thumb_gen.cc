@@ -20,6 +20,7 @@
 #define alr                 d->lr_addr
 #define azr                 d->zr_addr
 #define istemp(vn)          ((vn)->get_addr().getSpace()->getType() == IPTR_INTERNAL)
+#define isreg(vn)           ((d->r0_addr <= vn->get_addr()) && (vn->get_addr() <= d->pc_addr))
 
 #define ANDNEQ(r1, r2)      ((r1 & ~r2) == 0)
 #define ANDEQ(r1, r2)      ((r1 & r2) == r2)
@@ -196,20 +197,41 @@ static uint32_t stuff_const(uint32_t op, uint32_t c)
 
 static void stuff_const_harder(uint32_t op, uint32_t v)
 {
-    uint32_t x, h, o1;
+    uint32_t x;
     x = stuff_const(op, v);
     if (x)
         o(x);
-    else if (o1 = stuff_const(op, v & 0xffff)) {
-        o(o1);
-        h = v >> 16;
-        /* A8.8.106, movt*/
-        o((op & 0x0f00) | 0xf2c00000 | (h & 0xff) | imm_map(h, 0, 8, 0) | imm_map(h, 8, 3, 12) | imm_map(h, 11, 1, 26) | imm_map(h, 12, 4, 16));
-    }
     else
     {
-        UNPREDICITABLE();
-        //uint32_t a[16], nv, no, o2, n2;
+        /*
+        当我们
+        add r0, r1, c
+        时，假如c过大，那么如下处理
+        op: add r0, r1, c & 0xff
+        o2: add r0, r0, c & 0xff00
+        o2: add r0, r0, c & 0xff0000
+        o2: add r0, r0, c & 0xff000000
+        */
+        uint32_t a[24], o2, no; 
+        int i;
+        a[0] = 0xff << 24;
+        /* o2的源操作和目的操作数需要修正成同一个 */
+        o2 = (op & 0xfff0ffff) | (op & 0x0f00);
+        no = o2 ^ 0xa00000;
+        for (i = 1; i < 24; i++)
+            a[i] = a[i - 1] >> 1;
+
+        o(stuff_const(op, v & 0xff));
+        if (!(v & 0x8000) || !(v & 0x800000) || !(v & 0x80000000)) vm_error("stuff_const cant fit instruction");
+        o(stuff_const(o2, v & 0xff00));
+        if (!(v & 0x8000)) 
+            o(stuff_const(no, v & 0x8000));
+        o(stuff_const(o2, v & 0xff0000));
+        if (!(v & 0x800000))
+            o(stuff_const(no, v & 0x800000));
+        o(stuff_const(o2, v & 0xff000000));
+        if (!(v & 0x80000000))
+            o(stuff_const(no, v & 0x80000000));
     }
 }
 
@@ -282,14 +304,27 @@ int _str(int rt, int rn, int rm, int imm, char *buf)
     thumb_end_copy();
 }
 
-int _mov(int rd, uint32_t imm)
+void _mov(int rd, uint32_t v)
 {
-    if (in_imm8(imm) && in_imm3(rd)) 
-        o(0x2000 | (rd << 8) | imm);
-    else 
-        stuff_const_harder(0xf04f0000 | rd << 8, imm);
+    /* A8.8.102 */
+    if (in_imm8(v) && in_imm3(rd)) 
+        o(0x2000 | (rd << 8) | v); // T1
+    else {
+        uint32_t x = stuff_const(0xf04f0000 | (rd << 8), v); // T2
+        if (x) {
+            o(x);
+            return;
+        }
 
-    return 0;
+        /* 
+        碰见超大数
+        mov rd, v.lo
+        movt rd, v.hi
+        */
+        o(0xf2400000 | (rd << 8) | imm_map(v, 12, 4, 16) | imm_map(v, 11, 1, 26) | imm_map(v, 8, 3, 12) | imm_map(v, 0, 8, 0));
+        v >>= 16;
+        o(0xf2a00000 | (rd << 8) | imm_map(v, 12, 4, 16) | imm_map(v, 11, 1, 26) | imm_map(v, 8, 3, 12) | imm_map(v, 0, 8, 0));
+    }
 }
 
 uint32_t encbranch(int pos, int addr, int fail)
@@ -401,18 +436,18 @@ int thumb_gen::run()
                     o(x | (COND_AL << 22));
                 }
                 else {
-                    o(NOP2);
+                o(NOP2);
                 }
             }
         }
         else if (b->out.size() == 2) {
-            flowblock *f = b->get_false_edge()->point;
+        flowblock *f = b->get_false_edge()->point;
 
-            if (((i + 1) == blist.size()) && (blist[i + 1] != b->get_out(0))) 
-                b->flags.g_flow_branch = 1;
+        if (((i + 1) == blist.size()) && (blist[i + 1] != b->get_out(0)))
+            b->flags.g_flow_branch = 1;
         }
         else {
-            throw LowlevelError("now not support switch code gen");
+        throw LowlevelError("now not support switch code gen");
         }
     }
 
@@ -431,8 +466,8 @@ int thumb_gen::run_block(flowblock *b)
 {
     list<pcodeop *>::iterator it, it1;
     pcodeop *p, *p1, *p2;
-    uint32_t reg, x;
-    int plen;
+    uint32_t reg, x, rt, rd, rn;
+    int plen, imm;
 
     b->cg.data = data + ind;
 
@@ -444,6 +479,11 @@ int thumb_gen::run_block(flowblock *b)
             if (poa(p) == ama) it = g_push(b, it);
             else if (pi1(p)->is_constant())
                 _mov(reg2index(poa(p)), pi1(p)->get_val());
+            else if (isreg(p->output) && isreg(pi0(p))) {
+                rd = reg2index(poa(p));
+                /* A8.8.103*/
+                o(0x46 | reg2index(pi0a(p)) << 3 | (rd & 7) | (rd >> 3 << 7));
+            }
             break;
 
         case CPUI_INT_EQUAL:
@@ -454,9 +494,9 @@ int thumb_gen::run_block(flowblock *b)
                     if (p2->opcode == CPUI_CBRANCH) {
                         flowblock *t = b->get_true_edge()->point;
                         x = (COND_EQ << 22);
-                        if (t->cg.data) 
+                        if (t->cg.data)
                             x |= encbranch(ind, t->cg.data - data, 0);
-                        else 
+                        else
                             add_fix_list(ind, t);
                         o(x);
                     }
@@ -469,10 +509,10 @@ int thumb_gen::run_block(flowblock *b)
             else if (istemp(p->output)) {
                 p1 = *++it;
                 if (p1->opcode == CPUI_INT_EQUAL) {
-                    p2 = *++it; 
+                    p2 = *++it;
                     if ((p2->opcode == CPUI_COPY) && (poa(p2) == azr)) {
                         reg = reg2index(pi0a(p));
-                        if (pi1(p)->is_constant() && (pi1(p)->get_val() < 256) && (reg < 7)) 
+                        if (pi1(p)->is_constant() && (pi1(p)->get_val() < 256) && (reg < 7))
                             o(0x2800 | (reg << 8) | ((uint32_t)pi1(p)->get_val()));
                     }
                 }
@@ -484,19 +524,48 @@ int thumb_gen::run_block(flowblock *b)
                 p1 = *++it;
                 switch (p1->opcode) {
                 case CPUI_COPY:
-                    if ((pi0a(p) == asp) && pi1(p)->is_constant() && a(pi1(p1)) == poa(p)) 
+                    if ((pi0a(p) == asp) && pi1(p)->is_constant() && a(pi1(p1)) == poa(p))
                         asmlen += _add(reg2index(poa(p1)), 1, pi1(p)->get_val(), asmbuf);
                     break;
 
                 case CPUI_STORE:
-                    if (a(pi1(p1)) == poa(p)) {
+                    if (a(pi1(p1)) == poa(p))
                         asmlen += _str(reg2index(pi2a(p1)), reg2index(pi0a(p)), -1, pi1(p)->get_val(), asmbuf);
+                    break;
+
+                case CPUI_LOAD:
+                    if (a(pi1(p1)) == poa(p)) {
+                        rt = reg2index(poa(p1));
+                        /* A8.8.62 */
+                        if ((pi0a(p) == asp) && (pi1(p)->get_val() < 256) && (rt < 8))
+                            o(0x9800 | (rt << 8) | pi1(p)->get_val());
+                        else
+                            o(0xf8d00000 | (rt << 12) | (reg2index(pi0a(p)) << 16) | pi1(p)->get_val());
                     }
                     break;
                 }
             }
             else if ((pi0a(p) == asp) && pi1(p)->is_constant()){
                 asmlen += _add(reg2index(poa(p)), 1, pi1(p)->get_val(), asmbuf);
+            }
+            else if (isreg(p->output)) {
+                rd = reg2index(poa(p));
+                rn = reg2index(pi0a(p));
+                /* A8.8.4 */
+                if (pi2(p)->is_constant()) {
+                    imm = (int)pi1(p)->get_val();
+                    if ((poa(p) == pi0a(p)) && rd < 8 && imm < 256)
+                        o(0x3000 | (rd << 8) | (imm & 0xff));       // T2
+                    else {
+                        x = stuff_const(0xf1000000, imm);           // T3
+                        if (!x) {
+                            //x = 0xf2000000 | imm_map(imm, );
+                        }
+
+                        x |= (rn << 16) | (rd << 8);
+                        o(x);
+                    }
+                }
             }
             break;
 
