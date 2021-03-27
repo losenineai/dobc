@@ -20,8 +20,6 @@ public:
     /* 再扫描elf的符号表时，会出现数据紧跟在代码区域后面，这部分的数据不应该在解析了，
     我们这里假设这个跟随的数据区是4字节为一个单位的，所以我们用一个 filelen/32 大小的bit数组来
     标识是否是数据还是代码 */
-    int markData(int offset);
-    bool isData(const Address &a);
 #define DATA_IN_CODE            0
 #define DATA_IN_BSS             1
     virtual int loadFill(uint1 *ptr,int4 size,const Address &addr);
@@ -29,4 +27,5 @@ public:
     virtual bool getNextSymbol(LoadImageFunc &record); 
     virtual void adjustVma(long adjust) { }
     int getSymbol(const char *symname, LoadImageFunc &record);
+    int saveSymbol(const char *symname, int size);
 };

@@ -3,6 +3,7 @@
 //#include "sleigh_arch.hh"
 #include "sleigh.hh"
 #include "dobc.hh"
+#include "thumb_gen.hh"
 #include <iostream>
 #include <assert.h>
 
@@ -266,6 +267,10 @@ int valuetype::cmp(const valuetype &b) const
     return height - b.height;
 }
 
+int         dobc::func_is_thumb(int offset)
+{
+    return 1;
+}
 
 // FIXME:loader的类型本来应该是LoadImageB的，但是不知道为什么loader的getNextSymbol访问的是
 // LoadImageB的，而不是ElfLoadImage的···
@@ -323,14 +328,14 @@ void dobc::init_plt()
             fd->funcp.set_side_effect(entry->side_effect);
             fd->funcp.inputs = entry->input;
             fd->funcp.output = 1;
-            add_func(fd);
+            functab.insert({ addr, fd });
         }
     }
     else {
         Address addr(trans->getDefaultCodeSpace(), stack_check_fail_addr);
         fd = new funcdata("__stack_check_fail", addr, 0, this);
         fd->set_exit(1);
-        add_func(fd);
+        functab.insert({ addr, fd });
     }
 }
 
@@ -371,14 +376,14 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 
 void dobc::plugin_ollvm()
 {
-    funcdata *fd_main = find_func("JNI_OnLoad");
+    funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
 
     fd_main->ollvm_deshell();
 }
 
 void dobc::plugin_dvmp360()
 {
-    funcdata *fd_main = find_func("_Z10__arm_a_21v");
+    funcdata *fd_main = find_func(std::string("_Z10__arm_a_21v"));
     //funcdata *fd_main = find_func("_Z9__arm_a_1P7_JavaVMP7_JNIEnvPvRi");
     //funcdata *fd_main = find_func("_Z9__arm_a_2PcjS_Rii");
     //funcdata *fd_main = find_func("_ZN10DynCryptor9__arm_c_0Ev");
@@ -419,26 +424,19 @@ void    funcdata::vmp360_marker(pcodeop *p)
 
 funcdata* dobc::find_func(const Address &addr)
 {
-    funcdata *fd;
-    int i;
-    mlist_for_each(funcs, fd, node, i) {
-        if (fd->get_addr() == addr)
-            return fd;
-    }
+    map<Address, funcdata *>::iterator it;
 
-    return NULL;
+    it = functab.find(addr);
+    return (it != functab.end()) ? it->second : NULL;
 }
 
-funcdata* dobc::find_func(const char *name)
+funcdata* dobc::find_func(const string &s)
 {
-    funcdata *fd;
-    int i;
-    mlist_for_each(funcs, fd, node, i) {
-        if (!strcmp(fd->name.c_str(), name))
-            return fd;
-    }
+    map<string, funcdata *>::iterator it;
 
-    return NULL;
+    it = functab_s.find(s);
+
+    return (it != functab_s.end()) ? it->second:NULL;
 }
 
 void dobc::init_regs()
@@ -473,17 +471,19 @@ void dobc::init()
         Address addr(sym.address);
         Address lastaddr(trans->getDefaultCodeSpace(), sym.address.getOffset() + sym.size);
 
-        funcdata *func;
+        funcdata *fd;
 
-        func = new funcdata(sym.name.c_str(), addr, sym.size, this);
+        if (NULL == (fd  = find_func(addr)))
+            fd = new funcdata(sym.name.c_str(), addr, sym.size, this);
 
         Address baddr(get_code_space(), 0);
         Address eaddr(get_code_space(), ~((uintb)0));
 
-        //func->set_range(addr, lastaddr);
-        func->set_range(baddr, eaddr);
+        fd->set_range(baddr, eaddr);
+        fd->bufptr = sym.bufptr;
 
-        mlist_add(funcs, func, node);
+        functab.insert({ addr, fd });
+        functab_s.insert({ sym.name, fd });
     }
 }
 
@@ -554,7 +554,7 @@ void dobc::dump_function(char *symname)
 {
     funcdata *func;
 
-    func = find_func(symname);
+    func = find_func(std::string(symname));
     if (!func) {
         printf("not found function %s", symname);
         exit(-1);
@@ -569,28 +569,11 @@ void dobc::dump_function(char *symname)
     printf("\n");
 }
 
-void dobc::add_func(funcdata *fd)
+void        dobc::set_func_alias(const string &sym, const string &alias)
 {
-    mlist_add(funcs, fd, node);
-}
-
-void        dobc::set_func_alias(const string &func, const string &alias)
-{
-    funcdata *fd = find_func(func.c_str());
+    funcdata *fd = find_func(sym);
 
     fd->set_alias(alias);
-}
-
-funcdata* dobc::find_func_by_alias(const string &alias)
-{
-    funcdata *fd;
-    int i;
-    mlist_for_each(funcs, fd, node, i) {
-        if (alias == fd->alias)
-            return fd;
-    }
-
-    return NULL;
 }
 
 #define SLA_FILE            "../../../Processors/ARM/data/languages/ARM8_le.sla"
@@ -2937,7 +2920,15 @@ void        funcdata::dump_exe()
 
     dead_code_elimination(bblocks.blist, 0);
 	build_liverange();
-	dump_liverange("1");
+	//dump_liverange("1");
+
+#if 0
+    thumb_gen gen(this);
+
+    gen.run();
+
+    gen.dump();
+#endif
 }
 
 void        funcdata::detect_calced_loops(vector<flowblock *> &loops)
@@ -3496,7 +3487,7 @@ void        flowblock::add_op(pcodeop *op)
     insert(ops.end(), op);
 }
 
-funcdata::funcdata(const char *nm, const Address &a, int size, dobc *d1)
+funcdata::funcdata(const char *nm, const Address &a, int siz, dobc *d1)
     : startaddr(a),
     bblocks(this),
     name(nm),
@@ -3508,6 +3499,8 @@ funcdata::funcdata(const char *nm, const Address &a, int size, dobc *d1)
     emitter.fd = this;
 
     flags.thumb = a.getOffset() & 1;
+
+    size = siz;
 
     memstack.size = 256 * 1024;
     memstack.bottom = (u1 *)malloc(sizeof (u1) * memstack.size);
@@ -4229,9 +4222,8 @@ bool        funcdata::process_instruction(const Address &curaddr, bool &startbas
         emitter.exit_itblock();
     }
 
-#if ENABLE_DUMP_INST
-    d->trans->printAssembly(assem, curaddr);
-#endif
+    if (flags.dump_inst)
+        d->trans->printAssembly(assem, curaddr);
 
     step = d->trans->oneInstruction(emitter, curaddr);
 

@@ -72,24 +72,9 @@ bool ElfLoadImage::getNextSymbol(LoadImageFunc &record)
     record.address = Address(codespace, sym->st_value);
     record.name = string(name);
     record.size = sym->st_size;
+    record.bufptr = filedata + sym->st_value;
 
     return true;
-}
-
-int ElfLoadImage::markData(int offset)
-{
-    if (offset & 3)
-        vm_error("Address[0x%x] not align 4 byte", offset);
-
-    //bitset_set(isdata, offset / 4, 1);
-
-    return 0;
-}
-
-bool ElfLoadImage::isData(const Address &a)
-{
-    //return bitset_get(isdata, (int)a.getOffset() / 4);
-    return false;
 }
 
 int ElfLoadImage::getSymbol(const char *symname, LoadImageFunc &record)
@@ -115,9 +100,15 @@ int ElfLoadImage::getSymbol(const char *symname, LoadImageFunc &record)
             record.address = Address(codespace, sym->st_value);
             record.name = string(name);
             record.size = sym->st_size;
+            record.bufptr = filedata + sym->st_value;
             return 0;
         }
     }
 
     return -1;
+}
+
+int ElfLoadImage::saveSymbol(const char *symname, int size)
+{
+    return 0;
 }

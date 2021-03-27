@@ -1,4 +1,8 @@
 ﻿
+
+#ifndef __dobc_h__
+#define __dobc_h__
+
 #include "mcore/mcore.h"
 #include "elfloadimage.hh"
 #include "types.h"
@@ -798,6 +802,7 @@ struct funcdata {
 		2. 一种是慢速但完全，可以参与所有优化 */
 		unsigned enable_complete_liverange : 1;
         unsigned thumb : 1;
+        unsigned dump_inst : 1;
     } flags = { 0 };
 
     enum {
@@ -903,7 +908,6 @@ struct funcdata {
     string fullpath;
     string name;
     string alias;
-    int size = 0;
 
     /* 扫描到的最小和最大指令地址 */
     Address minaddr;
@@ -932,6 +936,10 @@ struct funcdata {
     /* 做条件inline时用到 */
     funcdata *caller = NULL;
     pcodeop *callop = NULL;
+    /* bufptr指向elf的加载位置 */
+    unsigned char *bufptr = NULL;
+    /* elf的symbol指示的大小 */
+    int size;
 
 
     struct {
@@ -1368,12 +1376,9 @@ struct dobc {
 
     ContextDatabase *context = NULL;
     Translate *trans = NULL;
-    //TypeFactory *types;
 
-    struct {
-        int counts = 0;
-        funcdata *list = NULL;
-    } funcs;
+    map<Address, funcdata *> functab;
+    map<string, funcdata *> functab_s;
 
 #define SHELL_OLLVM           0
 #define SHELL_360FREE         1
@@ -1420,14 +1425,13 @@ struct dobc {
     void        init_plt(void);
     void        set_shelltype(char *shelltype);
 
+    int         func_is_thumb(int offset);
     void        run();
     void        dump_function(char *name);
-    void        add_func(funcdata *fd);
     void        set_func_alias(const string &func, const string &alias);
     void        set_test_cond_inline_fn(test_cond_inline_fn fn1) { test_cond_inline = fn1;  }
-    funcdata*   find_func(const char *name);
+    funcdata*   find_func(const string &s);
     funcdata*   find_func(const Address &addr);
-    funcdata*   find_func_by_alias(const string &name);
     AddrSpace *get_code_space() { return trans->getDefaultCodeSpace();  }
     AddrSpace *get_uniq_space() { return trans->getUniqueSpace();  }
     bool        is_cpu_reg(const Address &addr) { return cpu_regs.find(addr) != cpu_regs.end();  }
@@ -1440,3 +1444,5 @@ struct dobc {
     void init_abbrev();
     const string &get_abbrev(const string &name);
 };
+
+#endif

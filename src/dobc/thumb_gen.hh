@@ -1,6 +1,8 @@
 ﻿
-#include "dobc.hh"
+#ifndef __thumb_gen_h__
+#define __thumb_gen_h__
 
+#include "dobc.hh"
 
 typedef list<pcodeop *>::iterator pit;
 
@@ -34,10 +36,6 @@ struct thumb_gen {
     vector<flowblock *> blist;
     vector<fix_item *> flist;
 
-    char *asmbuf;
-    int asmlen;
-    int asmsize;
-
     unsigned char *data;
     int ind;
 
@@ -53,12 +51,9 @@ struct thumb_gen {
     int     calc_code_size(flowblock *b);
 
     pit g_push(flowblock *b, pit pit);
-
     pit g_add(flowblock *b, pit pit);
-    pit g_sub(flowblock *b, pit pit);
 
-    pit g_ldr(flowblock *b, pit pit);
-    pit g_str(flowblock *b, pit pit);
-    pit g_mov(flowblock *b, pit pit);
-    pit g_blx(flowblock *b, pit pit);
+    void dump();
 };
+
+#endif
