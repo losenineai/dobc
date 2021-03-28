@@ -405,6 +405,17 @@ funcdata* dobc::find_func(const string &s)
     return (it != functab_s.end()) ? it->second:NULL;
 }
 
+void dobc::init_spcs()
+{
+    for (int i = 0; i < trans->numSpaces(); i++) {
+        AddrSpace *spc = trans->getSpace(i);
+        if (spc->getName() == "ram")
+            ram_spc = spc;
+        else if (spc->getName() == "register")
+            reg_spc = spc;
+    }
+}
+
 void dobc::init_regs()
 {
     map<VarnodeData, string> reglist;
@@ -429,6 +440,7 @@ void dobc::init()
 {
     LoadImageFunc sym;
 
+    init_spcs();
     init_regs();
     init_abbrev();
     init_plt();
@@ -1254,6 +1266,25 @@ void            pcodeop::on_MULTIEQUAL()
         output->set_top();
 }
 
+void            pcodeop::loadram2out(Address &addr)
+{
+    dobc *d = parent->fd->d;
+    unsigned char buf[8];
+    varnode *out = output;
+
+    memset(buf, 0, sizeof(buf));
+    d->loader->loadFill(buf, out->size, addr);
+
+    if (out->size == 1)
+        out->set_val(*(int1 *)buf);
+    else if (out->size == 2)
+        out->set_val(*(int2 *)buf);
+    else if (out->size == 4)
+        out->set_val(*(int *)buf);
+    else if (out->size == 8)
+        out->set_val(*(intb *)buf);
+}
+
 int				pcodeop::compute_add_sub()
 {
 	varnode *in0, *in1, *_in0, *_in1, *out;
@@ -1357,9 +1388,10 @@ int             pcodeop::compute(int inslot, flowblock **branch)
             }
         }
 
-        if (in0->is_constant()) {
+        if (in0->get_addr().getSpace() == d->ram_spc)
+            loadram2out(Address(d->trans->getDefaultCodeSpace(), in0->get_addr().getOffset()));
+        else if (in0->is_constant()) 
             out->set_val(in0->get_val());
-        }
         else if (fd->is_sp_rel_constant(in0)) {
             out->set_rel_constant(in0->get_rel(), in0->get_val());
 
@@ -1409,21 +1441,7 @@ int             pcodeop::compute(int inslot, flowblock **branch)
         in1 = get_in(1);
         in2 = (inrefs.size() == 3) ? get_in(2):NULL;
         if (fd->is_code(in0, in1) && in1->is_constant()) {
-            Address addr(d->trans->getDefaultCodeSpace(), in1->type.v);
-
-            memset(buf, 0, sizeof(buf));
-            d->loader->loadFill(buf, out->size, addr);
-
-            if (out->size == 1)
-                out->set_val(*(int1 *)buf);
-            else if (out->size == 2)
-                out->set_val(*(int2 *)buf);
-            else if (out->size == 4)
-                out->set_val(*(int *)buf);
-            else if (out->size == 8)
-                out->set_val(*(intb *)buf);
-
-
+            loadram2out(Address(d->trans->getDefaultCodeSpace(), in1->type.v));
             //printf("addr=%llx, pcode=%d, load ram, pos = %llx, val = %llx\n", get_dis_addr().getOffset(), start.getTime(), in1->type.v, out->get_val());
         }
         else if (in2) { // 别名分析过
@@ -2888,7 +2906,7 @@ void        funcdata::dump_exe()
 	build_liverange();
 	//dump_liverange("1");
 
-#if 1
+#if 0
     thumb_gen gen(this);
 
     gen.run();
@@ -4709,7 +4727,7 @@ void        funcdata::dump_pcode(const char *postfix)
 
     for (int i = 0; i < d->trans->numSpaces(); i++) {
         AddrSpace *spc = d->trans->getSpace(i);
-        fprintf(fp, "Space[%s, 0x%llx, %c]\n", spc->getName().c_str(), spc->getHighest(), spc->getShortcut());
+        fprintf(fp, "Space[%s, type:%d, 0x%llx, %c]\n", spc->getName().c_str(), spc->getType(), spc->getHighest(), spc->getShortcut());
     }
     fprintf(fp, "ma = mult_addr\n");
     fprintf(fp, "\n");

@@ -438,6 +438,7 @@ struct pcodeop {
     void            peephole(void);
 
     void            on_MULTIEQUAL();
+    void            loadram2out(Address &addr);
 };
 
 typedef struct blockedge            blockedge;
@@ -1450,11 +1451,15 @@ struct dobc {
     set<Address> cpu_base_regs;
     vector<Address *>   argument_regs;
 
+    AddrSpace *ram_spc = NULL;
+    AddrSpace *reg_spc = NULL;
+
     dobc(const char *slafilename, const char *filename);
     ~dobc();
 
     void init_regs();
     void init();
+    void init_spcs();
     /* 初始化位置位置无关代码，主要时分析原型 */
     void        init_plt(void);
     void        set_shelltype(char *shelltype);
