@@ -1271,9 +1271,14 @@ void            pcodeop::loadram2out(Address &addr)
     dobc *d = parent->fd->d;
     unsigned char buf[8];
     varnode *out = output;
+    int ret;
 
     memset(buf, 0, sizeof(buf));
-    d->loader->loadFill(buf, out->size, addr);
+    ret = d->loader->loadFill(buf, out->size, addr);
+    if (ret == DATA_TOP) {
+        out->set_top();
+        return;
+    }
 
     if (out->size == 1)
         out->set_val(*(int1 *)buf);
