@@ -28,11 +28,6 @@
 
 static dobc *g_dobc = NULL;
 
-#define COLOR_ASM_INST_MNEM             "#3933ff"               
-#define COLOR_ASM_INST_BODY             "#3933ff"               
-#define COLOR_ASM_ADDR                  "#33A2FF"               
-#define COLOR_ASM_STACK_DEPTH           "green"
-
 #if 1
 #define DCFG_COND_INLINE                
 #define DCFG_BEFORE               
@@ -43,35 +38,6 @@ static dobc *g_dobc = NULL;
 
 #define MSB4(a)                 (a & 0x80000000)
 #define MSB2(a)                 (a & 0x8000)
-
-class AssemblyRaw : public AssemblyEmit {
-
-public:
-    char *buf = NULL;
-    FILE *fp = NULL;
-    int sp = 0;
-
-    virtual void dump(const Address &addr, const string &mnem, const string &body) {
-        if (!fp) fp = stdout;
-
-        if (buf) {
-            sprintf(buf, "<tr>"
-                "<td><font color=\"" COLOR_ASM_STACK_DEPTH "\">%03x:</font></td>"
-                "<td><font color=\"" COLOR_ASM_ADDR "\">0x%04x:</font></td>"
-                "<td align=\"left\"><font color=\"" COLOR_ASM_INST_MNEM "\">%s </font></td>"
-                "<td align=\"left\"><font color=\"" COLOR_ASM_INST_BODY "\">%s</font></td></tr>",
-                sp, (int)addr.getOffset(), mnem.c_str(), body.c_str());
-            //sprintf(buf, "0x%08x:%10s %s", (int)addr.getOffset(), mnem.c_str(), body.c_str());
-        }
-        else {
-            fprintf(fp, "0x%04x: %s %s\n", (int)addr.getOffset(), mnem.c_str(), body.c_str());
-        }
-    }
-
-    void set_buf(char *b) { buf = b; }
-    void set_fp(FILE *f) { fp = f; }
-    void set_sp(int s) { sp = s;  };
-};
 
 static void print_vardata(Translate *trans, FILE *fp, VarnodeData &data)
 {
@@ -2922,7 +2888,7 @@ void        funcdata::dump_exe()
 	build_liverange();
 	//dump_liverange("1");
 
-#if 0
+#if 1
     thumb_gen gen(this);
 
     gen.run();

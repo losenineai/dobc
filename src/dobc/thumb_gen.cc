@@ -51,6 +51,10 @@
 #define NOP1            0xbf00
 #define NOP2            0xf3af8000
 
+#define imm_map(imm, l, bw, r)          (((imm >> l) & (2 ^ bw - 1)) << r)
+#define bit_get(imm, l, bw)             ((imm >> l) & (2 ^ bw - 1))
+
+
 #define read_thumb2(b)          ((((uint32_t)(b)[0]) << 16) | (((uint32_t)(b)[1]) << 24) | ((uint32_t)(b)[2]) | (((uint32_t)(b)[3]) << 8))
 #define write_thumb2(b)          
 
@@ -62,6 +66,7 @@ thumb_gen::thumb_gen(funcdata *f)
     d = fd->d;
     data = f->bufptr;
     g_cg = this;
+    addr = f->get_addr();
 }
 
 thumb_gen::~thumb_gen()
@@ -98,9 +103,9 @@ static void ott(uint32_t i)
     i >>= 8;
     g_cg->data[g_cg->ind + 3] = i & 255;
     i >>= 8;
-    g_cg->data[g_cg->ind + 1] = i & 255;
-    i >>= 8;
     g_cg->data[g_cg->ind + 0] = i & 255;
+    i >>= 8;
+    g_cg->data[g_cg->ind + 1] = i & 255;
     i >>= 8;
 
     g_cg->ind += 4;
@@ -108,6 +113,9 @@ static void ott(uint32_t i)
 
 static void o(uint32_t i)
 {
+    if (!i)
+        vm_error("cant write zero value to code region");
+
     if ((i >> 16))
         ott(i);
     else
@@ -176,8 +184,12 @@ static uint32_t stuff_const(uint32_t op, uint32_t c)
     return 0;
 }
 
-#define imm_map(imm, l, bw, r)          (((imm >> l) & (2 ^ bw - 1)) << r)
-#define bit_get(imm, l, bw)             ((imm >> l) & (2 ^ bw - 1))
+static uint32_t stuff_constw(uint32_t op, uint32_t c)
+{
+    if (c > 2048) return 0;
+
+    return op | imm_map(c, 11, 1, 26) || imm_map(c, 8, 3, 0) || imm_map(c, 0, 11, 0);
+}
 
 static void stuff_const_harder(uint32_t op, uint32_t v)
 {
@@ -227,7 +239,7 @@ int _push(int32_t reglist)
     if (ANDNEQ(reglist, T1_REGLIST_MASK)) 
         o(0xb400 | (reglist & 0xff) | ((reglist & 0x4000) ? 0x100:0));
     else if (ANDNEQ(reglist, T2_REGLIST_MASK)) 
-        o(0xe92d | (reglist & 0xfff) | ((reglist & 0x100) ? 0x1000:0));
+        o(0xe92d0000 | reglist);
     return 0;
 }
 
@@ -331,15 +343,19 @@ pit thumb_gen::g_push(flowblock *b, pit pit)
         p = *pit++;
         p1 = *pit++;
         if ((p->opcode == CPUI_INT_SUB) && (p1->opcode == CPUI_STORE) && (pi1a(p1) == ama)) {
-            reglist |= reg2index(pi2a(p1));
+            reglist |= 1 << reg2index(pi2a(p1));
         }
         else throw LowlevelError("not support");
 
         p = *pit;
     }
 
-    if ((p->opcode == CPUI_COPY) && poa(p) == asp)
-        _push(reglist);
+    if ((poa(p) == asp) && (pi0a(p) == ama)) {
+        if ((p->opcode == CPUI_COPY)
+            /* FIXME: rn = rm + 0 == > rn = copy rm*/
+            || ((p->opcode == CPUI_INT_ADD) && pi1(p)->is_constant() && !pi1(p)->get_val()))
+            _push(reglist);
+    }
 
     return pit;
 }
@@ -439,8 +455,9 @@ int thumb_gen::run_block(flowblock *b)
         oind = ind;
         switch (p->opcode) {
         case CPUI_COPY:
+            /* push */
             if (poa(p) == ama) it = g_push(b, it);
-            else if (pi1(p)->is_constant())
+            else if (pi0(p)->is_constant())
                 _mov(reg2index(poa(p)), pi1(p)->get_val());
             else if (poa(p) == alr) {
                 p1 = *++it;
@@ -492,20 +509,33 @@ int thumb_gen::run_block(flowblock *b)
                     }
                 }
             }
-            else if (d->is_cpu_base_reg(poa(p))) {
-                if (d->is_cpu_base_reg(pi0a(p)) && d->is_cpu_base_reg(pi1a(p))) {
-                    rn = reg2index(pi0a(p));
-                    rm = reg2index(pi1a(p));
-                    rd = reg2index(poa(p));
-                    if (rn < 8 && rm < 8 && rd < 8)
-                        o(0x1a00 | rd | (rn << 3) || (rm << 6));
-                    else
-                        o(0xeba00000 | rm | (rd << 8) || (rn << 16));
+            else if (isreg(p->output)) {
+                if (isreg(pi0(p))) {
+                    if (isreg(pi1(p))) {
+                        rn = reg2index(pi0a(p));
+                        rm = reg2index(pi1a(p));
+                        rd = reg2index(poa(p));
+                        if (rn < 8 && rm < 8 && rd < 8)
+                            o(0x1a00 | rd | (rn << 3) || (rm << 6));
+                        else
+                            o(0xeba00000 | rm | (rd << 8) || (rn << 16));
 
-                    it1 = it;
-                    p1 = *++it1;
-                    if ((p1->opcode == CPUI_INT_EQUAL) && (p->output == pi0(p1))) {
-                        p2 = *++it1;
+                        it1 = it;
+                        p1 = *++it1;
+                        if ((p1->opcode == CPUI_INT_EQUAL) && (p->output == pi0(p1))) 
+                            p2 = *++it1;
+                    }
+                    /* sub sp, sp, c 
+                    A8.8.225.T1
+                    */
+                    else if (pi1(p)->is_constant() && (pi0a(p) == asp) && (poa(p) == asp)) {
+                        imm = pi1(p)->get_val();
+                        if (!(imm & 3)) /* ALIGN 4 */
+                            o(0xb080 | (imm >> 2));
+                        else if (imm < 4096) //subw, T3
+                            o(stuff_constw(0xf25b0000, imm));
+                        else // T2
+                            o(stuff_const(0xf1ad0000 | (SP << 8), imm));
                     }
                 }
             }
@@ -577,6 +607,18 @@ int thumb_gen::run_block(flowblock *b)
 
         if (oind == ind) 
             throw LowlevelError("pcodeop iterator not increment");
+
+        /* 打印新生成的代码 */
+#if 1
+        int len = ind - oind, i;
+        for (i = 0; i < len; i++)
+            printf("%02x ", data[oind + i]);
+
+        for (; i < 4; i++)
+            printf("   ");
+        AssemblyRaw assem;
+        d->trans->printAssembly(assem, addr + oind);
+#endif
     }
     return 0;
 }

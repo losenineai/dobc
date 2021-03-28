@@ -35,6 +35,7 @@ struct thumb_gen {
     dobc *d;
     vector<flowblock *> blist;
     vector<fix_item *> flist;
+    Address addr;
 
     unsigned char *data;
     int ind;
