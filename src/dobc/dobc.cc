@@ -1373,7 +1373,6 @@ int             pcodeop::compute(int inslot, flowblock **branch)
     varnode *in0, *in1, *in2, *out, *_in0, *_in1, *vn;
     funcdata *fd = parent->fd;
     dobc *d = fd->d;
-    uint1 buf[8];
     int ret = 0;
     pcodeop *store, *op;
     flowblock *b, *bb;
@@ -2911,7 +2910,7 @@ void        funcdata::dump_exe()
 	build_liverange();
 	//dump_liverange("1");
 
-#if 0
+#if 1
     thumb_gen gen(this);
 
     gen.run();

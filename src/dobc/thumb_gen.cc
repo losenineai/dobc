@@ -51,8 +51,8 @@
 #define NOP1            0xbf00
 #define NOP2            0xf3af8000
 
-#define imm_map(imm, l, bw, r)          (((imm >> l) & (2 ^ bw - 1)) << r)
-#define bit_get(imm, l, bw)             ((imm >> l) & (2 ^ bw - 1))
+#define imm_map(imm, l, bw, r)          (((imm >> l) & ((1 <<  bw) - 1)) << r)
+#define bit_get(imm, l, bw)             ((imm >> l) & ((1 << bw) - 1))
 
 
 #define read_thumb2(b)          ((((uint32_t)(b)[0]) << 16) | (((uint32_t)(b)[1]) << 24) | ((uint32_t)(b)[2]) | (((uint32_t)(b)[3]) << 8))
@@ -184,11 +184,13 @@ static uint32_t stuff_const(uint32_t op, uint32_t c)
     return 0;
 }
 
-static uint32_t stuff_constw(uint32_t op, uint32_t c)
+static uint32_t stuff_constw(uint32_t op, uint32_t c, int m)
 {
-    if (c > 2048) return 0;
+    if (c >= (1 << m)) return 0;
 
-    return op | imm_map(c, 11, 1, 26) || imm_map(c, 8, 3, 0) || imm_map(c, 0, 11, 0);
+    op |= imm_map(c, 11, 1, 26) | imm_map(c, 8, 3, 12) | imm_map(c, 0, 8, 0);
+    if (m == 16) op |= imm_map(c, 12, 4, 16);
+    return op;
 }
 
 static void stuff_const_harder(uint32_t op, uint32_t v)
@@ -243,12 +245,17 @@ int _push(int32_t reglist)
     return 0;
 }
 
-int _add(int rd, int sp, int imm)
+int _add(int rd, int rn, uint32_t imm)
 {
-    if (sp) {
-        if (in_imm8(imm) && (rd <= 7)) {
-            o(0xa800 | (rd << 8) | imm);
-        }
+    if (rn == SP) {
+        if (align4(imm) && (imm < 1024) && (rd < 8))
+            o(0xa800 | (rd << 8) | (imm >> 2));
+        else if ((rd == SP) && align4(imm) && (imm < 512))
+            o(0xb000 | (imm >> 2));
+        else if (imm < 4096)
+            o(stuff_constw(0xf20d0000 | (rd << 8), imm, 12));
+        else
+            stuff_const_harder(0xf10d0000, imm);
     }
 
     return 0;
@@ -260,7 +267,6 @@ int _ldr(int rt, int rn, int rm, int imm, char *buf)
     }
     else if (in_imm3(rt) && in_imm3(rn)){
         if (!align4(imm) || !in_imm5(imm >> 2)) UNPREDICITABLE();
-
         o(0x68 | ((imm >> 2) << 6) | (rn << 3) | rt);
     }
 
@@ -271,11 +277,15 @@ int _str(int rt, int rn, int rm, int imm)
 {
     if (rm != -1) {
     }
-    else if (in_imm3(rt) && in_imm3(rn)){
-        if (!align4(imm) || !in_imm5(imm >> 2)) UNPREDICITABLE();
-
-        o(0x60 | ((imm >> 2) << 6) | (rn << 3) | rt);
+    else if (rt < 8 && rn < 8) {
+        if (align4(imm) && imm < 128)
+            o(0x6000 | ((imm >> 2) << 6) | (rn << 3) | rt);
     }
+    else if ((rn == SP) && rt < 8 && align4(imm) && imm < 1024)
+        o(0x9000 | (rt << 8) | (imm >> 2));
+    else if (imm < 4096)
+        o(0xf8600000 | (rn << 16) | (rt << 12) | imm);
+
     return 0;
 }
 
@@ -296,9 +306,9 @@ void _mov(int rd, uint32_t v)
         mov rd, v.lo
         movt rd, v.hi
         */
-        o(0xf2400000 | (rd << 8) | imm_map(v, 12, 4, 16) | imm_map(v, 11, 1, 26) | imm_map(v, 8, 3, 12) | imm_map(v, 0, 8, 0));
+        o(stuff_constw(0xf2400000 | (rd << 8), v & 0xffff, 16));
         v >>= 16;
-        o(0xf2a00000 | (rd << 8) | imm_map(v, 12, 4, 16) | imm_map(v, 11, 1, 26) | imm_map(v, 8, 3, 12) | imm_map(v, 0, 8, 0));
+        o(stuff_constw(0xf2c00000 | (rd << 8), v, 16));
     }
 }
 
@@ -370,13 +380,13 @@ pit thumb_gen::g_add(flowblock *b, pit pit)
         p1 = *pit;
 
         if ((pi0a(p) == asp) && pi1(p)->is_constant() && (p1->opcode == CPUI_COPY) && a(pi1(p1)) == poa(p)) {
-            _add(reg2index(poa(p1)), 1, pi1(p)->get_val());
+            _add(reg2index(poa(p1)), SP, pi1(p)->get_val());
         }
         else
             UNPREDICITABLE();
     }
     else if ((pi0a(p) == asp) && pi1(p)->is_constant())
-        _add(reg2index(poa(p)), 1, pi1(p)->get_val());
+        _add(reg2index(poa(p)), SP, pi1(p)->get_val());
 
     return pit;
 }
@@ -458,7 +468,7 @@ int thumb_gen::run_block(flowblock *b)
             /* push */
             if (poa(p) == ama) it = g_push(b, it);
             else if (pi0(p)->is_constant())
-                _mov(reg2index(poa(p)), pi1(p)->get_val());
+                _mov(reg2index(poa(p)), pi0(p)->get_val());
             else if (poa(p) == alr) {
                 p1 = *++it;
                 if ((p1->opcode == CPUI_CALL) && pi0(p1)->is_constant()) {
@@ -533,11 +543,19 @@ int thumb_gen::run_block(flowblock *b)
                         if (!(imm & 3)) /* ALIGN 4 */
                             o(0xb080 | (imm >> 2));
                         else if (imm < 4096) //subw, T3
-                            o(stuff_constw(0xf25b0000, imm));
+                            o(stuff_constw(0xf25b0000, imm, 12));
                         else // T2
                             o(stuff_const(0xf1ad0000 | (SP << 8), imm));
                     }
                 }
+            }
+            break;
+
+        case CPUI_LOAD:
+            if (isreg(p->output) && pi1(p)->is_constant()) {
+                rd = reg2index(poa(p));
+                _mov(rd, pi1(p)->get_val());
+                o(0xf8d00000 | (rd << 12) | (rd << 16) | 0);
             }
             break;
 
@@ -547,7 +565,7 @@ int thumb_gen::run_block(flowblock *b)
                 switch (p1->opcode) {
                 case CPUI_COPY:
                     if ((pi0a(p) == asp) && pi1(p)->is_constant() && a(pi1(p1)) == poa(p))
-                        _add(reg2index(poa(p1)), 1, pi1(p)->get_val());
+                        _add(reg2index(poa(p1)), SP, pi1(p)->get_val());
                     break;
 
                 case CPUI_STORE:
@@ -568,7 +586,7 @@ int thumb_gen::run_block(flowblock *b)
                 }
             }
             else if ((pi0a(p) == asp) && pi1(p)->is_constant())
-                _add(reg2index(poa(p)), 1, pi1(p)->get_val());
+                _add(reg2index(poa(p)), SP, pi1(p)->get_val());
             else if (isreg(p->output)) {
                 rd = reg2index(poa(p));
                 rn = reg2index(pi0a(p));
@@ -595,8 +613,19 @@ int thumb_gen::run_block(flowblock *b)
                 p1 = *++it;
                 if (poa(p1) == alr) {
                     p2 = *++it;
-                    if (p2->opcode == CPUI_CALL) 
+                    if (p2->opcode == CPUI_CALLIND) 
                         o(0x4780 | (reg2index(pi0a(p)) << 3));
+                }
+            }
+            else if (istemp(p->output)) {
+                p1 = *++it;
+                if (p1->opcode == CPUI_STORE) {
+                    if (isreg(pi0(p)) && pi1(p)->is_constant()) {
+                        imm = pi1(p)->get_val();
+                        rt = reg2index(pi2a(p1));
+                        rn = reg2index(pi0a(p));
+                        _str(rt, rn, -1, imm);
+                    }
                 }
             }
             break;
@@ -610,14 +639,28 @@ int thumb_gen::run_block(flowblock *b)
 
         /* 打印新生成的代码 */
 #if 1
-        int len = ind - oind, i;
-        for (i = 0; i < len; i++)
-            printf("%02x ", data[oind + i]);
+        int len = ind - oind, i, siz;
 
-        for (; i < 4; i++)
-            printf("   ");
-        AssemblyRaw assem;
-        d->trans->printAssembly(assem, addr + oind);
+        while (len > 0) {
+            AssemblyRaw assem;
+            assem.disbable_html();
+            char buf[128];
+            assem.set_buf(buf);
+            siz = d->trans->printAssembly(assem, addr + oind);
+
+            printf("[p%-3d] ", p->start.getTime());
+
+            for (i = 0; i < siz; i++)
+                printf("%02x ", data[oind + i]);
+
+            for (; i < 4; i++)
+                printf("   ");
+
+            puts(buf);
+
+            len -= siz;
+            oind += siz;
+        }
 #endif
     }
     return 0;
