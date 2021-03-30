@@ -35,7 +35,6 @@ struct thumb_gen {
     dobc *d;
     vector<flowblock *> blist;
     vector<fix_item *> flist;
-    Address addr;
 
     unsigned char *data;
     int ind;
@@ -52,7 +51,7 @@ struct thumb_gen {
     int     calc_code_size(flowblock *b);
 
     pit g_push(flowblock *b, pit pit);
-    pit g_add(flowblock *b, pit pit);
+    pit g_pop(flowblock *b, pit pit);
 
     void dump();
 };

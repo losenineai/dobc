@@ -3,8 +3,6 @@
 
 class ElfLoadImage : public LoadImageB {
     long long baseaddr;
-    unsigned char*  filedata;
-    int				filelen;
 
     int is64bit;
     FILE *fp;
@@ -13,6 +11,9 @@ class ElfLoadImage : public LoadImageB {
     //struct bitset *isdata;
 
 public:
+    unsigned char*  filedata;
+    int				filelen;
+
     ElfLoadImage(const char *filename);
     virtual ~ElfLoadImage();
 

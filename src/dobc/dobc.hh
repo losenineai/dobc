@@ -534,7 +534,6 @@ struct flowblock {
         unsigned f_irreducible : 1;
         unsigned f_loopheader : 1;
 
-        unsigned g_flow_branch : 1;
         unsigned g_swap_cond : 1;
     } flags = { 0 };
 
