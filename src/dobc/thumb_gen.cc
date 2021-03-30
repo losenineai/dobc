@@ -113,9 +113,6 @@ static void ott(uint32_t i)
 
 static void o(uint32_t i)
 {
-    if (!i)
-        vm_error("cant write zero value to code region");
-
     if ((i >> 16))
         ott(i);
     else
@@ -321,7 +318,7 @@ uint32_t encbranch(int pos, int addr, int fail)
         vm_error("FIXME: function bigger than 1MB");
         return 0;
     }
-    return 0xf00080000 | imm_map(addr, 31, 1, 26) | imm_map(addr, 18, 1, 11) | imm_map(addr, 17, 1, 13) | imm_map(addr, 11, 6, 16) | imm_map(addr, 0, 11, 0);
+    return 0xf0008000 | imm_map(addr, 31, 1, 26) | imm_map(addr, 18, 1, 11) | imm_map(addr, 17, 1, 13) | imm_map(addr, 11, 6, 16) | imm_map(addr, 0, 11, 0);
 }
 
 uint32_t encbranch2(int pos, int addr, int arm)
@@ -445,6 +442,7 @@ int thumb_gen::run()
         fix_item *item = flist[i];
 
         x = read_thumb2(data + item->ind);
+        if (x == NOP2) x = 0;
         x |= encbranch(item->ind, item->b->cg.data - data, 0);
     }
 
@@ -496,9 +494,8 @@ int thumb_gen::run_block(flowblock *b)
                     if (p2->opcode == CPUI_CBRANCH) {
                         flowblock *t = b->get_true_edge()->point;
                         x = (COND_EQ << 22);
-                        if (t->cg.data)
-                            x |= encbranch(ind, t->cg.data - data, 0);
-                        else
+                        x |=  t->cg.data ?  encbranch(ind, t->cg.data - data, 0):encbranch(0, 0, 0);
+                        if (!t->cg.data)
                             add_fix_list(ind, t);
                         o(x);
                     }

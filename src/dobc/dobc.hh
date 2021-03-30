@@ -587,7 +587,7 @@ struct flowblock {
     /* code gen */
     struct {
         /* 自己的block生成的代码对应的具体位置 */
-        unsigned char *data;
+        unsigned char *data = NULL;
     }cg;
 
     flowblock(funcdata *fd);
