@@ -27,7 +27,7 @@ struct fix_item {
     int ind;
     flowblock *b;
 
-    fix_item(int i, flowblock *b1) { ind = i; b1 = b;  }
+    fix_item(int i, flowblock *b1) { ind = i; b = b1;  }
 };
 
 struct thumb_gen {

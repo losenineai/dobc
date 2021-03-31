@@ -53,7 +53,7 @@ public:
     virtual void dump(const Address &addr, const string &mnem, const string &body) {
         if (!fp) fp = stdout;
 
-        if (enable_html) {
+        if (enable_html && buf) {
             sprintf(buf, "<tr>"
                 "<td><font color=\"" COLOR_ASM_STACK_DEPTH "\">%03x:</font></td>"
                 "<td><font color=\"" COLOR_ASM_ADDR "\">0x%04x:</font></td>"

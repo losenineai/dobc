@@ -56,7 +56,17 @@
 
 
 #define read_thumb2(b)          ((((uint32_t)(b)[0]) << 16) | (((uint32_t)(b)[1]) << 24) | ((uint32_t)(b)[2]) | (((uint32_t)(b)[3]) << 8))
-#define write_thumb2(b)          
+#define write_thumb2(i, buf) do { \
+            (buf)[2] = i & 255; \
+            i >>= 8; \
+            (buf)[3] = i & 255; \
+            i >>= 8; \
+            (buf)[0] = i & 255; \
+            i >>= 8; \
+            (buf)[1] = i & 255; \
+            i >>= 8; \
+    } while (0)
+
 
 uint32_t bitcount(uint32_t x)
 {
@@ -109,15 +119,7 @@ static void ot(uint16_t i)
 
 static void ott(uint32_t i)
 {
-    g_cg->data[g_cg->ind + 2] = i & 255;
-    i >>= 8;
-    g_cg->data[g_cg->ind + 3] = i & 255;
-    i >>= 8;
-    g_cg->data[g_cg->ind + 0] = i & 255;
-    i >>= 8;
-    g_cg->data[g_cg->ind + 1] = i & 255;
-    i >>= 8;
-
+    write_thumb2(i, g_cg->data + g_cg->ind);
     g_cg->ind += 4;
 }
 
@@ -434,6 +436,8 @@ int thumb_gen::run()
     data = d->loader->filedata;
     ind = fd->bufptr - data;
 
+    ind -= fd->flags.thumb;
+
     memset(data, 0, fd->size);
     /* 对block进行排序 */
     /* FIXME:这里直接用最土炮的方法来做了，实际上应该用topsort来做会好点，更具体的请参考:
@@ -472,9 +476,10 @@ int thumb_gen::run()
     for (i = 0; i < flist.size(); i++) {
         fix_item *item = flist[i];
 
+        /* 读取出原先的inst，然后取出其中的cond，生成新的inst，然后写入buf */
         x = read_thumb2(data + item->ind);
-        if (x == NOP2) x = 0;
-        x |= encbranch(item->ind, item->b->cg.data - data, 0);
+        x =  (x & 0x03c00000)| encbranch(item->ind, item->b->cg.data - data, 0);
+        write_thumb2(x, data + item->ind);
     }
 
     return 0;
@@ -725,5 +730,6 @@ void thumb_gen::dump()
 
     fd1->flags.dump_inst = 1;
     fd1->follow_flow();
+    fd1->heritage();
     fd1->dump_cfg(fd1->name, "after_codegen", 1);
 }
