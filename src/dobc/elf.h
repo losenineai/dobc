@@ -3327,6 +3327,7 @@ const char *elf_secflag2str(int flags);
 
 Elf32_Shdr *elf32_shdr_get(Elf32_Ehdr *hdr, int type);
 Elf32_Sym *elf32_sym_find(Elf32_Ehdr *hdr, unsigned long sym_val);
+Elf32_Sym *elf32_sym_find2(Elf32_Ehdr *hdr, const char *name);
 int         elf32_sym_count(Elf32_Ehdr *hdr);
 Elf32_Sym *elf32_sym_geti(Elf32_Ehdr *hdr, int index);
 

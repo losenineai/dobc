@@ -75,36 +75,31 @@ bool ElfLoadImage::getNextSymbol(LoadImageFunc &record)
 
 int ElfLoadImage::getSymbol(const char *symname, LoadImageFunc &record)
 {
-    Elf32_Shdr *dynsymsh, *link_sh;
-    Elf32_Sym *sym;
-    Elf32_Ehdr *hdr = (Elf32_Ehdr *)filedata;
-    int i, num;
-    const char *name;
+    Elf32_Sym *sym = elf32_sym_find2((Elf32_Ehdr *)filedata, symname);
 
-    dynsymsh = elf32_shdr_get((Elf32_Ehdr *)filedata, SHT_DYNSYM);
-    if (!dynsymsh) 
-        vm_error("file[%s] have not .dymsym section", filename.c_str());
+    if (!sym)
+        return -1;
 
-    link_sh = (Elf32_Shdr *)(filedata + hdr->e_shoff) + dynsymsh->sh_link;
-
-    num = dynsymsh->sh_size / dynsymsh->sh_entsize;
-
-    for (i = 0; i < num; i++) {
-        sym = (Elf32_Sym *)(filedata + dynsymsh->sh_offset) + i;
-        name = (char *)filedata + (link_sh->sh_offset + sym->st_name);
-        if (!strcmp(name, symname)) {
-            record.address = Address(codespace, sym->st_value);
-            record.name = string(name);
-            record.size = sym->st_size;
-            record.bufptr = filedata + sym->st_value;
-            return 0;
-        }
-    }
-
-    return -1;
+    record.address = Address(codespace, sym->st_value);
+    record.name = string(symname);
+    record.size = sym->st_size;
+    record.bufptr = filedata + sym->st_value;
+    return 0;
 }
 
 int ElfLoadImage::saveSymbol(const char *symname, int size)
 {
+    Elf32_Sym *sym = elf32_sym_find2((Elf32_Ehdr *)filedata, symname);
+
+    if (!sym)
+        return -1;
+
+    sym->st_size = size;
+
     return 0;
+}
+
+void ElfLoadImage::saveFile(const char *filename)
+{
+    file_save(filename, (char *)filedata, filelen);
 }

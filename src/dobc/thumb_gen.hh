@@ -45,7 +45,8 @@ struct thumb_gen {
 
     void resort_blocks();
     int run();
-    int run_block(flowblock *b);
+    void save(void);
+    int run_block(flowblock *b, int b_ind);
     void add_fix_list(int ind, flowblock *b, int op);
 
     uint32_t reg2index(const Address &a);

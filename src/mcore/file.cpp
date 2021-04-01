@@ -1,4 +1,4 @@
-
+﻿
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,7 +23,7 @@ int file_exist(char *filename)
 #endif
 }
 
-int file_save(char *filename, char *buf, int len)
+int file_save(const char *filename, char *buf, int len)
 {
 #undef  func_format_s
 #undef  func_format

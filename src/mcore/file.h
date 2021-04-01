@@ -8,7 +8,7 @@ extern "C" {
 #endif
 
 	int file_exist(char *filename);
-	int file_save(char *filename, char *buf, int len);
+	int file_save(const char *filename, char *buf, int len);
 	char* file_load(const char *filename, int *len);
 	int file_unload(char *data);
 

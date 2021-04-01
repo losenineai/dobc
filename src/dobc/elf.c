@@ -376,6 +376,31 @@ Elf32_Sym *elf32_sym_find(Elf32_Ehdr *hdr, unsigned long sym_val)
 	return NULL;
 }
 
+Elf32_Sym *elf32_sym_find2(Elf32_Ehdr *hdr, const char *symname)
+{
+    Elf32_Shdr *dynsymsh, *link_sh;
+    Elf32_Sym *sym;
+    int i, num;
+    const char *name;
+
+    dynsymsh = elf32_shdr_get(hdr, SHT_DYNSYM);
+    if (!dynsymsh)
+        return NULL;
+
+    link_sh = (Elf32_Shdr *)((char *)hdr + hdr->e_shoff) + dynsymsh->sh_link;
+
+    num = dynsymsh->sh_size / dynsymsh->sh_entsize;
+
+    for (i = 0; i < num; i++) {
+        sym = (Elf32_Sym *)((char *)hdr + dynsymsh->sh_offset) + i;
+        name = (char *)hdr + (link_sh->sh_offset + sym->st_name);
+        if (!strcmp(name, symname)) 
+            return sym;
+    }
+
+    return NULL;
+}
+
 int         elf32_sym_count(Elf32_Ehdr *hdr)
 {
 	Elf32_Shdr *dynsymsh;

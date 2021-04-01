@@ -427,18 +427,16 @@ pit thumb_gen::g_pop(flowblock *b, pit pit)
 
 int thumb_gen::run()
 {
-    int i, add_jmp;
+    int i;
     uint32_t x;
-    flowblock *b, *b1;
 
     /* 1. 设置写入位置
     2. 清空原函数 */
     data = d->loader->filedata;
     ind = fd->bufptr - data;
-
     ind -= fd->flags.thumb;
+    memset(fd->bufptr, 0, fd->size);
 
-    memset(data, 0, fd->size);
     /* 对block进行排序 */
     /* FIXME:这里直接用最土炮的方法来做了，实际上应该用topsort来做会好点，更具体的请参考:
 
@@ -448,36 +446,7 @@ int thumb_gen::run()
 
     /* 针对每一个Block生成代码，但是不处理末尾的jmp */
     for (i = 0; i < blist.size(); i++) {
-        b = blist[i];
-
-        run_block(b);
-
-        if (b->out.size() == 0) continue;
-
-        add_jmp = 0;
-        if (b->out.size() == 1) {
-            b1 = b->get_out(0);
-            if (((i + 1) == blist.size()) || (blist[i + 1] != b1)) 
-                add_jmp = 1;
-        }
-        else if (b->out.size() == 2) {
-            assert(b->last_op()->opcode == CPUI_CBRANCH);
-            b1 = b->get_false_edge()->point;
-            if (((i + 1) == blist.size()) || (blist[i + 1] != b1)) 
-                add_jmp = 1;
-        }
-        else 
-            throw LowlevelError("now not support switch code gen");
-
-        if (add_jmp) {
-            //x = COND_AL << 22;
-            x = 0xf0009000;
-            x |=  b1->cg.data ?  encbranch2(ind, b1->cg.data - data, 0):encbranch2(0, 0, 0);
-            if (!b1->cg.data)
-                add_fix_list(ind, b1, COND_AL);
-            o(x);
-            dump_one_inst(ind - 4, NULL);
-        }
+        run_block(blist[i], i);
     }
 
     /* 修复末尾的跳转 */
@@ -502,7 +471,11 @@ int thumb_gen::run()
     return 0;
 }
 
-int thumb_gen::run_block(flowblock *b)
+void thumb_gen::save(void)
+{
+}
+
+int thumb_gen::run_block(flowblock *b, int b_ind)
 {
     list<pcodeop *>::iterator it, it1;
     pcodeop *p, *p1, *p2;
@@ -718,6 +691,35 @@ int thumb_gen::run_block(flowblock *b)
         }
 #endif
     }
+
+    if (b->out.size() == 0) return 0;
+
+    int add_jmp = 0;
+    flowblock *b1;
+
+    if (b->out.size() == 1) {
+        b1 = b->get_out(0);
+        if (((b_ind + 1) == blist.size()) || (blist[b_ind + 1] != b1)) 
+            add_jmp = 1;
+    }
+    else if (b->out.size() == 2) {
+        assert(b->last_op()->opcode == CPUI_CBRANCH);
+        b1 = b->get_false_edge()->point;
+        if (((b_ind + 1) == blist.size()) || (blist[b_ind + 1] != b1)) 
+            add_jmp = 1;
+    }
+    else 
+        throw LowlevelError("now not support switch code gen");
+
+    if (add_jmp) {
+        //x = COND_AL << 22;
+        x = 0xf0009000;
+        x |=  b1->cg.data ?  encbranch2(ind, b1->cg.data - data, 0):encbranch2(0, 0, 0);
+        if (!b1->cg.data)
+            add_fix_list(ind, b1, COND_AL);
+        o(x);
+        dump_one_inst(ind - 4, NULL);
+    }
     return 0;
 }
 
@@ -759,4 +761,6 @@ void thumb_gen::dump()
     fd1->follow_flow();
     fd1->heritage();
     fd1->dump_cfg(fd1->name, "after_codegen", 1);
+    
+    d->loader->saveFile("test.so");
 }

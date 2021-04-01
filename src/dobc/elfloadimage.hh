@@ -30,4 +30,5 @@ public:
     virtual void adjustVma(long adjust) { }
     int getSymbol(const char *symname, LoadImageFunc &record);
     int saveSymbol(const char *symname, int size);
+    void saveFile(const char *filename);
 };
