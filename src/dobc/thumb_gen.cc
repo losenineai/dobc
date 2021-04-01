@@ -427,7 +427,7 @@ pit thumb_gen::g_pop(flowblock *b, pit pit)
 
 int thumb_gen::run()
 {
-    int i, allsiz = 0;
+    int i, add_jmp;
     uint32_t x;
     flowblock *b, *b1;
 
@@ -454,33 +454,50 @@ int thumb_gen::run()
 
         if (b->out.size() == 0) continue;
 
+        add_jmp = 0;
         if (b->out.size() == 1) {
-            if (((i + 1) == blist.size()) || (blist[i + 1] != b->get_out(0))) {
-                b1 = b->get_out(0);
-                if (b1->cg.data) {
-                    x = encbranch(ind, b->cg.data - data, 0);
-                    o(x | (COND_AL << 22));
-                }
-                else {
-                    o(NOP2);
-                }
-            }
+            b1 = b->get_out(0);
+            if (((i + 1) == blist.size()) || (blist[i + 1] != b1)) 
+                add_jmp = 1;
         }
         else if (b->out.size() == 2) {
+            assert(b->last_op()->opcode == CPUI_CBRANCH);
+            b1 = b->get_false_edge()->point;
+            if (((i + 1) == blist.size()) || (blist[i + 1] != b1)) 
+                add_jmp = 1;
         }
         else 
             throw LowlevelError("now not support switch code gen");
+
+        if (add_jmp) {
+            //x = COND_AL << 22;
+            x = 0xf0009000;
+            x |=  b1->cg.data ?  encbranch2(ind, b1->cg.data - data, 0):encbranch2(0, 0, 0);
+            if (!b1->cg.data)
+                add_fix_list(ind, b1, COND_AL);
+            o(x);
+            dump_one_inst(ind - 4, NULL);
+        }
     }
 
     /* 修复末尾的跳转 */
+    printf("fix jmp list\n");
     for (i = 0; i < flist.size(); i++) {
         fix_item *item = flist[i];
 
         /* 读取出原先的inst，然后取出其中的cond，生成新的inst，然后写入buf */
-        x = read_thumb2(data + item->ind);
-        x =  (x & 0x03c00000)| encbranch(item->ind, item->b->cg.data - data, 0);
-        write_thumb2(x, data + item->ind);
+        if (item->cond == COND_AL) {
+            x = 0xf0009000;
+            x |= encbranch2(item->from, item->to_blk->cg.data - data, 0);
+        }
+        else {
+            x = read_thumb2(data + item->from);
+            x =  (x & 0x03c00000)| encbranch(item->from, item->to_blk->cg.data - data, 0);
+        }
+        write_thumb2(x, data + item->from);
+        dump_one_inst(item->from, NULL);
     }
+    printf("fix jmp list success\n");
 
     return 0;
 }
@@ -547,7 +564,7 @@ int thumb_gen::run_block(flowblock *b)
                         x = (((p->opcode == CPUI_INT_NOTEQUAL)?COND_EQ:COND_NE) << 22);
                         x |=  t->cg.data ?  encbranch(ind, t->cg.data - data, 0):encbranch(0, 0, 0);
                         if (!t->cg.data)
-                            add_fix_list(ind, t);
+                            add_fix_list(ind, t, 0);
                         o(x);
                     }
                 }
@@ -692,25 +709,10 @@ int thumb_gen::run_block(flowblock *b)
 
         /* 打印新生成的代码 */
 #if 1
-        int len = ind - oind, i, siz;
+        int len = ind - oind, siz;
 
         while (len > 0) {
-            AssemblyRaw assem;
-            assem.disbable_html();
-            char buf[128];
-            assem.set_buf(buf);
-            siz = d->trans->printAssembly(assem, Address(d->trans->getDefaultCodeSpace(), oind));
-
-            printf("[p%4d] ", p->start.getTime());
-
-            for (i = 0; i < siz; i++)
-                printf("%02x ", data[oind + i]);
-
-            for (; i < 4; i++)
-                printf("   ");
-
-            puts(buf);
-
+            siz = dump_one_inst(oind, p);
             len -= siz;
             oind += siz;
         }
@@ -719,9 +721,34 @@ int thumb_gen::run_block(flowblock *b)
     return 0;
 }
 
-void thumb_gen::add_fix_list(int ind, flowblock *b)
+int thumb_gen::dump_one_inst(int oind, pcodeop *p)
 {
-    flist.push_back(new fix_item(ind, b));
+    int i, siz;
+    AssemblyRaw assem;
+    assem.disbable_html();
+    char buf[128];
+    assem.set_buf(buf);
+    siz = d->trans->printAssembly(assem, Address(d->trans->getDefaultCodeSpace(), oind));
+
+    if (p)
+        printf("[p%4d] ", p->start.getTime());
+    else
+        printf("[     ] ");
+
+    for (i = 0; i < siz; i++)
+        printf("%02x ", data[oind + i]);
+
+    for (; i < 4; i++)
+        printf("   ");
+
+    puts(buf);
+
+    return siz;
+}
+
+void thumb_gen::add_fix_list(int ind, flowblock *b, int cond)
+{
+    flist.push_back(new fix_item(ind, b, cond));
 }
 
 void thumb_gen::dump()

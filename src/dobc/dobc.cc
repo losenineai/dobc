@@ -3161,17 +3161,16 @@ int         funcdata::ollvm_deshell()
 #endif
     }
 
-    dump_exe();
-
     dump_cfg(name, "final", 1);
     dump_pcode("1");
-    dump_djgraph("1", 1);
+    //dump_djgraph("1", 1);
     //fd_main->dump_phi_placement(17, 5300);
-    dump_store_info("1");
+    //dump_store_info("1");
     dump_loop("1");
 
 	printf("deshell spent %u ms\n", mtime_tick() - tick);
 
+    dump_exe();
 
     return 0;
 }
