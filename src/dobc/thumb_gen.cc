@@ -534,7 +534,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     p2 = *++it;
                     if (p2->opcode == CPUI_CBRANCH) {
                         flowblock *t = b->get_true_edge()->point;
-                        x = (((p->opcode == CPUI_INT_NOTEQUAL)?COND_EQ:COND_NE) << 22);
+                        x = (((p->opcode == CPUI_INT_NOTEQUAL)?COND_NE:COND_EQ) << 22);
                         x |=  t->cg.data ?  encbranch(ind, t->cg.data - data, 0):encbranch(0, 0, 0);
                         if (!t->cg.data)
                             add_fix_list(ind, t, 0);
@@ -613,11 +613,12 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 case CPUI_LOAD:
                     if (a(pi1(p1)) == poa(p)) {
                         rt = reg2index(poa(p1));
+                        imm = pi1(p)->get_val();
                         /* A8.8.62 */
-                        if ((pi0a(p) == asp) && (pi1(p)->get_val() < 256) && (rt < 8))
-                            o(0x9800 | (rt << 8) | pi1(p)->get_val());
-                        else
-                            o(0xf8d00000 | (rt << 12) | (reg2index(pi0a(p)) << 16) | pi1(p)->get_val());
+                        if ((pi0a(p) == asp) && align4(imm) && (imm < 1024) && (rt < 8)) // T2
+                            o(0x9800 | (rt << 8) | (imm >> 2));
+                        else if (imm < 4096) // T3
+                            o(0xf8d00000 | (rt << 12) | (reg2index(pi0a(p)) << 16) | imm);
                     }
                     break;
                 }
