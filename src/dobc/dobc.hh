@@ -7,6 +7,7 @@
 #include "elfloadimage.hh"
 #include "types.h"
 #include "heritage.hh"
+#include "pcodefunc.hh"
 
 typedef struct funcdata     funcdata;
 typedef struct pcodeop      pcodeop;
@@ -24,6 +25,7 @@ typedef struct cover		cover;
 typedef struct valuetype    valuetype;
 typedef struct coverblock	coverblock;
 typedef struct ollvmhead    ollvmhead;
+
 
 class pcodeemit2 : public PcodeEmit {
 public:
@@ -170,6 +172,10 @@ struct varnode_cmp_gvn {
     bool operator()(const varnode *a, const varnode *b) const;
 };
 
+struct varnode_const_cmp {
+    bool operator()(const varnode *a, const varnode *b) const;
+};
+
 typedef map<varnode *, vector<pcodeop *>, varnode_cmp_gvn> varnode_gvn_map;
 
 struct coverblock {
@@ -247,6 +253,7 @@ struct varnode {
     ~varnode();
 
     const Address &get_addr(void) const { return (const Address &)loc; }
+    int             get_size() { return size;  }
     bool            is_heritage_known(void) const { return (flags.insert | flags.annotation) || is_constant(); }
     bool            has_no_use(void) { return uses.empty(); }
 
@@ -259,7 +266,7 @@ struct varnode {
     bool            is_rel_constant(void) { return type.height == a_rel_constant; }
     bool            is_input(void) { return flags.input; }
     void            set_rel_constant(Address &r, int v) { type.height = a_rel_constant; type.v = v;  type.rel = r; }
-    intb            get_val(void);
+    intb            get_val(void) const;
     Address         &get_rel(void) { return type.rel; }
 
     void            add_use(pcodeop *op);
@@ -593,7 +600,8 @@ struct flowblock {
     ~flowblock();
 
     void        add_block(flowblock *b);
-    blockbasic* new_block_basic(funcdata *f);
+    blockbasic* new_block_basic(void);
+    blockbasic* new_block_basic(intb offset);
     flowblock*  get_out(int i) { return out[i].point;  }
     flowblock*  get_in(int i) { return in[i].point;  }
     flowblock*  get_block(int i) { return blist[i]; }
@@ -807,9 +815,23 @@ struct rangenode {
     intb    end() { return start + size;  }
 };
 
+class pcodefunc {
+public:
+    funcdata *fd;
+    dobc *d;
+    pcodefunc(funcdata *f);
+    void add_cmp_const(flowblock *b, varnode *rn, varnode *v);
+    void add_cbranch_eq(flowblock *b);
+    void add_cbranch_ne(flowblock *b);
+    void add_copy_const(flowblock *b, varnode *rd, uint32_t v);
+};
+
 struct ollvmhead {
     Address st1;
+    int st1_size;
+
     Address st2;
+    int st2_size;
     flowblock *h;
 
     ollvmhead(flowblock *h1);
@@ -963,6 +985,9 @@ struct funcdata {
     struct {
         vector<ollvmhead *>   heads;
     } ollvm;
+
+
+    pcodefunc pf;
 
     vector<Address>     addrlist;
     /* 常量cbranch列表 */
@@ -1351,8 +1376,81 @@ struct funcdata {
     void        detect_calced_loops(vector<flowblock *> &loops);
 /* 找到某个循环出口活跃的变量集合 */
     void        remove_loop_livein_varnode(flowblock *lheader);
+    /* action:删除可计算循环
+    lheader: 
+    */
     void        remove_calculated_loop(flowblock *lheader);
+    /* action: 删除所有可计算循环，并*/
     void        remove_calculated_loops();
+    /*
+    条件拷贝传递优化，情况1
+    action:
+    首先: a = T;
+
+    figure.A
+    001: b.0 = 1
+    002: if (a.0 match const_cond) b.1 = 2;
+    003: b.3 = phi(b.0, b.1)
+    ...: ...
+    ...: ...
+    n+0: ...
+    n+1: copy c.0, b.3
+
+    条件传递复写成:
+    figure.B
+    001: b.0 = a.0
+    ...
+    ...
+    n+0: if (b.0 match const_cond) b.1 = 2
+    n+1: else b.2 = 3;
+    n+2: b.3 = phi(b.1, b.2)
+    n+2: copy c.0, b.3
+
+    这里要注意的是，条件cp块的封闭性，
+
+    什么是封闭性: 自己发明的一个概念 :)， 从一个问题开始吧？
+    
+    你要把一行代码从一个地方A. cut & paste 到另外一个地方B，要满足什么条件?
+
+    1. 这行代码的out节点，必须得在地方B处活跃
+    2. 这行代码的in节点，也必须得在地方B处活跃，假如不活跃，必须得通过某种方式保存下来，比如堆栈。
+
+    你假如要把一整块代码从一个地方A. cut & paste 到另外一个地方B，要满足什么条件？
+
+    1. 因为块代码的复杂性，我们只讲述其中一种情况
+    2. 块A所有out节点，得在 B 处活跃。假如没有在B处活跃，必须得死在块A内。
+    3. 块A所有in节点，最好都死在块A内，否则在B处活跃。
+    4. input节点要B处活跃，否则要自己想办法保留下来，然后在地方B处恢复
+    */
+    int         cond_copy_propagation(varnode *phi);
+    /*
+    action:
+    假设有一条拷贝指令，他的rn操作数，是多个常量构成，但是赋值点都太远，我们对其进行重新，方便做de-ollvm
+
+    rd = rn
+
+    -->
+
+    if (rn == cl) {
+        rd = c1;
+    }
+    else if (rn == c2) {
+        rd = c2;
+    }
+    else 
+        rd = rn;
+
+    这个改完以后，程序的语义没有发生任何变化
+    */
+    int         cond_copy_expand(pcodeop *p);
+    /*
+    收集vn的所有def，维护一个队列
+
+    1. v来自于copy，扫描in
+    2. v来自于phi，扫描phi的所有in
+    3. 不是copy，也不是phi，认为其实一个定值
+    */
+    int         collect_all_const_defs(varnode *v, vector<varnode *> &defs);
 
     int         cmp_itblock_cbranch_conditions(pcodeop *cbr1, pcodeop* cbr2);
 

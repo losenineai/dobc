@@ -343,8 +343,9 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 void dobc::plugin_ollvm()
 {
     funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
-
+    //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
     fd_main->ollvm_deshell();
+    loader->saveFile("test.so");
 }
 
 void dobc::plugin_dvmp360()
@@ -815,7 +816,7 @@ void			varnode::clear_cover_simple()
 	simple_cover.end = -1;
 }
 
-intb            varnode::get_val(void)
+intb            varnode::get_val(void) const
 {
     return type.v;
 }
@@ -918,6 +919,11 @@ inline bool varnode_cmp_gvn::operator()(const varnode *a, const varnode *b) cons
     }
 
     return false;
+}
+
+inline bool varnode_const_cmp::operator()(const varnode *a, const varnode *b) const
+{
+    return a->get_val() < b->get_val();
 }
 
 void coverblock::set_begin(pcodeop *op) 
@@ -2348,11 +2354,21 @@ void  flowblock::calc_forward_dominator(const vector<flowblock *> &rootlist)
     postorder.back()->immed_dom = NULL;
 }
 
-blockbasic* blockgraph::new_block_basic(funcdata *f)
+blockbasic* blockgraph::new_block_basic(void)
 {
-    blockbasic *ret = new blockbasic(f);
+    blockbasic *ret = new blockbasic(fd);
     add_block(ret);
     return ret;
+}
+
+blockbasic* blockgraph::new_block_basic(intb offset)
+{
+    flowblock *b = new_block_basic();
+
+    Address addr(fd->d->trans->getDefaultCodeSpace(), offset);
+    b->set_initial_range(addr, addr);
+
+    return b;
 }
 
 void        blockgraph::set_start_block(flowblock *bl)
@@ -2874,7 +2890,7 @@ flowblock*          flowblock::detect_whiledo_exit(flowblock *header)
 flowblock*        funcdata::combine_multi_in_before_loop(vector<flowblock *> ins, flowblock *header)
 {
     int i;
-    flowblock *b = bblocks.new_block_basic(this);
+    flowblock *b = bblocks.new_block_basic();
 
     user_offset += user_step;
     Address addr(d->trans->getDefaultCodeSpace(), user_offset);
@@ -3047,6 +3063,132 @@ void        funcdata::remove_calculated_loops()
 
     heritage_clear();
     heritage();
+}
+
+/*
+
+识别出这样一种结构 
+
+top->b0
+top->b1
+b0->b1
+
+b0里面只允许有1-2行代码 
+*/
+int         funcdata::cond_copy_propagation(varnode *phi)
+{
+    pcodeop *p = phi->def;
+    int i;
+    flowblock *b0, *b1, *top;
+
+    if (!p 
+        || (p->opcode == CPUI_MULTIEQUAL)
+        || (p->inrefs.size() != 2))
+        throw LowlevelError("input varnode cant cond copy propagation");
+
+    /* 模式匹配 */
+    b0 = p->parent->get_in(0);
+    b1 = p->parent->get_in(1);
+
+    if ((i = b0->get_inslot(b1)) == -1) {
+        if ((i = b1->get_inslot(b0)) == -1)
+            throw LowlevelError("cond_copy_propagation pattern mismatch");
+        top = b1;
+    }
+    else
+        top = b0;
+
+    b0 = (top == b0) ? b1 : b0;
+    b1 = p->parent;
+
+    if (b0->ops.size() != 1)
+        throw LowlevelError("cond_copy_propagation pattern mismatch");
+
+    return 0;
+}
+
+int         funcdata::cond_copy_expand(pcodeop *p)
+{
+    flowblock *b = p->parent, *b1, *b2;
+    vector<varnode *> defs;
+    int i;
+    varnode *out, *in0, *in1, *def;
+    pcodeop *op[6], *op0;
+    assert(p->opcode == CPUI_COPY);
+    assert(b->out.size() == 1);
+
+    collect_all_const_defs(p->output, defs);
+
+    if (defs.size() == 0)
+        return -1;
+
+
+    for (i = 0; i < defs.size(); i++) {
+        def = defs[i];
+
+        b1 = bblocks.new_block_basic(user_offset += user_step);
+        op[0] = newop(2, SeqNum(Address(d->trans->getDefaultCodeSpace(), user_offset++), op_uniqid++));
+        op[0]->set_opcode(CPUI_INT_SUB);
+        new_unique_out(def->size, op[0]);
+        op_insert_end(op[0], b1);
+
+        op[1] = newop(2, SeqNum(Address(d->trans->getDefaultCodeSpace(), user_offset++), op_uniqid++));
+        op[1]->set_opcode(CPUI_INT_EQUAL);
+        op_insert_end(op[1], b1);
+
+        op[2] = newop(2, SeqNum(Address(d->trans->getDefaultCodeSpace(), user_offset++), op_uniqid++));
+        op[2]->set_opcode(CPUI_INT_EQUAL);
+        op_insert_end(op[2], b1);
+
+        b2 = bblocks.new_block_basic(user_offset += user_step);
+    }
+
+
+    return 0;
+}
+
+int         funcdata::collect_all_const_defs(varnode *v, vector<varnode *> &defs)
+{
+    pcodeop *p, *def;
+    pcodeop_set visit;
+    pcodeop_set::iterator it;
+    vector<pcodeop *> q;
+    varnode *in;
+    int i, j;
+
+    q.push_back(v->def);
+    visit.insert(v->def);
+    while (!q.empty()) {
+        p = q.front();
+        q.erase(q.begin());
+
+#define cad_push_def(in)        do { \
+            def = (in)->def; \
+            if (in->is_constant()) { \
+                for (j = 0; j < defs.size(); j++) { \
+                    if (defs[j]->get_val() == in->get_val()) break; \
+                } \
+                if (j == defs.size()) defs.push_back(in); \
+            } \
+            else if (def && (visit.find(def) == visit.end())) { \
+                if (def->opcode == CPUI_COPY && def->opcode == CPUI_MULTIEQUAL) \
+                    visit.insert(def); \
+            } \
+        } while (0)
+
+        if (p->opcode == CPUI_COPY) {
+            in = p->get_in(0);
+            cad_push_def(in);
+        }
+        else if (p->opcode == CPUI_MULTIEQUAL) {
+            for (i = 0; i < p->inrefs.size(); i++) {
+                in = p->get_in(0);
+                cad_push_def(in);
+            }
+        }
+    }
+
+    return 0;
 }
 
 int         funcdata::cmp_itblock_cbranch_conditions(pcodeop *cbr1, pcodeop* cbr2)
@@ -3431,7 +3573,8 @@ bool        flowblock::find_irreducible(const vector<flowblock *> &preorder, int
                 2. cross edge
                 */
                 if ((x->dfnum > yprime->dfnum) || ((x->dfnum + x->numdesc) <= yprime->dfnum)) {
-                    printf("warn: dfnum[%d] irreducible to dfnum[%d]\n", x->dfnum, yprime->dfnum);
+                    // FIXME:这行打印太多了，需要优化掉
+                    //printf("warn: dfnum[%d] irreducible to dfnum[%d]\n", x->dfnum, yprime->dfnum);
                     x->irreducibles.push_back(yprime);
                 }
                 else if (!yprime->is_mark() && (yprime != x)) {
@@ -3479,7 +3622,8 @@ funcdata::funcdata(const char *nm, const Address &a, int siz, dobc *d1)
     bblocks(this),
     name(nm),
     alias(nm),
-    searchvn(0, Address(Address::m_minimal))
+    searchvn(0, Address(Address::m_minimal)),
+    pf(this)
 {
     d = d1;
 
@@ -4630,7 +4774,7 @@ void        funcdata::split_basic()
 
     op = *iter++;
 
-    cur = bblocks.new_block_basic(this);
+    cur = bblocks.new_block_basic();
     op_insert(op, cur, cur->ops.end());
     bblocks.set_start_block(cur);
 
@@ -4642,7 +4786,7 @@ void        funcdata::split_basic()
 
         if (op->flags.startblock) {
             cur->set_initial_range(start, stop);
-            cur = bblocks.new_block_basic(this);
+            cur = bblocks.new_block_basic();
             start = op->start.getAddr();
             stop = start;
         }
@@ -4669,7 +4813,7 @@ void        funcdata::generate_blocks()
         flowblock *startblock = bblocks.blist[0];
         if (startblock->in.size()) {
             // 保证入口block没有输入边
-            blockbasic *newfront = bblocks.new_block_basic(this);
+            blockbasic *newfront = bblocks.new_block_basic();
             bblocks.add_edge(newfront, startblock);
             bblocks.set_start_block(newfront);
             newfront->set_initial_range(startaddr, startaddr);
@@ -6539,7 +6683,7 @@ flowblock*       funcdata::loop_unrolling(flowblock *h, flowblock *end, uint32_t
 
     /* 把刚才走过的路径复制出来，剔除jmp节点，最后一个节点的jmp保留 */
     br = trace.back()->parent;
-    cur = bblocks.new_block_basic(this);
+    cur = bblocks.new_block_basic();
 
     if (flags & _NOTE_VMBYTEINDEX) {
         if (!iv->is_constant())
@@ -6650,8 +6794,6 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
         return -1;
     }
 
-    printf("propchain===\n");
-
     prev = from;
     cur = chain->point;
 
@@ -6689,6 +6831,7 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
 
             /* 假如trace的最后一个节点，直接等于from，那么证明，一个分支节点都没走过去，直接禁止掉这个edge */
             if (trace[end]->parent == from) {
+                printf("warn: only one block, forbidden this edge\n");
                 chain->set_flag(a_unpropchain);
 
                 for (i = 0; i < trace.size(); i++) {
@@ -6728,7 +6871,7 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
     1. 当走出循环时，back指向循环外节点
     2. 当碰到undefined cbranch, trace.back指向了第一个无法计算的循环节点 */
     last = (end == trace.size() - 1) ? cur:trace.back()->parent;
-    cur = bblocks.new_block_basic(this);
+    cur = bblocks.new_block_basic();
 
     user_offset += user_step;
     Address addr(d->get_code_space(), user_offset);
@@ -7405,7 +7548,12 @@ int         funcdata::ollvm_detect_frameworkinfo()
             if (!ollvm_detect_fsm(head)) {
                 ollvm.heads.push_back(head);
                 head->h->mark_unsplice();
-                printf("ollvm head[%llx] fsm1[%llx] fsm2[%llx]\n", head->h->get_start().getOffset(), head->st1.getOffset(), head->st2.getOffset());
+                printf("ollvm head[%llx] ", head->h->get_start().getOffset());
+                if (!head->st1.isInvalid())
+                    printf("fsm1[%s] ", d->trans->getRegisterName(head->st1.getSpace(), head->st1.getOffset(), head->st1_size).c_str());
+                if (!head->st2.isInvalid())
+                    printf("fsm2[%s] ", d->trans->getRegisterName(head->st1.getSpace(), head->st1.getOffset(), head->st1_size).c_str());
+                printf("\n");
             }
             else
                 delete head;
@@ -7441,6 +7589,14 @@ int         funcdata::ollvm_detect_propchains(flowblock *&from, blockedge *&oute
 {
     int i;
 
+    /* 寻找传递链的逻辑 
+    1. 找到所有带循环的头 
+    2. 确实每个带循环头的状态变量
+
+    情况一: cmp rn, rm
+        假如 rn 是常数，那么rm就是状态变量候选，否则rn是候选
+        继续往上搜，假如
+    */
     for (i = 0; i < ollvm.heads.size(); i++) {
         ollvmhead *oh = ollvm.heads[i];
 
@@ -7527,11 +7683,13 @@ int         funcdata::ollvm_detect_fsm(ollvmhead *oh)
                 p = *it;
                 if ((p->opcode == CPUI_COPY) && p->output->get_addr() == s) {
                     oh->st1 = p->get_in(0)->get_addr();
+                    oh->st1_size = p->get_in(0)->get_size();
                     return 0;
                 }
             }
 
             oh->st1 = in0->is_constant() ? in1->get_addr() : in0->get_addr();
+            oh->st1_size = in0->is_constant() ? in1->get_size() : in0->get_size();
             return 0;
         }
     }
@@ -7793,7 +7951,7 @@ void        funcdata::dump_load_info(const char *postfix)
 
 flowblock*  funcdata::split_block(flowblock *f, list<pcodeop *>::iterator it)
 {
-    flowblock *b = bblocks.new_block_basic(this);
+    flowblock *b = bblocks.new_block_basic();
 
     user_offset += user_step;
     Address addr(d->trans->getDefaultCodeSpace(), user_offset);
@@ -7818,7 +7976,7 @@ flowblock*  funcdata::clone_block(flowblock *f, u4 flags)
     flowblock *b;
     pcodeop *op, *p;
 
-    b = bblocks.new_block_basic(this);
+    b = bblocks.new_block_basic();
     user_offset += user_step;
 
     Address addr(d->trans->getDefaultCodeSpace(), user_offset);
