@@ -598,7 +598,7 @@ struct flowblock {
 		return ops.size() ? (*--ops.end()):NULL;  
 	}
     list<pcodeop *>::iterator    last_it(void) { 
-        return ops.size() ? (--ops.end()) : ops.begin();
+        return ops.end();
 	}
     int         get_out_rev_index(int i) { return out[i].reverse_index;  }
 
@@ -847,6 +847,7 @@ public:
     dobc *d;
     pcodefunc(funcdata *f);
     void add_cmp_const(flowblock *b, list<pcodeop *>::iterator it, const varnode *rn, const varnode *v);
+    void add__cbranch_eq(flowblock *b, int eq);
     void add_cbranch_eq(flowblock *b);
     void add_cbranch_ne(flowblock *b);
     void add_copy_const(flowblock *b, list<pcodeop *>::iterator it, const varnode *rd, const varnode *v);
@@ -900,7 +901,6 @@ struct funcdata {
 	int reset_version = 0;
 
     pcodeop_tree     optree;
-    AddrSpace   *uniq_space = NULL;
     funcproto       funcp;
 
     struct {
@@ -1468,13 +1468,16 @@ struct funcdata {
 
     这个改完以后，程序的语义没有发生任何变化
     */
-    int         cond_copy_expand(pcodeop *p);
+    int         cond_copy_expand(pcodeop *p, int outslot);
     /*
     收集vn的所有def，维护一个队列
 
     1. v来自于copy，扫描in
     2. v来自于phi，扫描phi的所有in
     3. 不是copy，也不是phi，认为其实一个定值
+
+    @return     0           当前v的所有def都是常量，defs里的def就是v的所有def
+                1           v有值类型为top的def
     */
     int         collect_all_const_defs(varnode *v, vector<varnode *> &defs);
 

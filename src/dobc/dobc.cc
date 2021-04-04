@@ -342,8 +342,8 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 
 void dobc::plugin_ollvm()
 {
-    funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
-    //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
+    //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
+    funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
     fd_main->ollvm_deshell();
     loader->saveFile("test.so");
 }
@@ -3107,17 +3107,17 @@ int         funcdata::cond_copy_propagation(varnode *phi)
     return 0;
 }
 
-int         funcdata::cond_copy_expand(pcodeop *p)
+int         funcdata::cond_copy_expand(pcodeop *p, int outslot)
 {
     flowblock *b = p->parent, *b1, *b2, *pb1, *pb2, *outb;
     vector<varnode *> defs;
-    int i;
+    int i, have_top;
     varnode *def;
     assert(p->opcode == CPUI_COPY);
-    assert(b->out.size() == 1);
+    assert(outslot >= 0);
     outb = p->parent->get_out(0);
 
-    collect_all_const_defs(p->output, defs);
+    have_top = collect_all_const_defs(p->output, defs);
 
     if (defs.size() == 0)
         return -1;
@@ -3126,24 +3126,40 @@ int         funcdata::cond_copy_expand(pcodeop *p)
     for (i = 0; i < defs.size(); i++) {
         def = defs[i];
 
+        if ((def == defs.back()) && !have_top) {
+            b1 = bblocks.new_block_basic(user_offset += user_step);
+            pf.add_copy_const(b1, b1->ops.end(), p->output, defs[i]);
+
+            bblocks.add_edge(pb1, b1);
+            continue;
+        }
+
         b1 = bblocks.new_block_basic(user_offset += user_step);
-        pf.add_copy_const(b1, b1->last_it(), p->output, defs[i]);
-        pf.add_cmp_const(b1, b1->last_it(), p->get_in(0), defs[i]);
-        pf.add_cbranch_ne(b1);
+        pf.add_cmp_const(b1, b1->ops.end(), p->get_in(0), defs[i]);
+        pf.add_cbranch_eq(b1);
 
         b2 = bblocks.new_block_basic(user_offset += user_step);
-        pf.add_copy_const(b2, b2->last_it(), p->output, defs[i+1]);
+        pf.add_copy_const(b2, b2->ops.end(), p->output, defs[i]);
 
         bblocks.add_edge(b1, b2);
 
         if (pb1) {
-            bblocks.add_edge(pb1, b1);
-            bblocks.add_edge(pb2, b1);
+            bblocks.add_edge(pb1, b2, a_true_edge);
+            bblocks.add_edge(pb2, outb);
         }
 
         pb1 = b1;
         pb2 = b2;
+
+        if (i == 0) {
+            int lab = bblocks.remove_edge(b, b->get_out(outslot));
+            bblocks.add_edge(b, b1, lab & a_true_edge);
+        }
     }
+
+    bblocks.add_edge(b1, outb);
+
+    structure_reset();
 
     return 0;
 }
@@ -3155,7 +3171,7 @@ int         funcdata::collect_all_const_defs(varnode *v, vector<varnode *> &defs
     pcodeop_set::iterator it;
     vector<pcodeop *> q;
     varnode *in;
-    int i, j;
+    int i, j, have_top_def = 0;
 
     q.push_back(v->def);
     visit.insert(v->def);
@@ -3171,10 +3187,11 @@ int         funcdata::collect_all_const_defs(varnode *v, vector<varnode *> &defs
                 } \
                 if (j == defs.size()) defs.push_back(in); \
             } \
-            else if (def && (visit.find(def) == visit.end())) { \
-                if (def->opcode == CPUI_COPY && def->opcode == CPUI_MULTIEQUAL) \
-                    visit.insert(def); \
+            else if (def && (visit.find(def) == visit.end()) && ((def->opcode == CPUI_COPY) || (def->opcode == CPUI_MULTIEQUAL))) { \
+                q.push_back(def); \
+                visit.insert(def); \
             } \
+            else have_top_def = 1; \
         } while (0)
 
         if (p->opcode == CPUI_COPY) {
@@ -3183,13 +3200,13 @@ int         funcdata::collect_all_const_defs(varnode *v, vector<varnode *> &defs
         }
         else if (p->opcode == CPUI_MULTIEQUAL) {
             for (i = 0; i < p->inrefs.size(); i++) {
-                in = p->get_in(0);
+                in = p->get_in(i);
                 cad_push_def(in);
             }
         }
     }
 
-    return 0;
+    return have_top_def;
 }
 
 int         funcdata::cmp_itblock_cbranch_conditions(pcodeop *cbr1, pcodeop* cbr2)
@@ -3616,10 +3633,9 @@ funcdata::funcdata(const char *nm, const Address &a, int siz, dobc *d1)
     name(nm),
     alias(nm),
     searchvn(0, Address(Address::m_minimal)),
+    d(d1),
     pf(this)
 {
-    d = d1;
-
     emitter.fd = this;
 
     flags.thumb = a.getOffset() & 1;
@@ -3733,7 +3749,7 @@ varnode*    funcdata::set_def(varnode *vn, pcodeop *op)
 
 varnode*    funcdata::create_def_unique(int s, pcodeop *op)
 {
-    Address addr(uniq_space, vbank.uniqid);
+    Address addr(d->trans->getUniqueSpace(), vbank.uniqid);
 
     vbank.uniqid += s;
 
@@ -7253,7 +7269,7 @@ void        funcdata::rename_recurse(blockbasic *bl, variable_stack &varstack, v
     */
     fd1 = bl->ops.size() ?  bl->last_op()->callfd:NULL;
     /*  对于noreturn 函数我们设置出口寄存器活跃数量为0 */
-    if (bl->is_end() && (!fd1 || !fd1->flags.exit)) {
+    if (bl->is_end() && fd1 && !fd1->flags.exit) {
         variable_stack::iterator it;
         for (it = varstack.begin(); it != varstack.end(); it++) {
             vector<varnode *> &stack = it->second;
@@ -7606,7 +7622,7 @@ int         funcdata::ollvm_detect_propchain(ollvmhead *oh, flowblock *&from, bl
     if (oh->h->flags.f_dead) return -1;
 
     flowblock *h = oh->h, *pre, *cur, *h1;
-    int i, j;
+    int i, j, top;
     pcodeop *p = h->find_pcode_def(oh->st1), *p1;
     varnode *vn;
     blockedge *e;
@@ -7623,14 +7639,26 @@ int         funcdata::ollvm_detect_propchain(ollvmhead *oh, flowblock *&from, bl
             p1 = vn->def;
             h1 = p1->parent;
 
-            if (p1->opcode != CPUI_MULTIEQUAL) continue;
+            if (p1->opcode == CPUI_COPY) {
+                vector<varnode *> defs;
+                top = collect_all_const_defs(p1->get_in(0), defs);
 
-            for (j = 0; j < h1->in.size(); j++) {
-                vn = p1->get_in(j);
-                pre = p1->parent->get_in(j);
-                cur = p1->parent;
+                if (defs.size() > 1) {
+                    cond_copy_expand(p1, pre->get_out_index(cur));
+                    heritage_clear();
+                    heritage();
+                    dump_cfg(name, "cond_copy_expand", 1);
+                    return ollvm_detect_propchain(oh, from, outedge);
+                }
+            }
+            else if (p1->opcode == CPUI_MULTIEQUAL) {
+                for (j = 0; j < h1->in.size(); j++) {
+                    vn = p1->get_in(j);
+                    pre = p1->parent->get_in(j);
+                    cur = p1->parent;
 
-                if (vn->is_constant()) break;
+                    if (vn->is_constant()) break;
+                }
             }
         }
 
