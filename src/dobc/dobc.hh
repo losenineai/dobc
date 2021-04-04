@@ -12,7 +12,7 @@
 typedef struct funcdata     funcdata;
 typedef struct pcodeop      pcodeop;
 typedef struct varnode      varnode;
-typedef struct flowblock    flowblock, blockbasic, blockgraph;
+typedef struct flowblock    flowblock, blockbasic;
 typedef struct dobc         dobc;
 typedef struct jmptable     jmptable;
 typedef struct cpuctx       cpuctx;
@@ -26,6 +26,7 @@ typedef struct valuetype    valuetype;
 typedef struct coverblock	coverblock;
 typedef struct ollvmhead    ollvmhead;
 
+class blockgraph;
 
 class pcodeemit2 : public PcodeEmit {
 public:
@@ -253,7 +254,7 @@ struct varnode {
     ~varnode();
 
     const Address &get_addr(void) const { return (const Address &)loc; }
-    int             get_size() { return size;  }
+    int             get_size() const { return size;  }
     bool            is_heritage_known(void) const { return (flags.insert | flags.annotation) || is_constant(); }
     bool            has_no_use(void) { return uses.empty(); }
 
@@ -500,6 +501,7 @@ struct mem_stack {
     int     pop(int size);
 };
 
+
 struct flowblock {
     enum block_type     type;
 
@@ -548,7 +550,7 @@ struct flowblock {
 
     list<pcodeop*>      ops;
 
-    flowblock *parent = NULL;
+    blockgraph *parent = NULL;
     flowblock *immed_dom = NULL;
     /* 
     1. 标明自己属于哪个loop
@@ -561,8 +563,6 @@ struct flowblock {
     /* 标明这个loop有哪些节点*/
     vector<flowblock *> irreducibles;
     vector<flowblock *> loopnodes;
-    /* 识别所有的循环头 */
-    vector<flowblock *> loopheaders;
     /* 
     1. 测试可规约性
     2. clone web时有用
@@ -577,17 +577,9 @@ struct flowblock {
     int vm_byteindex = -1;      
     int vm_caseindex = -1;
 
+    jmptable *jmptable = NULL;
     vector<blockedge>   in;
     vector<blockedge>   out;
-    vector<flowblock *> blist;
-    vector<flowblock *> deadblist;
-    /* 一个函数的所有结束节点 */
-    vector<flowblock *> exitlist;
-    /* 有些block是不可到达的，都放到这个列表内 */
-    vector<flowblock *> deadlist;
-
-    jmptable *jmptable = NULL;
-
     funcdata *fd;
 
     /* code gen */
@@ -599,66 +591,33 @@ struct flowblock {
     flowblock(funcdata *fd);
     ~flowblock();
 
-    void        add_block(flowblock *b);
-    blockbasic* new_block_basic(void);
-    blockbasic* new_block_basic(intb offset);
     flowblock*  get_out(int i) { return out[i].point;  }
     flowblock*  get_in(int i) { return in[i].point;  }
-    flowblock*  get_block(int i) { return blist[i]; }
-    flowblock*  get_block_by_index(int index) {
-        for (int i = 0; i < blist.size(); i++)
-            if (blist[i]->index == index) return blist[i];
-
-        return NULL;
-    }
     pcodeop*    first_op(void) { return *ops.begin();  }
     pcodeop*    last_op(void) { 
 		return ops.size() ? (*--ops.end()):NULL;  
 	}
+    list<pcodeop *>::iterator    last_it(void) { 
+        return ops.size() ? (--ops.end()) : ops.begin();
+	}
     int         get_out_rev_index(int i) { return out[i].reverse_index;  }
 
-    void        set_start_block(flowblock *bl);
     void        set_initial_range(const Address &begin, const Address &end);
     void        add_op(pcodeop *);
     void        insert(list<pcodeop *>::iterator iter, pcodeop *inst);
 
-    int         sub_id();
-    void        structure_loops(vector<flowblock *> &rootlist);
-    void        find_spanning_tree(vector<flowblock *> &preorder, vector<flowblock *> &rootlist);
-    void        dump_spanning_tree(const char *filename, vector<flowblock *> &rootlist);
-    void        calc_forward_dominator(const vector<flowblock *> &rootlist);
-    void        build_dom_tree(vector<vector<flowblock *> > &child);
-    int         build_dom_depth(vector<int> &depth);
-    /*
-    寻找一种trace流的反向支配节点，
 
-    一般的反向支配节点算法，就是普通支配节点算法的逆
-
-    而这个算法是去掉，部分节点的回边而生成反向支配节点，用来在trace流中使用
-    */
-    flowblock*  find_post_tdom(flowblock *h);
-    bool        find_irreducible(const vector<flowblock *> &preorder, int &irreduciblecount);
-    void        calc_loop();
-
-    int         get_size(void) { return blist.size();  }
     Address     get_start(void);
 
     bool        is_back_edge_in(int i) { return in[i].label & a_back_edge; }
     void        set_mark() { flags.f_mark = 1;  }
     void        clear_mark() { flags.f_mark = 0;  }
-    void        clear_marks(void);
     bool        is_mark() { return flags.f_mark;  }
     bool        is_entry_point() { return flags.f_entry_point;  }
     bool        is_switch_out(void) { return flags.f_switch_out;  }
-    flowblock*  get_entry_point(void);
     int         get_in_index(const flowblock *bl);
     int         get_out_index(const flowblock *bl);
-    void        calc_exitpath();
 
-    void        clear(void);
-    int         remove_edge(flowblock *begin, flowblock *end);
-    void        add_edge(flowblock *begin, flowblock *end);
-    void        add_edge(flowblock *b, flowblock *e, int label);
     void        add_in_edge(flowblock *b, int lab);
     int         remove_in_edge(int slot);
     void        remove_out_edge(int slot);
@@ -685,49 +644,14 @@ struct flowblock {
     void        set_dead(void) { flags.f_dead = 1;  }
     int         is_dead(void) { return flags.f_dead;  }
     bool        is_irreducible() { return flags.f_irreducible;  }
-    void        remove_from_flow(flowblock *bl);
     void        remove_op(pcodeop *inst);
-    void        remove_block(flowblock *bl);
-    void        collect_reachable(vector<flowblock *> &res, flowblock *bl, bool un) const;
-    void        splice_block(flowblock *bl);
-    void        move_out_edge(flowblock *blold, int slot, flowblock *blnew);
     void        replace_in_edge(int num, flowblock *b);
     list<pcodeop *>::reverse_iterator get_rev_iterator(pcodeop *op);
-    flowblock*  add_block_if(flowblock *b, flowblock *cond, flowblock *tc);
-    bool        is_dowhile(flowblock *b);
     pcodeop*    first_callop();
-    /* 搜索到哪个节点为止 */
-    pcodeop*    first_callop_vmp(flowblock *end);
-    /* 这个函数有点问题 */
-    flowblock*  find_loop_exit(flowblock *start, flowblock *end);
-
-    /*
-    1. 检测header是否为 while...do 形式的循环的头节点
-    2. 假如不是，返回NULL
-    3. 假如是，计算whiledo的结束节点是哪个
-    */
-    flowblock*  detect_whiledo_exit(flowblock *header);
     void        mark_unsplice() { flags.f_unsplice = 1;  }
     bool        is_unsplice() { return flags.f_unsplice; }
     bool        is_end() { return out.size() == 0;  }
     Address     get_return_addr();
-    void        clear_all_unsplice();
-    void        clear_all_vminfo();
-    void        add_loopheader(flowblock *b) { 
-        b->flags.f_loopheader = 1;
-        loopheaders.push_back(b);  
-        b->loopnodes.push_back(b);
-        b->loopheader;
-    }
-    bool        in_loop(flowblock *lheader, flowblock *node);
-    void        clear_loopinfo() {
-        loopheader = NULL;
-        loopheaders.clear();
-        loopnodes.clear();
-        irreducibles.clear();
-        flags.f_irreducible = 0;
-        flags.f_loopheader = 0;
-    }
     pcodeop*    get_pcode(int pid) {
         list<pcodeop *>::iterator it;
         for (it = ops.begin(); it != ops.end(); it++) {
@@ -740,6 +664,108 @@ struct flowblock {
     /* 查找以这个变量为out的第一个pcode */
     pcodeop*    find_pcode_def(const Address &out);
     void        dump();
+    int         sub_id();
+
+    void        clear_loopinfo() {
+        loopheader = NULL;
+        loopnodes.clear();
+        irreducibles.clear();
+        flags.f_irreducible = 0;
+        flags.f_loopheader = 0;
+    }
+};
+
+class blockgraph {
+public:
+    vector<flowblock *> blist;
+    vector<flowblock *> deadblist;
+    /* 一个函数的所有结束节点 */
+    vector<flowblock *> exitlist;
+    /* 有些block是不可到达的，都放到这个列表内 */
+    vector<flowblock *> deadlist;
+
+    funcdata *fd;
+
+    /* 识别所有的循环头 */
+    vector<flowblock *> loopheaders;
+
+    int index = 0;
+
+    //--------------------
+    blockgraph(funcdata *fd1) { fd = fd1;  }
+
+    flowblock*  get_block(int i) { return blist[i]; }
+    flowblock*  get_block_by_index(int index) {
+        for (int i = 0; i < blist.size(); i++)
+            if (blist[i]->index == index) return blist[i];
+
+        return NULL;
+    }
+    int         get_size(void) { return blist.size();  }
+    void        set_start_block(flowblock *bl);
+    flowblock*  get_entry_point(void);
+    void        clear_marks(void);
+
+    /*
+    1. 检测header是否为 while...do 形式的循环的头节点
+    2. 假如不是，返回NULL
+    3. 假如是，计算whiledo的结束节点是哪个
+    */
+    flowblock*  detect_whiledo_exit(flowblock *header);
+    void        add_block(flowblock *b);
+    blockbasic* new_block_basic(void);
+    blockbasic* new_block_basic(intb offset);
+
+    void        structure_loops(vector<flowblock *> &rootlist);
+    void        find_spanning_tree(vector<flowblock *> &preorder, vector<flowblock *> &rootlist);
+    void        dump_spanning_tree(const char *filename, vector<flowblock *> &rootlist);
+    void        calc_forward_dominator(const vector<flowblock *> &rootlist);
+    void        build_dom_tree(vector<vector<flowblock *> > &child);
+    int         build_dom_depth(vector<int> &depth);
+    /*
+    寻找一种trace流的反向支配节点，
+
+    一般的反向支配节点算法，就是普通支配节点算法的逆
+
+    而这个算法是去掉，部分节点的回边而生成反向支配节点，用来在trace流中使用
+    */
+    flowblock*  find_post_tdom(flowblock *h);
+    bool        find_irreducible(const vector<flowblock *> &preorder, int &irreduciblecount);
+
+    /* loop 处理 */
+    void        add_loopheader(flowblock *b) { 
+        b->flags.f_loopheader = 1;
+        loopheaders.push_back(b);  
+        b->loopnodes.push_back(b);
+        b->loopheader;
+    }
+    bool        in_loop(flowblock *lheader, flowblock *node);
+    void        clear_loopinfo() {
+        loopheaders.clear();
+    }
+
+    /* 边处理 */
+    void        clear(void);
+    int         remove_edge(flowblock *begin, flowblock *end);
+    void        add_edge(flowblock *begin, flowblock *end);
+    void        add_edge(flowblock *b, flowblock *e, int label);
+    void        calc_exitpath();
+    void        remove_block(flowblock *bl);
+
+    void        collect_reachable(vector<flowblock *> &res, flowblock *bl, bool un) const;
+    void        splice_block(flowblock *bl);
+    void        move_out_edge(flowblock *blold, int slot, flowblock *blnew);
+
+    void        clear_all_unsplice();
+    void        clear_all_vminfo();
+
+    flowblock*  add_block_if(flowblock *b, flowblock *cond, flowblock *tc);
+    bool        is_dowhile(flowblock *b);
+    /* 这个函数有点问题 */
+    flowblock*  find_loop_exit(flowblock *start, flowblock *end);
+    /* 搜索到哪个节点为止 */
+    pcodeop*    first_callop_vmp(flowblock *end);
+    void        remove_from_flow(flowblock *bl);
 };
 
 typedef struct priority_queue   priority_queue;
@@ -820,10 +846,10 @@ public:
     funcdata *fd;
     dobc *d;
     pcodefunc(funcdata *f);
-    void add_cmp_const(flowblock *b, varnode *rn, varnode *v);
+    void add_cmp_const(flowblock *b, list<pcodeop *>::iterator it, const varnode *rn, const varnode *v);
     void add_cbranch_eq(flowblock *b);
     void add_cbranch_ne(flowblock *b);
-    void add_copy_const(flowblock *b, varnode *rd, uint32_t v);
+    void add_copy_const(flowblock *b, list<pcodeop *>::iterator it, const varnode *rd, const varnode *v);
 };
 
 struct ollvmhead {

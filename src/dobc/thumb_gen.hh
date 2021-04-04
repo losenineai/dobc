@@ -48,6 +48,7 @@ struct thumb_gen {
     void save(void);
     int run_block(flowblock *b, int b_ind);
     void add_fix_list(int ind, flowblock *b, int op);
+    void topologsort();
 
     uint32_t reg2index(const Address &a);
     int     calc_code_size(flowblock *b);

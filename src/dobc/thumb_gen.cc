@@ -425,6 +425,10 @@ pit thumb_gen::g_pop(flowblock *b, pit pit)
     return pit;
 }
 
+void thumb_gen::topologsort()
+{
+}
+
 int thumb_gen::run()
 {
     int i;
@@ -763,5 +767,4 @@ void thumb_gen::dump()
     fd1->heritage();
     fd1->dump_cfg(fd1->name, "after_codegen", 1);
     
-    d->loader->saveFile("test.so");
 }

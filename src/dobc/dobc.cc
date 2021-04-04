@@ -2157,7 +2157,7 @@ void blockgraph::add_block(blockbasic *b)
     blist.push_back(b);
 }
 
-void flowblock::find_spanning_tree(vector<flowblock *> &preorder, vector<flowblock *> &rootlist)
+void blockgraph::find_spanning_tree(vector<flowblock *> &preorder, vector<flowblock *> &rootlist)
 {
     if (blist.size() == 0) return;
 
@@ -2250,7 +2250,7 @@ void flowblock::find_spanning_tree(vector<flowblock *> &preorder, vector<flowblo
     初步怀疑: tree-edge 是spanning tree
               forward-edge 是
 */
-void flowblock::structure_loops(vector<flowblock *> &rootlist)
+void blockgraph::structure_loops(vector<flowblock *> &rootlist)
 {
     vector<flowblock *> preorder;
     int irreduciblecount = 0;
@@ -2260,7 +2260,7 @@ void flowblock::structure_loops(vector<flowblock *> &rootlist)
     find_irreducible(preorder, irreduciblecount);
 }
 
-void flowblock::dump_spanning_tree(const char *filename, vector<flowblock *> &rootlist)
+void blockgraph::dump_spanning_tree(const char *filename, vector<flowblock *> &rootlist)
 {
     FILE *fp;
     int i;
@@ -2281,7 +2281,7 @@ void flowblock::dump_spanning_tree(const char *filename, vector<flowblock *> &ro
 paper: A Simple, Fast Dominance Algorithm
 http://web.cse.ohio-state.edu/~rountev.1/788/papers/cooper-spe01.pdf
 */
-void  flowblock::calc_forward_dominator(const vector<flowblock *> &rootlist)
+void  blockgraph::calc_forward_dominator(const vector<flowblock *> &rootlist)
 {
     vector<flowblock *>     postorder;
     flowblock *b, *new_idom, *rho;
@@ -2388,7 +2388,7 @@ void        blockgraph::set_start_block(flowblock *bl)
     bl->flags.f_entry_point = 1;
 }
 
-void        blockgraph::set_initial_range(const Address &b, const Address &e)
+void        flowblock::set_initial_range(const Address &b, const Address &e)
 {
     cover.clear();
     cover.insertRange(b.getSpace(), b.getOffset(), e.getOffset());
@@ -2412,7 +2412,7 @@ int         flowblock::sub_id()
     return (*iter)->start.getTime();
 }
 
-flowblock*  flowblock::get_entry_point(void)
+flowblock*  blockgraph::get_entry_point(void)
 {
     int i;
 
@@ -2448,7 +2448,7 @@ int         flowblock::get_out_index(const flowblock *bl)
     return -1;
 }
 
-void        flowblock::calc_exitpath()
+void        blockgraph::calc_exitpath()
 {
     flowblock *e, *in;
     int i, j;
@@ -2476,7 +2476,7 @@ void        flowblock::calc_exitpath()
     }
 }
 
-void        flowblock::clear(void)
+void        blockgraph::clear(void)
 {
     vector<flowblock *>::iterator iter;
 
@@ -2486,7 +2486,7 @@ void        flowblock::clear(void)
     blist.clear();
 }
 
-void        flowblock::clear_marks(void)
+void        blockgraph::clear_marks(void)
 {
     int i;
 
@@ -2494,7 +2494,7 @@ void        flowblock::clear_marks(void)
         blist[i]->clear_mark();
 }
 
-int         flowblock::remove_edge(flowblock *begin, flowblock *end)
+int         blockgraph::remove_edge(flowblock *begin, flowblock *end)
 {
     int i;
     for (i = 0; i < end->in.size(); i++) {
@@ -2505,12 +2505,12 @@ int         flowblock::remove_edge(flowblock *begin, flowblock *end)
     return end->remove_in_edge(i);
 }
 
-void        flowblock::add_edge(flowblock *begin, flowblock *end)
+void        blockgraph::add_edge(flowblock *begin, flowblock *end)
 {
     end->add_in_edge(begin, 0);
 }
 
-void        flowblock::add_edge(flowblock *begin, flowblock *end, int label)
+void        blockgraph::add_edge(flowblock *begin, flowblock *end, int label)
 {
     end->add_in_edge(begin, label);
 }
@@ -2641,7 +2641,7 @@ void        flowblock::clear_out_edge_flag(int i, uint4 lab)
     bbout->in[out[i].reverse_index].label &= ~lab;
 }
 
-void        flowblock::remove_from_flow(flowblock *bl)
+void        blockgraph::remove_from_flow(flowblock *bl)
 {
     if (bl->in.size() > 0)
         throw LowlevelError("only support remove block which in-size is 0");
@@ -2660,7 +2660,7 @@ void        flowblock::remove_op(pcodeop *inst)
     ops.erase(inst->basiciter);
 }
 
-void        flowblock::remove_block(flowblock *bl)
+void        blockgraph::remove_block(flowblock *bl)
 {
     vector<flowblock *>::iterator iter;
 
@@ -2679,7 +2679,7 @@ void        flowblock::remove_block(flowblock *bl)
     deadblist.push_back(bl);
 }
 
-void        flowblock::collect_reachable(vector<flowblock *> &res, flowblock *bl, bool un) const
+void        blockgraph::collect_reachable(vector<flowblock *> &res, flowblock *bl, bool un) const
 {
     flowblock *blk, *blk2;
 
@@ -2715,7 +2715,7 @@ void        flowblock::collect_reachable(vector<flowblock *> &res, flowblock *bl
     }
 }
 
-void        flowblock::splice_block(flowblock *bl)
+void        blockgraph::splice_block(flowblock *bl)
 {
     flowblock *outbl = (flowblock *)0;
     char f[3];
@@ -2738,7 +2738,7 @@ void        flowblock::splice_block(flowblock *bl)
     bl->flags.f_entry_point = f[0];
 }
 
-void        flowblock::move_out_edge(flowblock *blold, int slot, flowblock *blnew)
+void        blockgraph::move_out_edge(flowblock *blold, int slot, flowblock *blnew)
 {
     flowblock *outbl = blold->get_out(slot);
     int i = blold->get_out_rev_index(slot);
@@ -2766,7 +2766,7 @@ list<pcodeop *>::reverse_iterator flowblock::get_rev_iterator(pcodeop *op)
     throw LowlevelError("get_rev_iterator failure");
 }
 
-flowblock*  flowblock::add_block_if(flowblock *b, flowblock *cond, flowblock *tc)
+flowblock*  blockgraph::add_block_if(flowblock *b, flowblock *cond, flowblock *tc)
 {
     add_edge(b, cond, a_true_edge);
     add_edge(b, tc);
@@ -2774,7 +2774,7 @@ flowblock*  flowblock::add_block_if(flowblock *b, flowblock *cond, flowblock *tc
     return b;
 }
 
-bool        flowblock::is_dowhile(flowblock *b)
+bool        blockgraph::is_dowhile(flowblock *b)
 {
     int i;
 
@@ -2801,7 +2801,7 @@ pcodeop*    flowblock::first_callop(void)
     return NULL;
 }
 
-pcodeop*    flowblock::first_callop_vmp(flowblock *end)
+pcodeop*    blockgraph::first_callop_vmp(flowblock *end)
 {
     list<pcodeop *>::iterator it;
     pcodeop *op;
@@ -2823,7 +2823,7 @@ pcodeop*    flowblock::first_callop_vmp(flowblock *end)
     return NULL;
 }
 
-flowblock*  flowblock::find_loop_exit(flowblock *start, flowblock *end)
+flowblock*  blockgraph::find_loop_exit(flowblock *start, flowblock *end)
 {
     vector<flowblock *> stack;
     vector<int> visit;
@@ -2862,7 +2862,7 @@ flowblock*  flowblock::find_loop_exit(flowblock *start, flowblock *end)
     return NULL;
 }
 
-flowblock*          flowblock::detect_whiledo_exit(flowblock *header)
+flowblock*          blockgraph::detect_whiledo_exit(flowblock *header)
 {
     flowblock *true0, *false0, *back;
 
@@ -3109,40 +3109,41 @@ int         funcdata::cond_copy_propagation(varnode *phi)
 
 int         funcdata::cond_copy_expand(pcodeop *p)
 {
-    flowblock *b = p->parent, *b1, *b2;
+    flowblock *b = p->parent, *b1, *b2, *pb1, *pb2, *outb;
     vector<varnode *> defs;
     int i;
-    varnode *out, *in0, *in1, *def;
-    pcodeop *op[6], *op0;
+    varnode *def;
     assert(p->opcode == CPUI_COPY);
     assert(b->out.size() == 1);
+    outb = p->parent->get_out(0);
 
     collect_all_const_defs(p->output, defs);
 
     if (defs.size() == 0)
         return -1;
 
-
+    pb1 = pb2 = NULL;
     for (i = 0; i < defs.size(); i++) {
         def = defs[i];
 
         b1 = bblocks.new_block_basic(user_offset += user_step);
-        op[0] = newop(2, SeqNum(Address(d->trans->getDefaultCodeSpace(), user_offset++), op_uniqid++));
-        op[0]->set_opcode(CPUI_INT_SUB);
-        new_unique_out(def->size, op[0]);
-        op_insert_end(op[0], b1);
-
-        op[1] = newop(2, SeqNum(Address(d->trans->getDefaultCodeSpace(), user_offset++), op_uniqid++));
-        op[1]->set_opcode(CPUI_INT_EQUAL);
-        op_insert_end(op[1], b1);
-
-        op[2] = newop(2, SeqNum(Address(d->trans->getDefaultCodeSpace(), user_offset++), op_uniqid++));
-        op[2]->set_opcode(CPUI_INT_EQUAL);
-        op_insert_end(op[2], b1);
+        pf.add_copy_const(b1, b1->last_it(), p->output, defs[i]);
+        pf.add_cmp_const(b1, b1->last_it(), p->get_in(0), defs[i]);
+        pf.add_cbranch_ne(b1);
 
         b2 = bblocks.new_block_basic(user_offset += user_step);
-    }
+        pf.add_copy_const(b2, b2->last_it(), p->output, defs[i+1]);
 
+        bblocks.add_edge(b1, b2);
+
+        if (pb1) {
+            bblocks.add_edge(pb1, b1);
+            bblocks.add_edge(pb2, b1);
+        }
+
+        pb1 = b1;
+        pb2 = b2;
+    }
 
     return 0;
 }
@@ -3386,14 +3387,14 @@ Address    flowblock::get_return_addr()
     return Address(d->get_code_space(), p->output->get_val());
 }
 
-void        flowblock::clear_all_unsplice()
+void        blockgraph::clear_all_unsplice()
 {
     for (int i = 0; i < blist.size(); i++) {
         get_block(i)->flags.f_unsplice = 0;
     }
 }
 
-void        flowblock::clear_all_vminfo()
+void        blockgraph::clear_all_vminfo()
 {
     for (int i = 0; i < blist.size(); i++) {
         flowblock *b = get_block(i);
@@ -3402,7 +3403,7 @@ void        flowblock::clear_all_vminfo()
     }
 }
 
-bool        flowblock::in_loop(flowblock *lheader, flowblock *node)
+bool        blockgraph::in_loop(flowblock *lheader, flowblock *node)
 {
     return (node->loopheader == lheader) || (node == lheader);
 }
@@ -3474,7 +3475,7 @@ void        funcdata::remove_dead_stores()
     }
 }
 
-void        flowblock::build_dom_tree(vector<vector<flowblock *> > &child)
+void        blockgraph::build_dom_tree(vector<vector<flowblock *> > &child)
 {
     int i;
     flowblock *bl;
@@ -3490,7 +3491,7 @@ void        flowblock::build_dom_tree(vector<vector<flowblock *> > &child)
     }
 }
 
-int         flowblock::build_dom_depth(vector<int> &depth)
+int         blockgraph::build_dom_depth(vector<int> &depth)
 {
     flowblock *bl;
     int max = 0, i;
@@ -3512,7 +3513,7 @@ int         flowblock::build_dom_depth(vector<int> &depth)
     return max;
 }
 
-flowblock*  flowblock::find_post_tdom(flowblock *h)
+flowblock*  blockgraph::find_post_tdom(flowblock *h)
 {
     return NULL;
 }
@@ -3530,7 +3531,7 @@ Address     flowblock::get_start(void)
 /* 
 Testing Flow Graph Reducibility
 https://core.ac.uk/download/pdf/82032035.pdf */
-bool        flowblock::find_irreducible(const vector<flowblock *> &preorder, int &irreduciblecount)
+bool        blockgraph::find_irreducible(const vector<flowblock *> &preorder, int &irreduciblecount)
 {
     vector<flowblock *> reachunder;
     flowblock *y;
@@ -3602,14 +3603,6 @@ bool        flowblock::find_irreducible(const vector<flowblock *> &preorder, int
         preorder[i]->copymap = NULL;
 
     return false;
-}
-
-void        flowblock::calc_loop()
-{
-    int i;
-
-    for (i = 0; i < blist.size(); i++) {
-    }
 }
 
 void        flowblock::add_op(pcodeop *op)
