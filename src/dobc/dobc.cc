@@ -279,6 +279,23 @@ struct pltentry {
     { "vmp360_cbranch",        0x68cc, 4, 0, 0, 1 },
 };
 
+funcdata *dobc::add_func(const Address &a)
+{
+    char buf[128];
+    funcdata *fd;
+    if ((fd = find_func(a))) return fd;
+
+    if (a.getSpace() == ram_spc) {
+        Address addr(trans->getDefaultCodeSpace(), a.getOffset());
+
+        sprintf(buf, "sub_%llx", a.getOffset());
+        fd = new funcdata(buf, addr, 0, this);
+        return fd;
+    }
+
+    return NULL;
+}
+
 void dobc::init_plt()
 {
     funcdata *fd;
@@ -3115,7 +3132,7 @@ int         funcdata::cond_copy_expand(pcodeop *p, int outslot)
     varnode *def;
     assert(p->opcode == CPUI_COPY);
     assert(outslot >= 0);
-    outb = p->parent->get_out(0);
+    outb = b->get_out(outslot);
 
     have_top = collect_all_const_defs(p->output, defs);
 
@@ -3141,18 +3158,17 @@ int         funcdata::cond_copy_expand(pcodeop *p, int outslot)
         b2 = bblocks.new_block_basic(user_offset += user_step);
         pf.add_copy_const(b2, b2->ops.end(), p->output, defs[i]);
 
-        bblocks.add_edge(b1, b2);
+        bblocks.add_edge(b1, b2, a_true_edge);
+        bblocks.add_edge(b2, outb);
 
-        if (pb1) {
-            bblocks.add_edge(pb1, b2, a_true_edge);
-            bblocks.add_edge(pb2, outb);
-        }
+        if (pb1)
+            bblocks.add_edge(pb1, b1);
 
         pb1 = b1;
         pb2 = b2;
 
         if (i == 0) {
-            int lab = bblocks.remove_edge(b, b->get_out(outslot));
+            int lab = bblocks.remove_edge(b, outb);
             bblocks.add_edge(b, b1, lab & a_true_edge);
         }
     }
@@ -4284,7 +4300,7 @@ branch指令打上call_branch标记
         {
                 const Address &destaddr(op->get_in(0)->get_addr());
                 /* 假如发现某些call的函数有exit标记，则开始新的block，并删除当前inst的接下去的所有pcode，因为走不到了 */
-                if ((fd = d->find_func(destaddr))) {
+                if ((fd = d->add_func(destaddr))) {
                     if (exit = fd->flags.exit) startbasic = true;
 
                     add_callspec(op, fd);
@@ -4745,7 +4761,7 @@ void        funcdata::op_insert_end(pcodeop *op, blockbasic *bl)
     list<pcodeop *>::iterator iter = bl->ops.end();
 
     if (iter != bl->ops.begin()) {
-        --iter;
+        //--iter;
     }
 
     op_insert(op, bl, iter);
@@ -7611,13 +7627,25 @@ int         funcdata::ollvm_detect_propchains(flowblock *&from, blockedge *&oute
 
         if (oh->h->flags.f_dead) continue;
 
-        if (!ollvm_detect_propchain(oh, from, outedge)) return 0;
+        if (!ollvm_detect_propchain(oh, from, outedge, F_OPEN_PHI)) return 0;
+    }
+
+    /* 尝试传递拷贝复制 */
+    for (i = 0; i < ollvm.heads.size(); i++) {
+        ollvmhead *oh = ollvm.heads[i];
+
+        if (oh->h->flags.f_dead) continue;
+
+        if (!ollvm_detect_propchain(oh, from, outedge, F_OPEN_COPY)) {
+            /* 在搜索一次 */
+            if (!ollvm_detect_propchain(oh, from, outedge, F_OPEN_PHI)) return 0;
+        }
     }
 
     return -1;
 }
 
-int         funcdata::ollvm_detect_propchain(ollvmhead *oh, flowblock *&from, blockedge *&outedge)
+int         funcdata::ollvm_detect_propchain(ollvmhead *oh, flowblock *&from, blockedge *&outedge, uint32_t flags)
 {
     if (oh->h->flags.f_dead) return -1;
 
@@ -7629,6 +7657,36 @@ int         funcdata::ollvm_detect_propchain(ollvmhead *oh, flowblock *&from, bl
     if (!p || (p->opcode != CPUI_MULTIEQUAL))
         return -1;
 
+    if (b_is_flag(flags, F_OPEN_COPY)) {
+        /* 先寻找拓扑边 */
+        for (i = 0; i < h->in.size(); i++) {
+            vn = p->get_in(i);
+            pre = p->parent->get_in(i);
+            cur = h;
+            blockedge *e = &p->parent->in[i];
+
+            if (vn->is_constant()) break;
+            if (e->label & a_back_edge) continue;
+
+            p1 = vn->def;
+            h1 = p1->parent;
+            
+            if (!p1->flags.mark_cond_copy_prop && (p1->opcode == CPUI_COPY)) {
+                vector<varnode *> defs;
+                top = collect_all_const_defs(p1->get_in(0), defs);
+                p1->flags.mark_cond_copy_prop = 1;
+
+                if (defs.size() > 1) {
+                    cond_copy_expand(p1, pre->get_out_index(cur));
+                    heritage_clear();
+                    heritage();
+                    dump_cfg(name, "cond_copy_expand", 1);
+                    return 0;
+                }
+            }
+        }
+    }
+
     p1 = p;
     for (i = 0; i < h->in.size(); i++) {
         vn = p->get_in(i);
@@ -7639,19 +7697,20 @@ int         funcdata::ollvm_detect_propchain(ollvmhead *oh, flowblock *&from, bl
             p1 = vn->def;
             h1 = p1->parent;
 
-            if (p1->opcode == CPUI_COPY) {
+            if (!p1->flags.mark_cond_copy_prop && (p1->opcode == CPUI_COPY) && b_is_flag(flags,F_OPEN_COPY)) {
                 vector<varnode *> defs;
                 top = collect_all_const_defs(p1->get_in(0), defs);
+                p1->flags.mark_cond_copy_prop = 1;
 
                 if (defs.size() > 1) {
                     cond_copy_expand(p1, pre->get_out_index(cur));
                     heritage_clear();
                     heritage();
                     dump_cfg(name, "cond_copy_expand", 1);
-                    return ollvm_detect_propchain(oh, from, outedge);
+                    return 0;
                 }
             }
-            else if (p1->opcode == CPUI_MULTIEQUAL) {
+            else if ((p1->opcode == CPUI_MULTIEQUAL) && b_is_flag(flags, F_OPEN_PHI)) {
                 for (j = 0; j < h1->in.size(); j++) {
                     vn = p1->get_in(j);
                     pre = p1->parent->get_in(j);

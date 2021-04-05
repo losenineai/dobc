@@ -24,7 +24,7 @@ void pcodefunc::add_cmp_const(flowblock *b, list<pcodeop *>::iterator it, const 
     }
     op[0]->set_opcode(CPUI_INT_SUB);
     fd->op_set_input(op[0], fd->clone_varnode(rn), 0);
-    fd->op_set_input(op[0], fd->clone_varnode(v), 1);
+    fd->op_set_input(op[0], fd->create_constant_vn(v->get_val(), v->get_size()), 1);
     fd->new_unique_out(rn->get_size(), op[0]);
 
     op[1]->set_opcode(CPUI_INT_EQUAL);
@@ -65,11 +65,11 @@ void pcodefunc::add_cbranch_ne(flowblock *b)
 void pcodefunc::add_copy_const(flowblock *b, list<pcodeop *>::iterator it, const varnode *rd, const varnode *v)
 {
     pcodeop *op;
-    op = fd->newop(2, SeqNum(Address(d->trans->getDefaultCodeSpace(), fd->user_offset++), fd->op_uniqid++));
+    op = fd->newop(1, SeqNum(Address(d->trans->getDefaultCodeSpace(), fd->user_offset++), fd->op_uniqid++));
     fd->op_insert(op, b, it);
 
     op->set_opcode(CPUI_COPY);
-    fd->op_set_input(op, fd->clone_varnode(v), 0);
-    fd->op_set_output(op, fd->clone_varnode(v));
+    fd->op_set_input(op, fd->create_constant_vn(v->get_val(), v->get_size()), 0);
+    fd->op_set_output(op, fd->clone_varnode(rd));
 }
 

@@ -349,6 +349,7 @@ struct pcodeop {
         unsigned val_from_sp_alloc : 1;     // 这个load的值并非来自于store，而是来自于sp的内存分配行为
 		unsigned uncalculated_store : 1;	// 这个store节点是不可计算的
         unsigned itblock : 1;
+        unsigned mark_cond_copy_prop: 1;    
     } flags = { 0 };
 
     OpCode opcode;
@@ -1301,7 +1302,13 @@ struct funcdata {
 
     flowblock*  ollvm_get_head(void);
     int         ollvm_detect_frameworkinfo();
-    int         ollvm_detect_propchain(ollvmhead *oh, flowblock *&from, blockedge *&outedge);
+#define b_set_flag(f, fl)             f |= fl
+#define b_clear_flag(f, fl)           f &= ~fl
+#define b_is_flag(f, fl)              f & fl
+
+#define F_OPEN_COPY             0x01
+#define F_OPEN_PHI              0x02
+    int         ollvm_detect_propchain(ollvmhead *oh, flowblock *&from, blockedge *&outedge, uint32_t flags);
     int         ollvm_detect_propchains(flowblock *&from, blockedge *&outedge);
     int         ollvm_detect_fsm(ollvmhead *oh);
 
@@ -1591,6 +1598,7 @@ struct dobc {
     void init_spcs();
     /* 初始化位置位置无关代码，主要时分析原型 */
     void        init_plt(void);
+    funcdata*   add_func(const Address &addr);
     void        set_shelltype(char *shelltype);
 
     int         func_is_thumb(int offset);
