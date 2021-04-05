@@ -3203,7 +3203,7 @@ int         funcdata::collect_all_const_defs(varnode *v, vector<varnode *> &defs
                 } \
                 if (j == defs.size()) defs.push_back(in); \
             } \
-            else if (def && (visit.find(def) == visit.end()) && ((def->opcode == CPUI_COPY) || (def->opcode == CPUI_MULTIEQUAL))) { \
+            else if (def && (visit.find(def) == visit.end()) && ((def->opcode == CPUI_COPY) || (def->opcode == CPUI_MULTIEQUAL) || (def->opcode == CPUI_LOAD))) { \
                 q.push_back(def); \
                 visit.insert(def); \
             } \
@@ -3219,6 +3219,11 @@ int         funcdata::collect_all_const_defs(varnode *v, vector<varnode *> &defs
                 in = p->get_in(i);
                 cad_push_def(in);
             }
+        }
+        else if ((p->opcode == CPUI_LOAD) && (p->have_virtualnode())) {
+            in = p->get_virtualnode();
+            in = in->def->get_in(2);
+            cad_push_def(in);
         }
     }
 
@@ -6807,7 +6812,7 @@ flowblock*       funcdata::loop_unrolling(flowblock *h, flowblock *end, uint32_t
 
 int  funcdata::loop_dfa_connect(uint32_t flags)
 {
-    int i, inslot, ret, end;
+    int i, inslot, ret, end, nend;
     flowblock *cur, *prev, *br,  *last, *h = ollvm_get_head(), *from;
     list<pcodeop *>::const_iterator it;
     pcodeop *p, *op;
@@ -6891,7 +6896,6 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
     if (end == trace.size() - 1)
         printf("found exit node[%lx]\n", cur->sub_id());
 
-
     /* back指向的节点
     1. 当走出循环时，back指向循环外节点
     2. 当碰到undefined cbranch, trace.back指向了第一个无法计算的循环节点 */
@@ -6902,6 +6906,20 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
     Address addr(d->get_code_space(), user_offset);
     /* 进入节点抛弃 */
     for (i = 0; trace[i]->parent == from; i++);
+
+    /* 我们在复制节点的时候，末尾只有单个out节点的cfg不理会，这个是为了减少这种情况
+    a是个cbranch节点，在a分叉
+    a-> b -> c -> d
+    a-> e -> c -> d
+    当我们顺着a节点复制时，假如不在c节点停止，会复制出2条路径出来
+    */
+    for (nend = end; trace[nend]->parent->out.size() == 1; nend--);
+
+    if (nend != end) {
+        last = trace[nend + 1]->parent;
+        end = nend;
+    }
+
     /* 从主循环开始 */
     for (; i <= end; i++) {
         funcdata *callfd = NULL;
@@ -7645,6 +7663,11 @@ int         funcdata::ollvm_detect_propchains(flowblock *&from, blockedge *&oute
     return -1;
 }
 
+int block_dfnum_cmp(blockedge *l, blockedge *r)
+{
+    return l->point->dfnum < r->point->dfnum;
+}
+
 int         funcdata::ollvm_detect_propchain(ollvmhead *oh, flowblock *&from, blockedge *&outedge, uint32_t flags)
 {
     if (oh->h->flags.f_dead) return -1;
@@ -7654,44 +7677,24 @@ int         funcdata::ollvm_detect_propchain(ollvmhead *oh, flowblock *&from, bl
     pcodeop *p = h->find_pcode_def(oh->st1), *p1;
     varnode *vn;
     blockedge *e;
+    vector<blockedge *> invec;
     if (!p || (p->opcode != CPUI_MULTIEQUAL))
         return -1;
 
-    if (b_is_flag(flags, F_OPEN_COPY)) {
-        /* 先寻找拓扑边 */
-        for (i = 0; i < h->in.size(); i++) {
-            vn = p->get_in(i);
-            pre = p->parent->get_in(i);
-            cur = h;
-            blockedge *e = &p->parent->in[i];
-
-            if (vn->is_constant()) break;
-            if (e->label & a_back_edge) continue;
-
-            p1 = vn->def;
-            h1 = p1->parent;
-            
-            if (!p1->flags.mark_cond_copy_prop && (p1->opcode == CPUI_COPY)) {
-                vector<varnode *> defs;
-                top = collect_all_const_defs(p1->get_in(0), defs);
-                p1->flags.mark_cond_copy_prop = 1;
-
-                if (defs.size() > 1) {
-                    cond_copy_expand(p1, pre->get_out_index(cur));
-                    heritage_clear();
-                    heritage();
-                    dump_cfg(name, "cond_copy_expand", 1);
-                    return 0;
-                }
-            }
-        }
+    for (i = 0; i < h->in.size(); i++) {
+        e = & h->in[i];
+        e->index = i;
+        invec.push_back(&h->in[i]);
     }
 
+    std::sort(invec.begin(), invec.end(), block_dfnum_cmp);
+
     p1 = p;
-    for (i = 0; i < h->in.size(); i++) {
-        vn = p->get_in(i);
-        pre = p->parent->get_in(i);
+    for (i = 0; i < invec.size(); i++) {
+        e = invec[i];
+        pre = e->point;
         cur = h;
+        vn = p->get_in(e->index);
 
         if (!vn->is_constant()) {
             p1 = vn->def;

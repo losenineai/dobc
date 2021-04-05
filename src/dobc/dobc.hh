@@ -463,11 +463,14 @@ typedef struct blockedge            blockedge;
 #define a_true_edge             0x20
 #define a_mark                  0x40
 #define a_unpropchain           0x80
+#define a_do_propchain          0x100
 
 struct blockedge {
     uint32_t label;
     flowblock *point;
     int reverse_index;
+    /* 存临时变量的 */
+    int index;
 
     blockedge(flowblock *pt, int lab, int rev) { point = pt, label = lab; reverse_index = rev; }
     blockedge() {};
