@@ -1562,7 +1562,7 @@ struct dobc {
     int min_funcsymbol_size;
     int max_instructions;
     map<string, string>     abbrev;
-    test_cond_inline_fn test_cond_inline;
+    test_cond_inline_fn test_cond_inline = NULL;
 
     intb    stack_check_fail_addr;
 

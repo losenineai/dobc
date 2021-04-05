@@ -3327,7 +3327,6 @@ int         funcdata::ollvm_deshell()
 
     dump_cfg(name, "orig", 1);
 
-
     ollvm_detect_frameworkinfo();
 
     h = ollvm_get_head();
@@ -7580,7 +7579,7 @@ flowblock*  funcdata::ollvm_get_head(void)
 
 int         funcdata::ollvm_detect_frameworkinfo()
 {
-    int i, t, j;
+    int i, t, j, k;
     ollvmhead *head;
     flowblock *b, *b1, *b2;
 
@@ -7624,6 +7623,39 @@ int         funcdata::ollvm_detect_frameworkinfo()
             }
         }
     }
+
+    printf("search maybe safezone alias start...\n");
+    /* FIXME:后面要改成递归收集所有的load */
+    vector<pcodeop *> poss;
+    for (i = 0; i < ollvm.heads.size(); i++) {
+        ollvmhead *head = ollvm.heads[i];
+        pcodeop *p = head->h->find_pcode_def(head->st1), *p1, *p2;
+        for (j = 0; j < head->h->in.size(); j++) {
+            varnode *v = p->get_in(j);
+
+            if (NULL == (p1 = v->def)) NULL;
+
+            if ((p1->opcode == CPUI_LOAD)) 
+                poss.push_back(p1->get_in(1)->def);
+            else if (p1->opcode == CPUI_MULTIEQUAL) {
+                for (k = 0; k < p1->inrefs.size(); k++) {
+                    v = p1->get_in(k);
+                    if (!(p2 = v->def)) continue;
+                    if ((p2->opcode == CPUI_LOAD)) 
+                        poss.push_back(p2->get_in(1)->def);
+                }
+            }
+        }
+    }
+    for (i = 0; i < poss.size(); i++) {
+        pcodeop *p = poss[i];
+        char buf[128];
+        p->dump(buf, PCODE_DUMP_SIMPLE & ~PCODE_HTML_COLOR);
+        printf("%s\n", buf);
+        if (p->output->is_rel_constant())
+            set_safezone(p->output->get_val(), p->output->get_size());
+    }
+    printf("search maybe safezone alias end...\n");
 
     return 0;
 }
@@ -8177,7 +8209,7 @@ bool        funcdata::have_side_effect(pcodeop *op, varnode *pos)
 #endif
 
 #if 1
-    if (in_safezone(pos->get_val(), pos->size) && d->test_cond_inline && !d->test_cond_inline(d, op->get_call_offset()))
+    if (in_safezone(pos->get_val(), pos->size) && (!d->test_cond_inline || !d->test_cond_inline(d, op->get_call_offset())))
         return false;
 
     return true;
