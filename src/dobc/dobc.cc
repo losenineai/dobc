@@ -2907,11 +2907,7 @@ flowblock*          blockgraph::detect_whiledo_exit(flowblock *header)
 flowblock*        funcdata::combine_multi_in_before_loop(vector<flowblock *> ins, flowblock *header)
 {
     int i;
-    flowblock *b = bblocks.new_block_basic();
-
-    user_offset += user_step;
-    Address addr(d->trans->getDefaultCodeSpace(), user_offset);
-    b->set_initial_range(addr, addr);
+    flowblock *b = bblocks.new_block_basic(user_offset += user_step);
 
     for (i = 0; i < ins.size(); i++) {
         int lab = bblocks.remove_edge(ins[i], header);
@@ -3130,11 +3126,11 @@ int         funcdata::cond_copy_expand(pcodeop *p, int outslot)
     vector<varnode *> defs;
     int i, have_top;
     varnode *def;
-    assert(p->opcode == CPUI_COPY);
+    assert(p->opcode == CPUI_COPY || p->opcode == CPUI_LOAD);
     assert(outslot >= 0);
     outb = b->get_out(outslot);
 
-    have_top = collect_all_const_defs(p->output, defs);
+    have_top = collect_all_const_defs(p, defs);
 
     if (defs.size() == 0)
         return -1;
@@ -3152,7 +3148,7 @@ int         funcdata::cond_copy_expand(pcodeop *p, int outslot)
         }
 
         b1 = bblocks.new_block_basic(user_offset += user_step);
-        pf.add_cmp_const(b1, b1->ops.end(), p->get_in(0), defs[i]);
+        pf.add_cmp_const(b1, b1->ops.end(), p->output, defs[i]);
         pf.add_cbranch_eq(b1);
 
         b2 = bblocks.new_block_basic(user_offset += user_step);
@@ -3180,7 +3176,7 @@ int         funcdata::cond_copy_expand(pcodeop *p, int outslot)
     return 0;
 }
 
-int         funcdata::collect_all_const_defs(varnode *v, vector<varnode *> &defs)
+int         funcdata::collect_all_const_defs(pcodeop *start, vector<varnode *> &defs)
 {
     pcodeop *p, *def;
     pcodeop_set visit;
@@ -3189,8 +3185,8 @@ int         funcdata::collect_all_const_defs(varnode *v, vector<varnode *> &defs
     varnode *in;
     int i, j, have_top_def = 0;
 
-    q.push_back(v->def);
-    visit.insert(v->def);
+    q.push_back(start);
+    visit.insert(start);
     while (!q.empty()) {
         p = q.front();
         q.erase(q.begin());
@@ -3228,6 +3224,113 @@ int         funcdata::collect_all_const_defs(varnode *v, vector<varnode *> &defs
     }
 
     return have_top_def;
+}
+
+int         funcdata::ollvm_combine_lcts(pcodeop *p)
+{
+    assert(p->opcode == CPUI_COPY);
+    varnode *in = p->get_in(0);
+    flowblock *b = p->parent, *tob, *b1;
+    list<pcodeop *>::iterator it;
+    pcodeop *p1;
+    vector<flowblock *> blks;
+
+    if (b->out.size() != 1) return 0;
+
+    tob = b->get_out(0);
+
+    for (it = in->uses.begin(); it != in->uses.end(); it++) {
+        p1 = *it;
+        b1 = p1->parent;
+
+        if ((b1->out.size() != 1) || (b1->get_out(0) != tob))
+            continue;
+
+        blks.push_back(b1);
+    }
+
+    if (blks.size() < 2) 
+        return 0;
+
+    return combine_lcts(blks);
+}
+
+int         funcdata::combine_lcts(vector<flowblock *> &blks)
+{
+    flowblock *b = blks[0], *tob;
+    vector<list<pcodeop *>::reverse_iterator> its;
+    vector<pcodeop *> ops;
+    pcodeop *p, *p1;
+    int i, j, len, end = 0;
+
+    its.resize(blks.size());
+    tob = b->get_out(0);
+    for (i = 0; i < blks.size(); i++) {
+        b = blks[i];
+        /* 所有节点的出口节点必须一致，且只有一个出口节点 */
+        if (b->ops.size() == 0) return 0;
+        if (b->out.size() != 1) return 0;
+        if (b->get_out(0) != tob) return 0;
+
+        its[i] = b->ops.rend();
+    }
+
+    while (!end) {
+        p = *(its[0]);
+        for (i = 1; i < its.size(); i++) {
+            p1 = *(its[i]);
+
+            if (p->opcode == CPUI_MULTIEQUAL) break;
+            if (p->opcode != p1->opcode) break;
+            if (!p->output != !p1->output) break;
+            if (p->inrefs.size() != p1->inrefs.size()) break;
+            if (p->output) {
+                if ((d->is_temp(poa(p)) != d->is_temp(poa(p1))) || (poa(p) != poa(p1))) break;
+            }
+
+            for (j = 0; j < p->inrefs.size(); j++) {
+                if ((d->is_temp(poa(p)) != d->is_temp(poa(p1))) || (poa(p) != poa(p1))) break;
+            }
+        }
+
+        if (i == its.size())
+            ops.insert(ops.begin(), p);
+        else
+            break;
+
+        for (i = 0; i < its.size(); i++) {
+            its[i]++;
+            if (its[i] == blks[i]->ops.rend()) end = 1;
+        }
+    }
+
+    if ((ops.size() == 0) || ((ops.size() == 1) && (ops.back()->opcode == CPUI_BRANCH))) return 0;
+
+    b = bblocks.new_block_basic(user_offset += user_step);
+
+    for (i = 0; i < ops.size(); i++) {
+        Address addr2(d->get_code_space(), user_offset + p->get_addr().getOffset());
+        const SeqNum sq(addr2, op_uniqid++);
+        p = cloneop(p, sq);
+        op_insert_end(p, b);
+    }
+
+    len = ops.size();
+    while (len--) {
+        for (i = 0; i < its.size(); i++)
+            op_destroy(*(its[i])++);
+    }
+
+    for (i = 0; i < blks.size(); i++) {
+        bblocks.remove_edge(blks[i], tob);
+        bblocks.add_edge(blks[i], b);
+    }
+
+    bblocks.add_edge(b, tob);
+
+    structure_reset();
+
+    return 1;
 }
 
 int         funcdata::cmp_itblock_cbranch_conditions(pcodeop *cbr1, pcodeop* cbr2)
@@ -4773,18 +4876,28 @@ void        funcdata::op_insert_end(pcodeop *op, blockbasic *bl)
 
 void        funcdata::connect_basic()
 {
-    flowblock *from;
+    flowblock *from, *to;
     op_edge *edge;
     list<op_edge *>::const_iterator iter;
 
     iter = block_edge.begin();
-    while (iter != block_edge.end()) {
-        edge = *iter++;
+    while (!block_edge.empty()) {
+        edge = block_edge.front();
+        block_edge.erase(block_edge.begin());
         from = edge->from->parent;
-        bblocks.add_edge(from, edge->to->parent);
+        to = edge->to->parent;
 
-        if (edge->t)
-            from->set_out_edge_flag(from->out.size() - 1, a_true_edge);
+        /* 假如碰到一个裸的jmp 指令快，直接让from指向这个jmp的to，假如这个jmp->out没有赋值，加入到尾部中区 */
+        if ((to->ops.size() == 1) && (to->last_op()->opcode == CPUI_BRANCH)) {
+            if (0 == to->in.size())
+                bblocks.add_edge(from, to, edge->t ? a_true_edge : 0);
+            else if (to->out.size())
+                bblocks.add_edge(from, to->get_out(0), edge->t ? a_true_edge : 0);
+            else
+                block_edge.push_back(edge);
+        }
+        else
+            bblocks.add_edge(from, to, edge->t ? a_true_edge:0);
 
         //printf("0x%x -> 0x%x\n", (int)edge->from->start.getAddr().getOffset(), (int)edge->to->start.getAddr().getOffset());
     }
@@ -7732,9 +7845,22 @@ int         funcdata::ollvm_detect_propchain(ollvmhead *oh, flowblock *&from, bl
             p1 = vn->def;
             h1 = p1->parent;
 
-            if (!p1->flags.mark_cond_copy_prop && (p1->opcode == CPUI_COPY) && b_is_flag(flags,F_OPEN_COPY)) {
+            if (!p1->flags.mark_cond_copy_prop && ((p1->opcode == CPUI_COPY) || (p1->opcode == CPUI_LOAD)) && b_is_flag(flags,F_OPEN_COPY)) {
                 vector<varnode *> defs;
-                top = collect_all_const_defs(p1->get_in(0), defs);
+
+                if ((p1->opcode == CPUI_LOAD) && !p1->have_virtualnode())
+                    throw LowlevelError("alias analysis error");
+
+                if (p1->opcode == CPUI_COPY) {
+                    if (ollvm_combine_lcts(p1)) {
+                        heritage_clear();
+                        heritage();
+                        dump_cfg(name, "lcts", 1);
+                        return 1;
+                    }
+                }
+
+                top = collect_all_const_defs(p1, defs);
                 p1->flags.mark_cond_copy_prop = 1;
 
                 if (defs.size() > 1) {
@@ -7995,7 +8121,7 @@ void        funcdata::redundbranch_apply()
         /* 
 
         1. 假如一个块已经空了
-        2. 而且他的输入，输出节点都为0
+        2. 而且他的输入，输出节点都为1
         3. 不是被vm标记过的节点 
         */
         if ((bb->ops.size() == 0) && (bb->in.size() == 1) && (bb->out.size() == 1)) {

@@ -26,6 +26,15 @@ typedef struct valuetype    valuetype;
 typedef struct coverblock	coverblock;
 typedef struct ollvmhead    ollvmhead;
 
+#define pi0(p)              p->get_in(0)
+#define pi1(p)              p->get_in(1)
+#define pi1(p)              p->get_in(1)
+#define pi2(p)              p->get_in(2)
+#define pi0a(p)             p->get_in(0)->get_addr()
+#define pi1a(p)             p->get_in(1)->get_addr()
+#define pi2a(p)             p->get_in(2)->get_addr()
+#define poa(p)              p->output->get_addr()
+
 class blockgraph;
 
 class pcodeemit2 : public PcodeEmit {
@@ -1489,7 +1498,40 @@ struct funcdata {
     @return     0           当前v的所有def都是常量，defs里的def就是v的所有def
                 1           v有值类型为top的def
     */
-    int         collect_all_const_defs(varnode *v, vector<varnode *> &defs);
+    int         collect_all_const_defs(pcodeop *start, vector<varnode *> &defs);
+
+    /* 合并这些block中，最长公共尾串 
+    action:
+
+    比如:
+
+    a -> c
+    b -> c
+
+    a:
+    op1
+    op2
+    op7
+    op8
+    op10
+
+    b:
+    op3
+    op5
+    op7
+    op8
+    op10
+
+    那么op7, 8, 10可以重新生成一个新的Block d，最后块的关系
+
+    a -> d -> c
+    b -> d -> c
+
+    @return         0           没有合并
+                    1           合并成功
+    */
+    int         combine_lcts(vector<flowblock *> &blks);
+    int         ollvm_combine_lcts(pcodeop *p);
 
     int         cmp_itblock_cbranch_conditions(pcodeop *cbr1, pcodeop* cbr2);
 
@@ -1615,6 +1657,7 @@ struct dobc {
     AddrSpace *get_uniq_space() { return trans->getUniqueSpace();  }
     bool        is_cpu_reg(const Address &addr) { return cpu_regs.find(addr) != cpu_regs.end();  }
     bool        is_cpu_base_reg(const Address &addr) { return cpu_base_regs.find(addr) != cpu_base_regs.end();  }
+    bool        is_temp(const Address &addr) { return addr.getSpace() == trans->getUniqueSpace();  }
 
     void    plugin_dvmp360();
     void    plugin_ollvm();

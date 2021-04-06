@@ -4,14 +4,6 @@
 #include <assert.h>
 #include "vm.h"
 
-#define pi0(p)              p->get_in(0)
-#define pi1(p)              p->get_in(1)
-#define pi1(p)              p->get_in(1)
-#define pi2(p)              p->get_in(2)
-#define pi0a(p)             p->get_in(0)->get_addr()
-#define pi1a(p)             p->get_in(1)->get_addr()
-#define pi2a(p)             p->get_in(2)->get_addr()
-#define poa(p)              p->output->get_addr()
 #define a(vn)               ((vn)->get_addr())
 #define ama                 d->ma_addr
 #define asp                 d->sp_addr
