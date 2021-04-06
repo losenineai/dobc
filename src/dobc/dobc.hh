@@ -614,6 +614,7 @@ struct flowblock {
         return ops.end();
 	}
     int         get_out_rev_index(int i) { return out[i].reverse_index;  }
+    bool        is_empty();
 
     void        set_initial_range(const Address &begin, const Address &end);
     void        add_op(pcodeop *);

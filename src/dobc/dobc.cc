@@ -2411,6 +2411,23 @@ void        flowblock::set_initial_range(const Address &b, const Address &e)
     cover.insertRange(b.getSpace(), b.getOffset(), e.getOffset());
 }
 
+bool        flowblock::is_empty()
+{
+    pcodeop *op;
+    list<pcodeop *>::iterator it;
+
+    if (ops.empty()) return true;
+
+    for (it = ops.begin(); it != ops.end(); it++) {
+        op = *it;
+        if ((op->opcode == CPUI_BRANCH) || (op->opcode == CPUI_MULTIEQUAL)) continue;
+
+        return false;
+    }
+
+    return true;
+}
+
 
 void        flowblock::insert(list<pcodeop *>::iterator iter, pcodeop *inst)
 {
@@ -2925,19 +2942,6 @@ flowblock*        funcdata::combine_multi_in_before_loop(vector<flowblock *> ins
 
 void        funcdata::dump_exe()
 {
-    /* 删除所有splice 模块，不会导致ssa关系重构 */
-    bblocks.clear_all_unsplice();
-    bblocks.clear_all_vminfo();
-
-    redundbranch_apply();
-    remove_dead_stores();
-
-	heritage_clear();
-	heritage();
-
-    dead_code_elimination(bblocks.blist, 0);
-	build_liverange();
-	//dump_liverange("1");
 
 #if 1
     thumb_gen gen(this);
@@ -3272,7 +3276,7 @@ int         funcdata::combine_lcts(vector<flowblock *> &blks)
         if (b->out.size() != 1) return 0;
         if (b->get_out(0) != tob) return 0;
 
-        its[i] = b->ops.rend();
+        its[i] = b->ops.rbegin();
     }
 
     while (!end) {
@@ -3317,8 +3321,10 @@ int         funcdata::combine_lcts(vector<flowblock *> &blks)
 
     len = ops.size();
     while (len--) {
-        for (i = 0; i < its.size(); i++)
-            op_destroy(*(its[i])++);
+        for (i = 0; i < its.size(); i++) {
+            its[i]--;
+            op_destroy_ssa(*(its[i]));
+        }
     }
 
     for (i = 0; i < blks.size(); i++) {
@@ -3443,6 +3449,18 @@ int         funcdata::ollvm_deshell()
         dump_cfg(name, _itoa(i, buf, 10), 1);
 #endif
     }
+
+    /* 删除所有splice 模块，不会导致ssa关系重构 */
+    bblocks.clear_all_unsplice();
+    bblocks.clear_all_vminfo();
+
+    while (!cbrlist.empty())
+        cond_constant_propagation();
+    remove_dead_stores();
+    dead_code_elimination(bblocks.blist, 0);
+
+	//build_liverange();
+	//dump_liverange("1");
 
     dump_cfg(name, "final", 1);
     dump_pcode("1");
@@ -4888,6 +4906,7 @@ void        funcdata::connect_basic()
         to = edge->to->parent;
 
         /* 假如碰到一个裸的jmp 指令快，直接让from指向这个jmp的to，假如这个jmp->out没有赋值，加入到尾部中区 */
+#if 0
         if ((to->ops.size() == 1) && (to->last_op()->opcode == CPUI_BRANCH)) {
             if (0 == to->in.size())
                 bblocks.add_edge(from, to, edge->t ? a_true_edge : 0);
@@ -4898,6 +4917,9 @@ void        funcdata::connect_basic()
         }
         else
             bblocks.add_edge(from, to, edge->t ? a_true_edge:0);
+#else
+            bblocks.add_edge(from, to, edge->t ? a_true_edge:0);
+#endif
 
         //printf("0x%x -> 0x%x\n", (int)edge->from->start.getAddr().getOffset(), (int)edge->to->start.getAddr().getOffset());
     }
@@ -7415,7 +7437,7 @@ void        funcdata::rename_recurse(blockbasic *bl, variable_stack &varstack, v
     */
     fd1 = bl->ops.size() ?  bl->last_op()->callfd:NULL;
     /*  对于noreturn 函数我们设置出口寄存器活跃数量为0 */
-    if (bl->is_end() && fd1 && !fd1->flags.exit) {
+    if (bl->is_end() && (!fd1 || !fd1->flags.exit)) {
         variable_stack::iterator it;
         for (it = varstack.begin(); it != varstack.end(); it++) {
             vector<varnode *> &stack = it->second;
@@ -7775,7 +7797,7 @@ int         funcdata::ollvm_detect_frameworkinfo()
 
 int         funcdata::ollvm_detect_propchains(flowblock *&from, blockedge *&outedge)
 {
-    int i;
+    int i, ret;
 
     /* 寻找传递链的逻辑 
     1. 找到所有带循环的头 
@@ -7799,7 +7821,13 @@ int         funcdata::ollvm_detect_propchains(flowblock *&from, blockedge *&oute
 
         if (oh->h->flags.f_dead) continue;
 
-        if (!ollvm_detect_propchain(oh, from, outedge, F_OPEN_COPY)) {
+        ret = ollvm_detect_propchain(oh, from, outedge, F_OPEN_COPY);
+        /* 执行了 lcs，在来一次copy */
+        if (ret == 1)
+            ret = ollvm_detect_propchain(oh, from, outedge, F_OPEN_COPY);
+
+        /* 传递拷贝成功 */
+        if (ret == 0) {
             /* 在搜索一次 */
             if (!ollvm_detect_propchain(oh, from, outedge, F_OPEN_PHI)) return 0;
         }
@@ -8089,24 +8117,37 @@ void        funcdata::splice_block_basic(blockbasic *bl)
 
 void        funcdata::remove_empty_block(blockbasic *bl)
 {
-    flowblock *prev = bl->get_in(0);
+    assert(bl->out.size() == 1);
+    /* libmakeurl2.4.9.so 的 3648 出现了自己指向自己的情况，我们不允许删除这样的节点 */
+    assert(bl->get_out(0) != bl);
+    vector<flowblock *> inlist;
+    int i, lab;
+
+    flowblock *prev;
     flowblock *next = bl->get_out(0);
 
-    int lab = bblocks.remove_edge(prev, bl);
+    for (i = 0; i < bl->in.size(); i++)
+        inlist.push_back(bl->get_in(i));
+
     bblocks.remove_edge(bl, next);
-    bblocks.add_edge(prev, next, lab & a_true_edge);
-    bblocks.remove_block(bl);
+    for (i = 0; i < inlist.size(); i++) {
+        prev = inlist[i];
+        lab = bblocks.remove_edge(prev, bl);
+        bblocks.add_edge(prev, next, lab & a_true_edge);
 
-    if ((prev->out.size() == 2) && (prev->get_out(0) == prev->get_out(1))) {
+        if ((prev->out.size() == 2) && (prev->get_out(0) == prev->get_out(1))) {
+            clear_block_phi(prev->get_out(0));
+            bblocks.remove_edge(prev, prev->get_out(0));
 
-        clear_block_phi(prev->get_out(0));
-
-        bblocks.remove_edge(prev, prev->get_out(0));
-
-        if (prev->last_op()->opcode == CPUI_CBRANCH) {
-            op_destroy(prev->last_op(), 1);
+            if (prev->last_op()->opcode == CPUI_CBRANCH) {
+                op_destroy(prev->last_op(), 1);
+            }
         }
     }
+
+    block_remove_internal(bl, true);
+
+    /* 处理掉cbranch的block true , false指向同一个节点的情况 */
 
     structure_reset();
 }
@@ -8121,10 +8162,10 @@ void        funcdata::redundbranch_apply()
         /* 
 
         1. 假如一个块已经空了
-        2. 而且他的输入，输出节点都为1
+        2. 输出节点都为1
         3. 不是被vm标记过的节点 
         */
-        if ((bb->ops.size() == 0) && (bb->in.size() == 1) && (bb->out.size() == 1)) {
+        if ((bb->out.size() == 1) && (bb->get_out(0) != bb) && bb->is_empty()) {
             /* 
             */
             if ((bb->vm_byteindex != -1) || (bb->vm_caseindex)) {
