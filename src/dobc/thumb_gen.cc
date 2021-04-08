@@ -13,6 +13,7 @@
 #define azr                 d->zr_addr
 #define istemp(vn)          ((vn)->get_addr().getSpace()->getType() == IPTR_INTERNAL)
 #define isreg(vn)           d->is_cpu_base_reg(vn->get_addr())
+#define as(st)              d->trans->getRegister(st).getAddr()
 
 #define ANDNEQ(r1, r2)      ((r1 & ~r2) == 0)
 #define ANDEQ(r1, r2)      ((r1 & r2) == r2)
@@ -71,6 +72,21 @@ uint32_t bitcount(uint32_t x)
     return x;
 }
 
+int ntz(uint32_t x)
+{
+    int n;
+    if (x == 0) return(32);
+    n = 1;
+    if ((x & 0x0000FFFF) == 0) { n = n + 16; x = x >> 16; }
+    if ((x & 0x000000FF) == 0) { n = n + 8; x = x >> 8; }
+    if ((x & 0x0000000F) == 0) { n = n + 4; x = x >> 4; }
+    if ((x & 0x00000003) == 0) { n = n + 2; x = x >> 2; }
+    return n - (x & 1);
+}
+
+/* 测试x里是否有连续的1 */
+#define bitcont(x)          (!(((~x + 1) & x + x) & x))
+
 static  thumb_gen *g_cg = NULL;
 
 thumb_gen::thumb_gen(funcdata *f)
@@ -92,14 +108,16 @@ void thumb_gen::resort_blocks()
 
 #define UNPREDICITABLE()        throw LowlevelError("not support");
 
-uint32_t thumb_gen::reg2index(const Address &a)
+uint32_t thumb_gen::reg2i(const Address &a)
 {
-    return (a.getOffset() - ar0.getOffset()) / 4;
-}
+    if (ar0 <= a && a <= apc)
+        return (a.getOffset() - ar0.getOffset()) / 4;
 
-int     thumb_gen::calc_code_size(flowblock *b)
-{
-    return 0;
+    if (as("d0") <= a && a <= as("d15"))
+        return (a.getOffset() - as("d0").getOffset()) / 4;
+
+    vm_error("not support reg[%llx]", a.getOffset());
+    return -1;
 }
 
 static void ot(uint16_t i)
@@ -246,6 +264,24 @@ int _push(int32_t reglist)
     return 0;
 }
 
+/* reglist */
+void _vpush(int s, uint32_t reglist)
+{
+    uint32_t n = ntz(reglist), bc = bitcount(reglist), b = reglist >> n, x = 0;
+
+    if (((b + 1) & b))
+        vm_error("reglist[%x] must continuous 1 bit", reglist);
+
+    if (!s && (bc & 1))
+        vm_error("reglist[%x] bitcount must event 1 bit", reglist);
+
+    x |= imm_map(n, 4, 1, 22) | imm_map(n, 0, 4, 12) | bc;
+    if (s)
+        o(0xed2d0b00 | x);
+    else
+        o(0xed2d0a00 | x);
+}
+
 void _pop(int32_t reglist)
 {
     /* A8.8.131 */
@@ -367,7 +403,7 @@ pit thumb_gen::g_push(flowblock *b, pit pit)
         p = *pit++;
         p1 = *pit++;
         if ((p->opcode == CPUI_INT_SUB) && (p1->opcode == CPUI_STORE) && (pi1a(p1) == ama)) {
-            reglist |= 1 << reg2index(pi2a(p1));
+            reglist |= 1 << reg2i(pi2a(p1));
         }
         else throw LowlevelError("not support");
 
@@ -395,7 +431,7 @@ pit thumb_gen::g_pop(flowblock *b, pit pit)
         if ((p->opcode == CPUI_INT_ADD)) {
             if (p1->opcode != CPUI_LOAD)
                 break;
-            reglist |= 1 << reg2index(poa(p1));
+            reglist |= 1 << reg2i(poa(p1));
         }
         else throw LowlevelError("not support");
 
@@ -414,6 +450,15 @@ pit thumb_gen::g_pop(flowblock *b, pit pit)
         return pit;
     }
     vm_error("pop meet error pcode, %d", p->start.getTime());
+    return pit;
+}
+
+pit thumb_gen::g_vpush(flowblock *b, pit pit, int ext_sp)
+{
+    pcodeop *p = *pit;
+
+    if (p->opcode == CPUI_COPY) {
+    }
     return pit;
 }
 
@@ -506,17 +551,17 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 }
             }
             else if (pi0(p)->is_constant())
-                _mov(reg2index(poa(p)), pi0(p)->get_val());
+                _mov(reg2i(poa(p)), pi0(p)->get_val());
             else if (isreg(p->output) && isreg(pi0(p))) {
-                rd = reg2index(poa(p));
+                rd = reg2i(poa(p));
                 /* A8.8.103*/
-                o(0x4600 | (reg2index(pi0a(p)) << 3) | (rd & 7) | (rd >> 3 << 7));
+                o(0x4600 | (reg2i(pi0a(p)) << 3) | (rd & 7) | (rd >> 3 << 7));
             }
             break;
 
         case CPUI_LOAD:
             if (isreg(p->output) && pi1(p)->is_constant()) {
-                rd = reg2index(poa(p));
+                rd = reg2i(poa(p));
                 _mov(rd, pi1(p)->get_val());
                 o(0xf8d00000 | (rd << 12) | (rd << 16) | 0);
             }
@@ -547,7 +592,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 if (p1->opcode == CPUI_INT_EQUAL) {
                     p2 = *++it;
                     if ((p2->opcode == CPUI_COPY) && (poa(p2) == azr)) {
-                        reg = reg2index(pi0a(p));
+                        reg = reg2i(pi0a(p));
                         if (pi1(p)->is_constant() && (pi1(p)->get_val() < 256) && (reg < 7))
                             o(0x2800 | (reg << 8) | ((uint32_t)pi1(p)->get_val()));
                     }
@@ -557,9 +602,9 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 if (isreg(pi0(p))) {
                     if (isreg(pi1(p))) {
                         /* A8.8.223 */
-                        rn = reg2index(pi0a(p));
-                        rm = reg2index(pi1a(p));
-                        rd = reg2index(poa(p));
+                        rn = reg2i(pi0a(p));
+                        rm = reg2i(pi1a(p));
+                        rd = reg2i(poa(p));
 
                         it1 = it;
                         p1 = *++it1;
@@ -598,23 +643,23 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 switch (p1->opcode) {
                 case CPUI_COPY:
                     if ((pi0a(p) == asp) && pi1(p)->is_constant() && a(pi1(p1)) == poa(p))
-                        _add(reg2index(poa(p1)), SP, pi1(p)->get_val());
+                        _add(reg2i(poa(p1)), SP, pi1(p)->get_val());
                     break;
 
                 case CPUI_STORE:
                     if (a(pi1(p1)) == poa(p))
-                        _str(reg2index(pi2a(p1)), reg2index(pi0a(p)), -1, pi1(p)->get_val());
+                        _str(reg2i(pi2a(p1)), reg2i(pi0a(p)), -1, pi1(p)->get_val());
                     break;
 
                 case CPUI_LOAD:
                     if (a(pi1(p1)) == poa(p)) {
-                        rt = reg2index(poa(p1));
+                        rt = reg2i(poa(p1));
                         imm = pi1(p)->get_val();
                         /* A8.8.62 */
                         if ((pi0a(p) == asp) && align4(imm) && (imm < 1024) && (rt < 8)) // T2
                             o(0x9800 | (rt << 8) | (imm >> 2));
                         else if (imm < 4096) // T3
-                            o(0xf8d00000 | (rt << 12) | (reg2index(pi0a(p)) << 16) | imm);
+                            o(0xf8d00000 | (rt << 12) | (reg2i(pi0a(p)) << 16) | imm);
                     }
                     break;
                 }
@@ -625,11 +670,11 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 if (p1->opcode == CPUI_LOAD)
                     it = g_pop(b, it);
                 else
-                    _add(reg2index(poa(p)), SP, pi1(p)->get_val());
+                    _add(reg2i(poa(p)), SP, pi1(p)->get_val());
             }
             else if (isreg(p->output)) {
-                rd = reg2index(poa(p));
-                rn = reg2index(pi0a(p));
+                rd = reg2i(poa(p));
+                rn = reg2i(pi0a(p));
                 /* A8.8.4 */
                 if (pi2(p)->is_constant()) {
                     imm = (int)pi1(p)->get_val();
@@ -654,7 +699,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 if (poa(p1) == alr) {
                     p2 = *++it;
                     if (p2->opcode == CPUI_CALLIND) 
-                        o(0x4780 | (reg2index(pi0a(p)) << 3));
+                        o(0x4780 | (reg2i(pi0a(p)) << 3));
                 }
             }
             else if (istemp(p->output)) {
@@ -662,8 +707,8 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 if (p1->opcode == CPUI_STORE) {
                     if (isreg(pi0(p)) && pi1(p)->is_constant()) {
                         imm = pi1(p)->get_val();
-                        rt = reg2index(pi2a(p1));
-                        rn = reg2index(pi0a(p));
+                        rt = reg2i(pi2a(p1));
+                        rn = reg2i(pi0a(p));
                         _str(rt, rn, -1, imm);
                     }
                 }
