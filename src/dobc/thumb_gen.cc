@@ -106,15 +106,15 @@ void thumb_gen::resort_blocks()
     blist = fd->bblocks.blist;
 }
 
-#define UNPREDICITABLE()        throw LowlevelError("not support");
+#define UNPREDICITABLE()        vm_error("not support");
 
 uint32_t thumb_gen::reg2i(const Address &a)
 {
     if (ar0 <= a && a <= apc)
         return (a.getOffset() - ar0.getOffset()) / 4;
 
-    if (as("d0") <= a && a <= as("d15"))
-        return (a.getOffset() - as("d0").getOffset()) / 4;
+    if (as("s0") <= a && a <= as("s31"))
+        return (a.getOffset() - as("s0").getOffset()) / 4;
 
     vm_error("not support reg[%llx]", a.getOffset());
     return -1;
@@ -264,7 +264,7 @@ int _push(int32_t reglist)
     return 0;
 }
 
-/* reglist */
+/* A8.8.368 */
 void _vpush(int s, uint32_t reglist)
 {
     uint32_t n = ntz(reglist), bc = bitcount(reglist), b = reglist >> n, x = 0;
@@ -272,14 +272,17 @@ void _vpush(int s, uint32_t reglist)
     if (((b + 1) & b))
         vm_error("reglist[%x] must continuous 1 bit", reglist);
 
-    if (!s && (bc & 1))
-        vm_error("reglist[%x] bitcount must event 1 bit", reglist);
+    if (s) { // T2
+        x = 0xed2d0a00 | imm_map(n, 4, 1, 22) | imm_map(n, 0, 4, 12) | bc;
+    }
+    else { // T1
+        if ((bc & 1) || (n & 1))
+            vm_error("reglist[%x] bitcount must event 1 bit", reglist);
 
-    x |= imm_map(n, 4, 1, 22) | imm_map(n, 0, 4, 12) | bc;
-    if (s)
-        o(0xed2d0b00 | x);
-    else
-        o(0xed2d0a00 | x);
+        n /= 2;
+        x = 0xed2d0b00 | imm_map(n, 4, 1, 22) | imm_map(n, 0, 4, 12) | bc;
+    }
+    o(x);
 }
 
 void _pop(int32_t reglist)
@@ -309,6 +312,29 @@ int _add(int rd, int rn, uint32_t imm)
     }
 
     return 0;
+}
+
+void _sub_sp_imm(int imm)
+{
+    if (!(imm & 3)) /* ALIGN 4 */
+        o(0xb080 | (imm >> 2));
+    else if (imm < 4096) //subw, T3
+        o(stuff_constw(0xf25b0000, imm, 12));
+    else // T2
+        o(stuff_const(0xf1ad0000 | (SP << 8), imm));
+}
+
+/* A8.8.72 */
+void _ldrd_imm(int rn, int rt, int rt2, int imm)
+{
+    int add = imm > 0;
+    imm = abs(imm);
+
+    if (rn == rt) UNPREDICITABLE();
+    if (!align4(imm)) UNPREDICITABLE();
+
+    o(0xe85500000 | (rn << 16) | (rt << 12) | (rt2 << 8) | (imm >> 2) | (add << 23));
+    /* wback ? */
 }
 
 int _ldr(int rt, int rn, int rm, int imm, char *buf)
@@ -453,12 +479,34 @@ pit thumb_gen::g_pop(flowblock *b, pit pit)
     return pit;
 }
 
-pit thumb_gen::g_vpush(flowblock *b, pit pit, int ext_sp)
+pit thumb_gen::g_vpush(flowblock *b, pit pit)
 {
-    pcodeop *p = *pit;
+    pcodeop *p = *pit, *p1;
+    uint32_t reglist = 0, size = 0, dsize = 0, single = 0, x;
 
-    if (p->opcode == CPUI_COPY) {
+    assert(p->opcode == CPUI_INT_SUB);
+    size = p->get_in(1)->get_val();
+    p = *++pit;
+
+    while (poa(p) == ama) {
+        p = *pit++;
+        p1 = *pit++;
+        if (((p->opcode == CPUI_INT_ADD) || (p->opcode == CPUI_COPY)) && (p1->opcode == CPUI_STORE) && (pi1a(p1) == ama)) {
+            single = p1->get_in(2)->get_size() == 4;
+            dsize += p1->get_in(2)->get_size();
+            x = reg2i(pi2a(p1));
+            if (single) reglist |= 1 << x;
+            else 
+                reglist |= (1 << x) + (1 << (x + 1));
+        }
+        else throw LowlevelError("not support");
+
+        p = *pit;
     }
+
+    _sub_sp_imm(size - dsize);
+    _vpush(single, reglist);
+
     return pit;
 }
 
@@ -519,7 +567,7 @@ void thumb_gen::save(void)
 int thumb_gen::run_block(flowblock *b, int b_ind)
 {
     list<pcodeop *>::iterator it, it1;
-    pcodeop *p, *p1, *p2;
+    pcodeop *p, *p1, *p2, *p3;
     uint32_t reg, x, rt, rd, rn, rm, setflags;
     int oind, imm, target_thumb ;
 
@@ -527,6 +575,18 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
 
     for (it = b->ops.begin(); it != b->ops.end(); ++it) {
         p = *it;
+
+        /* 这一坨代码都是相当于词法分析的token的预取 */
+        it1 = it;
+        p1 = p2 = NULL;
+        if ((p->start.getOrder() + 1) < b->last_order())
+            p1 = *++it1;
+        if ((p->start.getOrder() + 2) < b->last_order())
+            p2 = *++it1;
+        if ((p->start.getOrder() + 3) < b->last_order())
+            p3 = *++it1;
+        it1 = it;
+
         oind = ind;
 
         /* branch 指令不处理，由外层循环进行填充 */
@@ -624,13 +684,16 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     A8.8.225.T1
                     */
                     else if (pi1(p)->is_constant() && (pi0a(p) == asp) && (poa(p) == asp)) {
-                        imm = pi1(p)->get_val();
-                        if (!(imm & 3)) /* ALIGN 4 */
-                            o(0xb080 | (imm >> 2));
-                        else if (imm < 4096) //subw, T3
-                            o(stuff_constw(0xf25b0000, imm, 12));
-                        else // T2
-                            o(stuff_const(0xf1ad0000 | (SP << 8), imm));
+                        if ((p->start.getOrder() + 2) < b->last_order()) {
+                            it1 = it;
+                            p1 = *++it1;
+                            p2 = *++it1;
+                            if ((p1->opcode == CPUI_COPY) && (p2->opcode == CPUI_STORE) && d->is_vreg(pi2a(p2))) {
+                                it = g_vpush(b, it);
+                                goto inst_label;
+                            }
+                        }
+                        _sub_sp_imm(pi1(p)->get_val());
                     }
                 }
             }
@@ -655,11 +718,17 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     if (a(pi1(p1)) == poa(p)) {
                         rt = reg2i(poa(p1));
                         imm = pi1(p)->get_val();
-                        /* A8.8.62 */
-                        if ((pi0a(p) == asp) && align4(imm) && (imm < 1024) && (rt < 8)) // T2
-                            o(0x9800 | (rt << 8) | (imm >> 2));
-                        else if (imm < 4096) // T3
-                            o(0xf8d00000 | (rt << 12) | (reg2i(pi0a(p)) << 16) | imm);
+
+                        if (p2 && p3 && (pi0a(p2) == poa(p)) && (p3->opcode == CPUI_LOAD)) {
+                            _ldrd_imm(reg2i(poa(p1)), reg2i(poa(p3)), reg2i(pi0a(p)), p->get_in(1)->get_val());
+                        }
+                        else {
+                            /* A8.8.62 */
+                            if ((pi0a(p) == asp) && align4(imm) && (imm < 1024) && (rt < 8)) // T2
+                                o(0x9800 | (rt << 8) | (imm >> 2));
+                            else if (imm < 4096) // T3
+                                o(0xf8d00000 | (rt << 12) | (reg2i(pi0a(p)) << 16) | imm);
+                        }
                     }
                     break;
                 }
@@ -719,6 +788,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
             break;
         }
 
+inst_label:
         if (oind == ind)
             vm_error("thumbgen find un-support pcode seq[%d]", p->start.getTime());
 

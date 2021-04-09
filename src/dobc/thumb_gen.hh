@@ -62,7 +62,6 @@ struct thumb_gen {
     pit g_push(flowblock *b, pit pit);
     pit g_pop(flowblock *b, pit pit);
     /* 
-    @ext_sp         
     我们假设有二行thumb代码:
     sub sp, sp, 4
     vpush {D8,D(}
@@ -84,10 +83,10 @@ struct thumb_gen {
     同样的代码，在经过转换pcode以后，转换不回来了。
 
     所以这里每次生成sub sp指令的时候，判断后面是否有跟随d0-d16的操作，有的话，
-
-    算出多余的 堆栈空间 (ext_sp)，传给下一个指令
+    执行g_vpush
     */
-    pit g_vpush(flowblock *b, pit pit, int ext_sp);
+    pit g_vpush(flowblock *b, pit pit);
+    pit g_vpop(flowblock *b, pit pit);
 
     void dump();
     int dump_one_inst(int index, pcodeop *p);

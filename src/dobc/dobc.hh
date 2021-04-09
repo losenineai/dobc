@@ -63,21 +63,24 @@ public:
     int enable_html = 1;
 
     virtual void dump(const Address &addr, const string &mnem, const string &body) {
-        if (!fp) fp = stdout;
-
-        if (enable_html && buf) {
-            sprintf(buf, "<tr>"
-                "<td><font color=\"" COLOR_ASM_STACK_DEPTH "\">%03x:</font></td>"
-                "<td><font color=\"" COLOR_ASM_ADDR "\">0x%04x:</font></td>"
-                "<td align=\"left\"><font color=\"" COLOR_ASM_INST_MNEM "\">%s </font></td>"
-                "<td align=\"left\"><font color=\"" COLOR_ASM_INST_BODY "\">%s</font></td></tr>",
-                sp, (int)addr.getOffset(), mnem.c_str(), body.c_str());
+        if (buf) {
+            if (enable_html)
+                sprintf(buf, "<tr>"
+                    "<td><font color=\"" COLOR_ASM_STACK_DEPTH "\">%03x:</font></td>"
+                    "<td><font color=\"" COLOR_ASM_ADDR "\">0x%04x:</font></td>"
+                    "<td align=\"left\"><font color=\"" COLOR_ASM_INST_MNEM "\">%s </font></td>"
+                    "<td align=\"left\"><font color=\"" COLOR_ASM_INST_BODY "\">%s</font></td></tr>",
+                    sp, (int)addr.getOffset(), mnem.c_str(), body.c_str());
+            else
+                sprintf(buf, "0x%04x: %s %s", (int)addr.getOffset(), mnem.c_str(), body.c_str());
             //sprintf(buf, "0x%08x:%10s %s", (int)addr.getOffset(), mnem.c_str(), body.c_str());
         }
-        else if (buf)
-            sprintf(buf, "0x%04x: %s %s", (int)addr.getOffset(), mnem.c_str(), body.c_str());
-        else
-            fprintf(stdout, "0x%04x: %s %s\n", (int)addr.getOffset(), mnem.c_str(), body.c_str());
+        else {
+            if (fp)
+                fprintf(fp, "0x%04x: %s %s\n", (int)addr.getOffset(), mnem.c_str(), body.c_str());
+            else
+                fprintf(stdout, "0x%04x: %s %s\n", (int)addr.getOffset(), mnem.c_str(), body.c_str());
+        }
     }
 
     void set_buf(char *b) { buf = b; }
@@ -613,6 +616,8 @@ struct flowblock {
     list<pcodeop *>::iterator    last_it(void) { 
         return ops.end();
 	}
+    int         last_order() { return last_op()->start.getOrder();  }
+
     int         get_out_rev_index(int i) { return out[i].reverse_index;  }
     bool        is_empty();
 
@@ -1658,6 +1663,10 @@ struct dobc {
     AddrSpace *get_uniq_space() { return trans->getUniqueSpace();  }
     bool        is_cpu_reg(const Address &addr) { return cpu_regs.find(addr) != cpu_regs.end();  }
     bool        is_cpu_base_reg(const Address &addr) { return cpu_base_regs.find(addr) != cpu_base_regs.end();  }
+    /* vector variable */
+    bool        is_vreg(const Address &addr) { 
+        return  trans->getRegister("s0").getAddr() <= addr && addr <= trans->getRegister("s31").getAddr();  
+    }
     bool        is_temp(const Address &addr) { return addr.getSpace() == trans->getUniqueSpace();  }
 
     void    plugin_dvmp360();
