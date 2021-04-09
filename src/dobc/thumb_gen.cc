@@ -298,6 +298,27 @@ void _pop(int32_t reglist)
     }
 }
 
+void _xor_reg(int rd, int rn, int rm)
+{
+    if (rd == rn && rm <= 7 && rn <= 7)
+		o(0x4040 | (rm << 3) | rd);	// Encoding t1
+	else if (rd != 13 && rd != 15 && rn != 13 && rn != 15) 
+        o(0xea800000 | (rn << 16) | (rd << 8) | rm);
+	else
+		vm_error ("internal error: th_xor_reg invalid parameters\n");
+}
+
+/* A8.8.123 */
+void _or_reg(int rd, int rn, int rm, int setflags)
+{
+    if (setflags && (rd == rn) && rm < 8 && rn < 8)
+        o(0x4300 | (rm << 3) | rd);
+    else if (rd != 13 && rd != 15 && rn != 13 && rm != 13 && rm != 15) 
+        o(0xea400000 | (rn << 16) | (rd << 8) | rm | (setflags << 20));
+	else
+		vm_error ("internal error: th_orr_reg invalid parameters\n");
+}
+
 int _add(int rd, int rn, uint32_t imm)
 {
     if (rn == SP) {
@@ -333,7 +354,7 @@ void _ldrd_imm(int rn, int rt, int rt2, int imm)
     if (rn == rt) UNPREDICITABLE();
     if (!align4(imm)) UNPREDICITABLE();
 
-    o(0xe85500000 | (rn << 16) | (rt << 12) | (rt2 << 8) | (imm >> 2) | (add << 23));
+    o(0xe8550000 | (imm ? 0x01000000:0) | (rn << 16) | (rt << 12) | (rt2 << 8) | (imm >> 2) | (add << 23));
     /* wback ? */
 }
 
@@ -720,6 +741,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                         imm = pi1(p)->get_val();
 
                         if (p2 && p3 && (pi0a(p2) == poa(p)) && (p3->opcode == CPUI_LOAD)) {
+                            advance(it, 2);
                             _ldrd_imm(reg2i(poa(p1)), reg2i(poa(p3)), reg2i(pi0a(p)), p->get_in(1)->get_val());
                         }
                         else {
@@ -762,6 +784,10 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
             }
             break;
 
+        case CPUI_INT_XOR:
+            _xor_reg(reg2i(poa(p)), reg2i(pi0a(p)), reg2i(pi1a(p)));
+            break;
+
         case CPUI_INT_AND:
             if (poa(p) == apc) {
                 p1 = *++it;
@@ -781,6 +807,17 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                         _str(rt, rn, -1, imm);
                     }
                 }
+            }
+            break;
+
+        case CPUI_INT_OR:
+            if (isreg(p->output)) {
+                setflags = 0;
+                if (p1 && p2 && p1->opcode == CPUI_INT_EQUAL && p2->opcode == CPUI_COPY && d->is_tsreg(poa(p1)) && d->is_sreg(poa(p2))) 
+                    setflags = 1;
+
+                _or_reg(reg2i(poa(p)), reg2i(pi0a(p)), reg2i(pi1a(p)), setflags);
+                advance(it, 2);
             }
             break;
 

@@ -1668,6 +1668,10 @@ struct dobc {
         return  trans->getRegister("s0").getAddr() <= addr && addr <= trans->getRegister("s31").getAddr();  
     }
     bool        is_temp(const Address &addr) { return addr.getSpace() == trans->getUniqueSpace();  }
+    /* temp status register, tmpNG, tmpZR, tmpCY, tmpOV, */
+    bool        is_tsreg(const Address &addr) { return trans->getRegister("tmpNG").getAddr() <= addr && addr <= trans->getRegister("tmpOV").getAddr();  }
+    /* status register */
+    bool        is_sreg(const Address &addr) { return trans->getRegister("NG").getAddr() <= addr && addr <= trans->getRegister("OV").getAddr();  }
 
     void    plugin_dvmp360();
     void    plugin_ollvm();
