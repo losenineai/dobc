@@ -8,6 +8,7 @@
 #include "types.h"
 #include "heritage.hh"
 #include "pcodefunc.hh"
+#include <bitset>
 
 typedef struct funcdata     funcdata;
 typedef struct pcodeop      pcodeop;
@@ -224,6 +225,7 @@ struct cover {
 	void add_def_point(varnode *vn);
 	void add_ref_point(pcodeop *op, varnode *vn, int exclude);
 	void add_ref_recurse(flowblock *bl);
+    bool contain(const pcodeop *op);
 	int dump(char *buf);
 };
 
@@ -563,6 +565,10 @@ struct flowblock {
     } flags = { 0 };
 
     RangeList cover;
+    bitset<32>      live_gen;
+    bitset<32>      live_kill;
+    bitset<32>      live_in;
+    bitset<32>      live_out;
 
     list<pcodeop*>      ops;
 
@@ -704,6 +710,7 @@ public:
     vector<flowblock *> deadlist;
 
     funcdata *fd;
+    dobc *d;
 
     /* 识别所有的循环头 */
     vector<flowblock *> loopheaders;
@@ -711,7 +718,7 @@ public:
     int index = 0;
 
     //--------------------
-    blockgraph(funcdata *fd1) { fd = fd1;  }
+    blockgraph(funcdata *fd1);
 
     flowblock*  get_block(int i) { return blist[i]; }
     flowblock*  get_block_by_index(int index) {
@@ -785,6 +792,10 @@ public:
     /* 搜索到哪个节点为止 */
     pcodeop*    first_callop_vmp(flowblock *end);
     void        remove_from_flow(flowblock *bl);
+    void        compute_local_live_sets(void);
+    void        compute_global_live_sets(void);
+    void        dump_live_sets();
+    void        dump_live_set(flowblock *b);
 };
 
 typedef struct priority_queue   priority_queue;
@@ -1667,11 +1678,15 @@ struct dobc {
     bool        is_vreg(const Address &addr) { 
         return  trans->getRegister("s0").getAddr() <= addr && addr <= trans->getRegister("s31").getAddr();  
     }
+    Address     get_addr(const string &name) { return trans->getRegister(name).getAddr();  }
     bool        is_temp(const Address &addr) { return addr.getSpace() == trans->getUniqueSpace();  }
     /* temp status register, tmpNG, tmpZR, tmpCY, tmpOV, */
     bool        is_tsreg(const Address &addr) { return trans->getRegister("tmpNG").getAddr() <= addr && addr <= trans->getRegister("tmpOV").getAddr();  }
     /* status register */
     bool        is_sreg(const Address &addr) { return trans->getRegister("NG").getAddr() <= addr && addr <= trans->getRegister("OV").getAddr();  }
+    int         reg2i(const Address &addr);
+    /* 获取经过call被破坏的寄存器，依赖于CPU架构 */
+    void        get_scratch_regs(vector<int> &regs);
 
     void    plugin_dvmp360();
     void    plugin_ollvm();

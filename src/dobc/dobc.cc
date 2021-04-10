@@ -738,26 +738,6 @@ void            varnode::del_use(pcodeop *op)
 bool            varnode::in_liverange(pcodeop *p)
 {
 	return in_liverange_simple(p);
-
-    if (!def) return false;
-
-    if ((p->output->get_addr() == get_addr()) && (p->output->version - 1) == version) return true;
-
-    if (def->parent != p->parent) return false;
-
-    list<pcodeop *>::iterator it = def->basiciter;
-
-    for (; it != p->parent->ops.end(); it++) {
-        pcodeop *o = *it;
-
-        if (o == p) return true;
-
-        if (o->output && o->output->get_addr() == get_addr())
-            return false;
-    }
-
-    assert(0);
-    return true;
 }
 
 bool			varnode::in_liverange_simple(pcodeop *p)
@@ -1037,6 +1017,11 @@ void cover::add_ref_recurse(flowblock *bl)
 		if (block.end >= block.start)
 			block.set_end(INT_MAX);
 	}
+}
+
+bool cover::contain(const pcodeop *op)
+{
+    return false;
 }
 
 int cover::dump(char *buf)
@@ -2446,6 +2431,12 @@ int         flowblock::sub_id()
     return (*iter)->start.getTime();
 }
 
+blockgraph::blockgraph(funcdata *fd1) 
+{ 
+    fd = fd1; 
+    d = fd1->d;  
+}
+
 flowblock*  blockgraph::get_entry_point(void)
 {
     int i;
@@ -3770,11 +3761,11 @@ void        flowblock::add_op(pcodeop *op)
 
 funcdata::funcdata(const char *nm, const Address &a, int siz, dobc *d1)
     : startaddr(a),
+    d(d1),
     bblocks(this),
     name(nm),
     alias(nm),
     searchvn(0, Address(Address::m_minimal)),
-    d(d1),
     pf(this)
 {
     emitter.fd = this;
@@ -8660,4 +8651,22 @@ flowblock *priority_queue::extract()
     }
 
     return res;
+}
+
+int        dobc::reg2i(const Address &addr)
+{
+    if (get_addr("r0") <= addr && addr <= get_addr("pc"))
+        return (addr.getOffset()  - get_addr("r0").getOffset()) / 4;
+    if (get_addr("NG") <= addr && addr <= get_addr("OV"))
+        return (addr.getOffset() - get_addr("NG").getOffset()) + 16;
+
+    return -1;
+}
+
+void        dobc::get_scratch_regs(vector<int> &regs)
+{
+    regs.push_back(R0);
+    regs.push_back(R1);
+    regs.push_back(R2);
+    regs.push_back(R3);
 }

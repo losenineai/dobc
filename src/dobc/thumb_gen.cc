@@ -1,6 +1,7 @@
 ﻿
 #include "sleigh.hh"
 #include "thumb_gen.hh"
+#include "pass.hh"
 #include <assert.h>
 #include "vm.h"
 
@@ -305,7 +306,14 @@ void _xor_reg(int rd, int rn, int rm)
 	else if (rd != 13 && rd != 15 && rn != 13 && rn != 15) 
         o(0xea800000 | (rn << 16) | (rd << 8) | rm);
 	else
-		vm_error ("internal error: th_xor_reg invalid parameters\n");
+		vm_error ("_xor_reg invalid parameters");
+}
+
+void _teq_reg(int rn, int rm, int shift)
+{
+    if (shift) UNPREDICITABLE();
+
+    o(0xea900f00 | (rn << 16) | rm);
 }
 
 /* A8.8.123 */
@@ -343,6 +351,10 @@ void _sub_sp_imm(int imm)
         o(stuff_constw(0xf25b0000, imm, 12));
     else // T2
         o(stuff_const(0xf1ad0000 | (SP << 8), imm));
+}
+
+void _cmp_imm()
+{
 }
 
 /* A8.8.72 */
@@ -540,6 +552,8 @@ int thumb_gen::run()
     int i;
     uint32_t x;
 
+    preprocess();
+
     /* 1. 设置写入位置
     2. 清空原函数 */
     data = d->loader->filedata;
@@ -615,6 +629,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
         /* phi节点不处理 */
         if (p->opcode == CPUI_MULTIEQUAL) continue;
 
+        setflags = 0;
         switch (p->opcode) {
         case CPUI_COPY:
             /* push */
@@ -785,7 +800,14 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
             break;
 
         case CPUI_INT_XOR:
-            _xor_reg(reg2i(poa(p)), reg2i(pi0a(p)), reg2i(pi1a(p)));
+            if (istemp(p->output)) {
+                if (p1 && p2 && d->is_tsreg(poa(p1)) && d->is_sreg(poa(p2))) {
+                    _teq_reg(reg2i(pi0a(p)), reg2i(pi1a(p)), 0);
+                    advance(it, 2);
+                }
+            }
+            else 
+                _xor_reg(reg2i(poa(p)), reg2i(pi0a(p)), reg2i(pi1a(p)));
             break;
 
         case CPUI_INT_AND:
@@ -812,12 +834,12 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
 
         case CPUI_INT_OR:
             if (isreg(p->output)) {
-                setflags = 0;
-                if (p1 && p2 && p1->opcode == CPUI_INT_EQUAL && p2->opcode == CPUI_COPY && d->is_tsreg(poa(p1)) && d->is_sreg(poa(p2))) 
+                if (p1 && p2 && p1->opcode == CPUI_INT_EQUAL && p2->opcode == CPUI_COPY && d->is_tsreg(poa(p1)) && d->is_sreg(poa(p2))) {
+                    advance(it, 2);
                     setflags = 1;
+                }
 
                 _or_reg(reg2i(poa(p)), reg2i(pi0a(p)), reg2i(pi1a(p)), setflags);
-                advance(it, 2);
             }
             break;
 
@@ -912,3 +934,22 @@ void thumb_gen::dump()
     fd1->dump_cfg(fd1->name, "after_codegen", 1);
     
 }
+
+void thumb_gen::preprocess()
+{
+    int ret;
+    pass_cond_reduce pass_cond_reduce(fd);
+    pass_regalloc_const_arm pass_regalloc(fd);
+
+    ret = pass_cond_reduce.run();
+    if (PASS_DO_STHING(ret)) {
+        fd->heritage_clear();
+        fd->heritage();
+    }
+    ret = pass_regalloc.run();
+    if (PASS_DO_STHING(ret)) {
+        fd->heritage_clear();
+        fd->heritage();
+    }
+}
+

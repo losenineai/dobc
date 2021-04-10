@@ -23,6 +23,11 @@ typedef list<pcodeop *>::iterator pit;
 #define LR          14
 #define PC          15
 
+#define NG          16
+#define ZR          17
+#define CY          18
+#define OV          19
+
 struct fix_item {
     int from;
     int cond;
@@ -50,6 +55,15 @@ struct thumb_gen {
     thumb_gen(funcdata *f);
     ~thumb_gen();
 
+    /*
+    cfg流图需要做预处理
+    1. 假设代码里面有 cmp r0, 0x12345678 这行语句，因为imm过大，导致0x12345678，
+    塞不进cmp rn, imm格式中去，需要改成
+    mov rn, 0x12345678
+    cmp rn, rm
+    这里需要空出一个寄存器的位置
+    */
+    void preprocess(void);
     void resort_blocks();
     int run();
     void save(void);
