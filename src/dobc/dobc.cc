@@ -2431,6 +2431,12 @@ int         flowblock::sub_id()
     return (*iter)->start.getTime();
 }
 
+
+bool        flowblock::noreturn(void) 
+{ 
+    return ops.size() && last_op()->callfd && last_op()->callfd->flags.exit;  
+}
+
 blockgraph::blockgraph(funcdata *fd1) 
 { 
     fd = fd1; 
@@ -7426,9 +7432,8 @@ void        funcdata::rename_recurse(blockbasic *bl, variable_stack &varstack, v
     /*
     假如这个节点是出口节点，切变量为系统寄存器，则加入出口活跃变量集合
     */
-    fd1 = bl->ops.size() ?  bl->last_op()->callfd:NULL;
     /*  对于noreturn 函数我们设置出口寄存器活跃数量为0 */
-    if (bl->is_end() && (!fd1 || !fd1->flags.exit)) {
+    if (bl->is_end() && !bl->noreturn()) {
         variable_stack::iterator it;
         for (it = varstack.begin(); it != varstack.end(); it++) {
             vector<varnode *> &stack = it->second;

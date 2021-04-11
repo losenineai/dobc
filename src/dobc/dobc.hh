@@ -698,6 +698,7 @@ struct flowblock {
         flags.f_irreducible = 0;
         flags.f_loopheader = 0;
     }
+    bool noreturn(void);
 };
 
 class blockgraph {

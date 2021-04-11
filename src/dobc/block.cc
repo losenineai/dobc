@@ -55,6 +55,10 @@ void        blockgraph::compute_global_live_sets(void)
                 b->live_out |= outb->live_in;
             }
 
+            /* fix interval */
+            if (b->is_end() && !b->noreturn()) 
+                b->live_out |= 0xffff;
+
             live_in0 = b->live_in;
             b->live_in = (b->live_out & ~b->live_kill) | b->live_gen;
 
