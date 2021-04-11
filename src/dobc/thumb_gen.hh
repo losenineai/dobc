@@ -43,6 +43,8 @@ class codegen {
     ~codegen();
 };
 
+int ntz(uint32_t x);
+
 struct thumb_gen {
     funcdata *fd;
     dobc *d;
@@ -104,6 +106,12 @@ struct thumb_gen {
 
     void dump();
     int dump_one_inst(int index, pcodeop *p);
+
+    static uint32_t stuff_const(uint32_t op, uint32_t c);
+    static void stuff_const_harder(uint32_t op, uint32_t v);
+    static int _add(int rd, int rn, uint32_t imm);
+    static void _sub_sp_imm(int imm);
+    static void _mov_imm(int rd, uint32_t imm);
 };
 
 #endif

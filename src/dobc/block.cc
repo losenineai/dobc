@@ -3,6 +3,26 @@
 #include "dobc.hh"
 #include "thumb_gen.hh"
 
+void        blockgraph::collect_cond_copy_sub(vector<pcodeop *> &subs)
+{
+    int i;
+    flowblock *b;
+    list<pcodeop *>::reverse_iterator   it;
+    pcodeop *p;
+
+    for (i = 0; i < blist.size(); i++) {
+        b = blist[i];
+        if (b->out.size() != 2) continue;
+        if (b->ops.size() <= 4) continue;
+
+        it = b->ops.rbegin();
+        advance(it, 3);
+        p = *it;
+        if ((p->opcode == CPUI_INT_SUB) && d->is_temp(poa(p)) && pi1(p)->is_constant())
+            subs.push_back(p);
+    }
+}
+
 void        blockgraph::compute_local_live_sets(void)
 {
     int i, j, r;
@@ -80,5 +100,6 @@ void        blockgraph::dump_live_sets()
 
 void        blockgraph::dump_live_set(flowblock *b)
 {
-    printf("block{id:%d, dfnum:%d} liveout[%lx] \n", b->index, b->dfnum, b->live_out.to_ulong());
+    //printf("block{id:%d, dfnum:%d} liveout[%lx] \n", b->index, b->dfnum, b->live_out.to_ulong());
+    printf("block{id:%3d, dfnum:%3d} liveout[%s] \n", b->index, b->dfnum, b->live_out.to_string().c_str());
 }

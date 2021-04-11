@@ -379,8 +379,11 @@ struct pcodeop {
 
     funcdata *callfd = NULL;   // 当opcode为call指令时，调用的
 
+    /* block 里的 */
     list<pcodeop *>::iterator basiciter;
+    /* deadlist 里的 */
     list<pcodeop *>::iterator insertiter;
+    /* 特殊操作类型里的，比如 store ,load, */
     list<pcodeop *>::iterator codeiter;
     list<pcodeop *> mayuses;
 
@@ -797,6 +800,7 @@ public:
     void        compute_global_live_sets(void);
     void        dump_live_sets();
     void        dump_live_set(flowblock *b);
+    void        collect_cond_copy_sub(vector<pcodeop *> &subs);
 };
 
 typedef struct priority_queue   priority_queue;
@@ -881,7 +885,7 @@ public:
     void add__cbranch_eq(flowblock *b, int eq);
     void add_cbranch_eq(flowblock *b);
     void add_cbranch_ne(flowblock *b);
-    void add_copy_const(flowblock *b, list<pcodeop *>::iterator it, const varnode *rd, const varnode *v);
+    void add_copy_const(flowblock *b, list<pcodeop *>::iterator it, const varnode &rd, const varnode &v);
 };
 
 struct ollvmhead {
@@ -920,6 +924,19 @@ struct funcdata {
 		unsigned enable_complete_liverange : 1;
         unsigned thumb : 1;
         unsigned dump_inst : 1;
+        /* 关闭常量持久化，比如
+        copy r0, 1
+        cmp r1, r0
+
+
+        ==> 
+
+        copy r0, 1
+        cmp r1, 1
+        
+        关闭掉这种优化
+        */
+        unsigned disable_to_const : 1;
     } flags = { 0 };
 
     enum {
@@ -1686,6 +1703,7 @@ struct dobc {
     /* status register */
     bool        is_sreg(const Address &addr) { return trans->getRegister("NG").getAddr() <= addr && addr <= trans->getRegister("OV").getAddr();  }
     int         reg2i(const Address &addr);
+    Address     i2reg(int i);
     /* 获取经过call被破坏的寄存器，依赖于CPU架构 */
     void        get_scratch_regs(vector<int> &regs);
 

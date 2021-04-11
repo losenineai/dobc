@@ -3142,7 +3142,7 @@ int         funcdata::cond_copy_expand(pcodeop *p, int outslot)
 
         if ((def == defs.back()) && !have_top) {
             b1 = bblocks.new_block_basic(user_offset += user_step);
-            pf.add_copy_const(b1, b1->ops.end(), p->output, defs[i]);
+            pf.add_copy_const(b1, b1->ops.end(), *p->output, *defs[i]);
 
             bblocks.add_edge(pb1, b1);
             continue;
@@ -3153,7 +3153,7 @@ int         funcdata::cond_copy_expand(pcodeop *p, int outslot)
         pf.add_cbranch_eq(b1);
 
         b2 = bblocks.new_block_basic(user_offset += user_step);
-        pf.add_copy_const(b2, b2->ops.end(), p->output, defs[i]);
+        pf.add_copy_const(b2, b2->ops.end(), *p->output, *defs[i]);
 
         bblocks.add_edge(b1, b2, a_true_edge);
         bblocks.add_edge(b2, outb);
@@ -6071,7 +6071,8 @@ cp_label1:
         }
 
         r = op->compute(-1, &b);
-        op->to_constant1();
+        if (!flags.disable_to_const)
+            op->to_constant1();
         if (r == ERR_FREE_SELF) continue;
         ret |= r;
 
@@ -7340,7 +7341,6 @@ void        funcdata::rename_recurse(blockbasic *bl, variable_stack &varstack, v
     pcodeop *op, *multiop;
     varnode *vnout, *vnin, *vnnew;
     int i, slot, set_begin = 0, order;
-    funcdata *fd1;
 
     for (oiter = bl->ops.begin(), order = 0; oiter != bl->ops.end(); oiter = next, order++) {
         op = *oiter ;
@@ -8666,6 +8666,16 @@ int        dobc::reg2i(const Address &addr)
         return (addr.getOffset() - get_addr("NG").getOffset()) + 16;
 
     return -1;
+}
+
+Address     dobc::i2reg(int i)
+{
+    if (i < 16)
+        return get_addr("r0") + i * 4;
+    if (i < 20)
+        return get_addr("NG") + i;
+
+    throw LowlevelError("not support i");
 }
 
 void        dobc::get_scratch_regs(vector<int> &regs)

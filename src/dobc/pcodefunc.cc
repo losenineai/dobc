@@ -62,14 +62,14 @@ void pcodefunc::add_cbranch_ne(flowblock *b)
     add__cbranch_eq(b, 0);
 }
 
-void pcodefunc::add_copy_const(flowblock *b, list<pcodeop *>::iterator it, const varnode *rd, const varnode *v)
+void pcodefunc::add_copy_const(flowblock *b, list<pcodeop *>::iterator it, const varnode &rd, const varnode &v)
 {
     pcodeop *op;
     op = fd->newop(1, SeqNum(Address(d->trans->getDefaultCodeSpace(), fd->user_offset++), fd->op_uniqid++));
     fd->op_insert(op, b, it);
 
     op->set_opcode(CPUI_COPY);
-    fd->op_set_input(op, fd->create_constant_vn(v->get_val(), v->get_size()), 0);
-    fd->op_set_output(op, fd->clone_varnode(rd));
+    fd->op_set_input(op, fd->create_constant_vn(v.get_val(), v.get_size()), 0);
+    fd->op_set_output(op, fd->clone_varnode(&rd));
 }
 

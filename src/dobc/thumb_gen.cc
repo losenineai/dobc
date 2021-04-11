@@ -142,7 +142,7 @@ static void o(uint32_t i)
         ot((uint16_t)i);
 }
 
-static uint32_t stuff_const(uint32_t op, uint32_t c)
+uint32_t thumb_gen::stuff_const(uint32_t op, uint32_t c)
 {
     int try_neg = 0;
     uint32_t nc = 0, negop = 0;
@@ -213,7 +213,7 @@ static uint32_t stuff_constw(uint32_t op, uint32_t c, int m)
     return op;
 }
 
-static void stuff_const_harder(uint32_t op, uint32_t v)
+void thumb_gen::stuff_const_harder(uint32_t op, uint32_t v)
 {
     uint32_t x;
     x = stuff_const(op, v);
@@ -327,7 +327,7 @@ void _or_reg(int rd, int rn, int rm, int setflags)
 		vm_error ("internal error: th_orr_reg invalid parameters\n");
 }
 
-int _add(int rd, int rn, uint32_t imm)
+int thumb_gen::_add(int rd, int rn, uint32_t imm)
 {
     if (rn == SP) {
         if (align4(imm) && (imm < 1024) && (rd < 8))
@@ -343,7 +343,7 @@ int _add(int rd, int rn, uint32_t imm)
     return 0;
 }
 
-void _sub_sp_imm(int imm)
+void thumb_gen::_sub_sp_imm(int imm)
 {
     if (!(imm & 3)) /* ALIGN 4 */
         o(0xb080 | (imm >> 2));
@@ -355,6 +355,14 @@ void _sub_sp_imm(int imm)
 
 void _cmp_imm()
 {
+}
+
+void _cmp_reg(int rn, int rm)
+{
+    if (rn < 8 && rm < 8)
+        o(0x4280 | (rm << 3) | rn);
+    else
+        o(0x4500 | (rm << 3) | (rn & 7) | ((rn >> 3) << 7));
 }
 
 /* A8.8.72 */
@@ -398,7 +406,7 @@ int _str(int rt, int rn, int rm, int imm)
     return 0;
 }
 
-void _mov(int rd, uint32_t v)
+void thumb_gen::_mov_imm(int rd, uint32_t v)
 {
     /* A8.8.102 */
     if (in_imm8(v) && in_imm3(rd)) 
@@ -553,6 +561,7 @@ int thumb_gen::run()
     uint32_t x;
 
     preprocess();
+    fd->dump_cfg(fd->name, "exe_pre", 1);
 
     /* 1. 设置写入位置
     2. 清空原函数 */
@@ -647,7 +656,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 }
             }
             else if (pi0(p)->is_constant())
-                _mov(reg2i(poa(p)), pi0(p)->get_val());
+                _mov_imm(reg2i(poa(p)), pi0(p)->get_val());
             else if (isreg(p->output) && isreg(pi0(p))) {
                 rd = reg2i(poa(p));
                 /* A8.8.103*/
@@ -658,7 +667,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
         case CPUI_LOAD:
             if (isreg(p->output) && pi1(p)->is_constant()) {
                 rd = reg2i(poa(p));
-                _mov(rd, pi1(p)->get_val());
+                _mov_imm(rd, pi1(p)->get_val());
                 o(0xf8d00000 | (rd << 12) | (rd << 16) | 0);
             }
             break;
@@ -684,13 +693,20 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
         case CPUI_INT_SUB:
             if (poa(p) == ama) it = g_push(b, it);
             else if (istemp(p->output)) {
-                p1 = *++it;
                 if (p1->opcode == CPUI_INT_EQUAL) {
-                    p2 = *++it;
                     if ((p2->opcode == CPUI_COPY) && (poa(p2) == azr)) {
                         reg = reg2i(pi0a(p));
-                        if (pi1(p)->is_constant() && (pi1(p)->get_val() < 256) && (reg < 7))
+                        if (pi1(p)->is_constant() && (pi1(p)->get_val() < 256) && (reg < 7)) {
                             o(0x2800 | (reg << 8) | ((uint32_t)pi1(p)->get_val()));
+                            advance(it, 2);
+                        }
+                    }
+                    /* A8.8.38 */
+                    else if (isreg(pi0(p)) && isreg(pi1(p))) {
+                        rn = d->reg2i(pi0a(p));
+                        rm = d->reg2i(pi1a(p));
+                        _cmp_reg(rn, rm);
+                        it++;
                     }
                 }
             }
@@ -940,6 +956,8 @@ void thumb_gen::preprocess()
     int ret;
     pass_cond_reduce pass_cond_reduce(fd);
     pass_regalloc_const_arm pass_regalloc(fd);
+
+    fd->flags.disable_to_const = 1;
 
     ret = pass_cond_reduce.run();
     if (PASS_DO_STHING(ret)) {

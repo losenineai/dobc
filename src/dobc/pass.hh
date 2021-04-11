@@ -19,6 +19,11 @@ return
 #define PASS_DO_STHING(x)           (x > 0)
 
 class pass {
+public:
+    funcdata *fd;
+    dobc *d;
+
+    pass(funcdata *f) { fd = f; d = fd->d; }
 };
 
 /* 条件缩减:
@@ -44,10 +49,9 @@ else {
 
 note:上面的r1的数字是乱写的
 */
-class pass_cond_reduce : pass {
+class pass_cond_reduce : public pass {
 public:
-    funcdata *fd;
-    pass_cond_reduce(funcdata *f) { fd = f;  }
+    pass_cond_reduce(funcdata *f):pass(f) {}
     int run(void);
 };
 
@@ -79,16 +83,13 @@ cmp r0, rn
 TODO:理解部分
 
 */
-class pass_regalloc_const_arm : pass {
+class pass_regalloc_const_arm : public pass {
 public:
-    funcdata *fd;
-    pass_regalloc_const_arm(funcdata *f) { fd = f;  }
+    pass_regalloc_const_arm(funcdata *f):pass(f) {  }
     int run(void);
 };
 
 class pass_mgr {
-public:
-    funcdata *fd;
 };
 
 #endif
