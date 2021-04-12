@@ -204,8 +204,10 @@ uint32_t thumb_gen::stuff_const(uint32_t op, uint32_t c)
     return 0;
 }
 
+/* 这里的m是规定c的bitwidth ，假如为0，则默认的12，因为大部分的数都是12位填法 */
 static uint32_t stuff_constw(uint32_t op, uint32_t c, int m)
 {
+    if (m == 0) m = 12;
     if (c >= (1 << m)) return 0;
 
     op |= imm_map(c, 11, 1, 26) | imm_map(c, 8, 3, 12) | imm_map(c, 0, 8, 0);
@@ -341,6 +343,20 @@ int thumb_gen::_add(int rd, int rn, uint32_t imm)
     }
 
     return 0;
+}
+
+/* A8.8.221 */
+void thumb_gen::_sub_imm(int rd, int rn, uint32_t imm)
+{
+    if ((imm < 8) && (rd < 8) && (rn < 8)) // t1
+        o(0x1e00 | (imm << 6) | (rn << 3) | rd);
+    else if (imm < 256 && (rd == rn) && (rn < 8)) // t2
+        o(0x3800 | imm | (rn << 8));
+    else if (imm <= 0x0fff && rd != 13 && rd != 15) { // t4
+        o(stuff_constw(0xf2a00000 | (rn << 16) | (rd << 8), imm, 0));
+    }
+    else
+        stuff_const_harder(0xf1a00000 | (rn << 16) | (rd << 8), imm);
 }
 
 void thumb_gen::_sub_sp_imm(int imm)
@@ -623,11 +639,11 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
         /* 这一坨代码都是相当于词法分析的token的预取 */
         it1 = it;
         p1 = p2 = NULL;
-        if ((p->start.getOrder() + 1) < b->last_order())
+        if ((p->start.getOrder() + 1) <= b->last_order())
             p1 = *++it1;
-        if ((p->start.getOrder() + 2) < b->last_order())
+        if ((p->start.getOrder() + 2) <= b->last_order())
             p2 = *++it1;
-        if ((p->start.getOrder() + 3) < b->last_order())
+        if ((p->start.getOrder() + 3) <= b->last_order())
             p3 = *++it1;
         it1 = it;
 
@@ -674,18 +690,15 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
 
         case CPUI_INT_NOTEQUAL:
         case CPUI_INT_EQUAL:
-            if (istemp(p->output) && (pi0a(p) == azr) && pi1(p)->is_constant() && (pi1(p)->get_val() == 0)) {
-                p1 = *++it;
-                if (p1->opcode == CPUI_BOOL_NEGATE) {
-                    p2 = *++it;
-                    if (p2->opcode == CPUI_CBRANCH) {
-                        flowblock *t = b->get_true_edge()->point;
-                        x = (((p->opcode == CPUI_INT_NOTEQUAL)?COND_NE:COND_EQ) << 22);
-                        x |=  t->cg.data ?  encbranch(ind, t->cg.data - data, 0):encbranch(0, 0, 0);
-                        if (!t->cg.data)
-                            add_fix_list(ind, t, 0);
-                        o(x);
-                    }
+            if (istemp(p->output) && (pi0a(p) == azr) && pi1(p)->is_constant()) {
+                imm = pi1(p)->get_val();
+                if (!imm && (p1->opcode == CPUI_BOOL_NEGATE) && (p2->opcode == CPUI_CBRANCH)) {
+                    write_cbranch(b, p->opcode);
+                    advance(it, 2);
+                }
+                else if (imm && p1->opcode == CPUI_CBRANCH) {
+                    write_cbranch(b, p->opcode);
+                    advance(it, 1);
                 }
             }
             break;
@@ -712,11 +725,11 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
             }
             else if (isreg(p->output)) {
                 if (isreg(pi0(p))) {
+                    rd = reg2i(poa(p));
+                    rn = reg2i(pi0a(p));
                     if (isreg(pi1(p))) {
                         /* A8.8.223 */
-                        rn = reg2i(pi0a(p));
                         rm = reg2i(pi1a(p));
-                        rd = reg2i(poa(p));
 
                         it1 = it;
                         p1 = *++it1;
@@ -735,17 +748,16 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     /* sub sp, sp, c 
                     A8.8.225.T1
                     */
-                    else if (pi1(p)->is_constant() && (pi0a(p) == asp) && (poa(p) == asp)) {
-                        if ((p->start.getOrder() + 2) < b->last_order()) {
-                            it1 = it;
-                            p1 = *++it1;
-                            p2 = *++it1;
-                            if ((p1->opcode == CPUI_COPY) && (p2->opcode == CPUI_STORE) && d->is_vreg(pi2a(p2))) {
+                    else if (pi1(p)->is_constant()) {
+                        if ((pi0a(p) == asp) && (poa(p) == asp)) {
+                            if (p1 && p2 && (p1->opcode == CPUI_COPY) && (p2->opcode == CPUI_STORE) && d->is_vreg(pi2a(p2))) {
                                 it = g_vpush(b, it);
                                 goto inst_label;
                             }
+                            _sub_sp_imm(pi1(p)->get_val());
                         }
-                        _sub_sp_imm(pi1(p)->get_val());
+                        else
+                            _sub_imm(rd, rn, pi1(p)->get_val());
                     }
                 }
             }
@@ -908,6 +920,17 @@ inst_label:
         dump_one_inst(ind - 4, NULL);
     }
     return 0;
+}
+
+void thumb_gen::write_cbranch(flowblock *b, uint32_t opcode)
+{
+    uint32_t x;
+    flowblock *t = b->get_true_edge()->point;
+    x = (((opcode == CPUI_INT_NOTEQUAL)?COND_NE:COND_EQ) << 22);
+    x |=  t->cg.data ?  encbranch(ind, t->cg.data - data, 0):encbranch(0, 0, 0);
+    if (!t->cg.data)
+        add_fix_list(ind, t, 0);
+    o(x);
 }
 
 int thumb_gen::dump_one_inst(int oind, pcodeop *p)

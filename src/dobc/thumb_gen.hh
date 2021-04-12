@@ -106,11 +106,13 @@ struct thumb_gen {
 
     void dump();
     int dump_one_inst(int index, pcodeop *p);
+    void write_cbranch(flowblock *b, uint32_t cond);
 
     static uint32_t stuff_const(uint32_t op, uint32_t c);
     static void stuff_const_harder(uint32_t op, uint32_t v);
     static int _add(int rd, int rn, uint32_t imm);
     static void _sub_sp_imm(int imm);
+    void _sub_imm(int rd, int rn, uint32_t imm);
     static void _mov_imm(int rd, uint32_t imm);
 };
 
