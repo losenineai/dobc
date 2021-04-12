@@ -2002,7 +2002,7 @@ void            pcodeop::to_constant1(void)
         3. store节点的in节点不能转换为常量，这个是因为thumb不支持 store 一个 imm 到一个地址上，假如我们常量化会导致不好做代码生成
 
         */
-        else if ((opcode != CPUI_MULTIEQUAL) && (opcode != CPUI_STORE) && !is_call()) {
+        else if (!fd->flags.disable_inrefs_to_const && (opcode != CPUI_MULTIEQUAL) && (opcode != CPUI_STORE) && !is_call()) {
             for (i = 0; i < inrefs.size(); i++) {
                 vn = get_in(i);
 
@@ -3426,6 +3426,8 @@ int         funcdata::ollvm_deshell()
 
     AssemblyRaw assem;
     Address addr(d->trans->getDefaultCodeSpace(), 0x3442);
+
+    flags.disable_inrefs_to_const = 1;
 
     follow_flow();
 

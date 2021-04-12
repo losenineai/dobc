@@ -379,6 +379,11 @@ struct pcodeop {
 
     funcdata *callfd = NULL;   // 当opcode为call指令时，调用的
 
+    bitset<32>      live_in;
+    bitset<32>      live_out;
+    bitset<32>      live_gen;
+    bitset<32>      live_kill;
+
     /* block 里的 */
     list<pcodeop *>::iterator basiciter;
     /* deadlist 里的 */
@@ -796,10 +801,16 @@ public:
     /* 搜索到哪个节点为止 */
     pcodeop*    first_callop_vmp(flowblock *end);
     void        remove_from_flow(flowblock *bl);
+    /* 计算每个blk 的live sets */
     void        compute_local_live_sets(void);
     void        compute_global_live_sets(void);
+
+    /* 计算每个pcode的live set*/
+    void        compute_local_live_sets_p(void);
+    void        compute_global_live_sets_p(void);
     void        dump_live_sets();
     void        dump_live_set(flowblock *b);
+    void        dump_live_set(pcodeop *p);
     void        collect_cond_copy_sub(vector<pcodeop *> &subs);
 };
 
@@ -937,6 +948,7 @@ struct funcdata {
         关闭掉这种优化
         */
         unsigned disable_to_const : 1;
+        unsigned disable_inrefs_to_const : 1;
     } flags = { 0 };
 
     enum {

@@ -103,3 +103,89 @@ void        blockgraph::dump_live_set(flowblock *b)
     //printf("block{id:%d, dfnum:%d} liveout[%lx] \n", b->index, b->dfnum, b->live_out.to_ulong());
     printf("block{id:%3d, dfnum:%3d} liveout[%s] \n", b->index, b->dfnum, b->live_out.to_string().c_str());
 }
+
+void        blockgraph::dump_live_set(pcodeop *p)
+{
+    printf("pcode{uniq:p%3d} livein[%s] liveout[%s] \n", p->start.getTime(), p->live_in.to_string().c_str(), p->live_out.to_string().c_str());
+}
+
+void        blockgraph::compute_local_live_sets_p(void)
+{
+    int i, j, r;
+    list<pcodeop *>::reverse_iterator it;
+    flowblock *b;
+
+    vector<int> scratch_regs;
+
+    d->get_scratch_regs(scratch_regs);
+
+    for (i = 0; i < blist.size(); i++) {
+        b = blist[i];
+
+        for (it = b->ops.rbegin(); it != b->ops.rend(); it++) {
+            pcodeop *p = *it;
+
+            for (j = 0; j < p->inrefs.size(); j++) {
+                r = d->reg2i(p->get_in(j)->get_addr());
+                if (r == -1) continue;
+
+                if (!p->live_kill.test(r)) p->live_gen.set(r);
+            }
+
+            if (p->is_call()) {
+                for (j = 0; j < scratch_regs.size(); j++)
+                    p->live_kill.set(scratch_regs[j]);
+            }
+
+            if (p->output && ((r = d->reg2i(p->output->get_addr())) >= 0)) 
+                p->live_kill.set(r);
+        }
+    }
+}
+
+void        blockgraph::compute_global_live_sets_p(void)
+{
+    int i, j, changed = 0;
+    flowblock *b;
+    bitset<32> live_out0, live_in0;
+    list<pcodeop *>::reverse_iterator   it;
+    pcodeop *p, *prev;
+
+    do {
+        changed = 0;
+        for (i = blist.size() - 1; i >= 0; i--) {
+            b = blist[i];
+
+            for (it = b->ops.rbegin(); it != b->ops.rend(); it++) {
+                p = *it;
+
+                if (!changed) {
+                    live_out0 = p->live_out;
+                    live_in0 = p->live_in;
+                }
+
+                if ((it == b->ops.rbegin())) {
+                    /* fix interval */
+                    if (b->is_end()) {
+                        if (!b->noreturn())
+                            p->live_out |= 0xffff;
+                    }
+                    else {
+                        for (j = 0; j < b->out.size(); j++) 
+                            p->live_out |= b->get_out(j)->ops.front()->live_in;
+                    }
+                }
+                else {
+                    p->live_out = prev->live_in;
+                }
+
+                p->live_in = (p->live_out & ~p->live_kill) | p->live_gen;
+
+                if (!changed && ((live_out0 != p->live_out) || (live_in0 != p->live_in)))
+                    changed = 1;
+
+                prev = p;
+            }
+        }
+    } while (changed);
+}

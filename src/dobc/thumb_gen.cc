@@ -204,6 +204,55 @@ uint32_t thumb_gen::stuff_const(uint32_t op, uint32_t c)
     return 0;
 }
 
+/* A7.4.6 */
+struct {
+    int         op;
+    int         cmode;
+    uint64_t    mask;
+    uint64_t    val;
+    int         dt;
+} simd_imm_tab[] = {
+    { 0, 0b0000, 0,                    0x000000ff000000ff, 32 },
+    { 0, 0b0010, 0,                    0x0000ff000000ff00, 32 },
+    { 0, 0b0100, 0,                    0x00ff000000ff0000, 32 },
+    { 0, 0b0110, 0,                    0xff000000ff000000, 32 },
+    { 0, 0b1000, 0,                    0x00ff00ff00ff00ff, 16 },
+    { 0, 0b1010, 0,                    0xff00ff00ff00ff00, 16 },
+
+    { 0, 0b1100, 0x000000ff000000ff,   0x0000ff000000ff00, 32 },
+    { 0, 0b1101, 0x0000ffff0000ffff,   0x00ff000000ff0000, 32 },
+
+    { 0, 0b1110, 0,                    0xffffffffffffffff, 8 },
+    { 0, 0b1111, 0,                    0xffffffffffffffff, 8 },
+
+    { 1, 0b1110, 0,                    0xffffffffffffffff, 64 },
+};
+
+/* vector */
+uint32_t sutff_constv(uint32_t op, uint64_t c, int dt)
+{
+    int bw = 64, i, j, abc = 0;
+    uint64_t mask = (1 << dt) - 1, s, c0 = c;
+
+
+    if (dt == 64) {
+        for (i = 0; i < 8; i++) {
+            j = (c >> (i * 8)) & 0xff;
+            if (j && (j < 255)) return 0;
+            abc |= (j & 1) << i;
+        }
+    }
+    else {
+        s = c & mask;
+        /* 确认是否对称 */
+        for (; bw; bw -= dt) {
+            c >>= dt;
+            if (!(c & mask == c))
+                return 0;
+        }
+    }
+}
+
 /* 这里的m是规定c的bitwidth ，假如为0，则默认的12，因为大部分的数都是12位填法 */
 static uint32_t stuff_constw(uint32_t op, uint32_t c, int m)
 {
@@ -445,6 +494,10 @@ void thumb_gen::_mov_imm(int rd, uint32_t v)
     }
 }
 
+void vmov_imm(int siz, int d, int imm)
+{
+}
+
 uint32_t encbranch(int pos, int addr, int fail)
 {
     /* A8.8.18 */
@@ -577,6 +630,7 @@ int thumb_gen::run()
     uint32_t x;
 
     preprocess();
+    //fd->bblocks.dump_live_set(fd->find_op(SeqNum(Address(), 2170)));
     fd->dump_cfg(fd->name, "exe_pre", 1);
 
     /* 1. 设置写入位置
@@ -671,8 +725,18 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                         o(0xf000d000 | encbranch2(ind, imm, !target_thumb));
                 }
             }
-            else if (pi0(p)->is_constant())
-                _mov_imm(reg2i(poa(p)), pi0(p)->get_val());
+            else if (pi0(p)->is_constant()) {
+                if (isreg(p->output))
+                    _mov_imm(reg2i(poa(p)), pi0(p)->get_val());
+                else if (istemp(p->output) && isreg(p1->output)){
+                    if (isreg(p1->output))
+                        _mov_imm(reg2i(poa(p1)), pi0(p)->get_val());
+                    else if (d->is_vreg(poa(p1))) {
+                        // FIXME: vmov_imm
+                    }
+                    advance(it, 1);
+                }
+            }
             else if (isreg(p->output) && isreg(pi0(p))) {
                 rd = reg2i(poa(p));
                 /* A8.8.103*/
@@ -709,6 +773,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 if (p1->opcode == CPUI_INT_EQUAL) {
                     if ((p2->opcode == CPUI_COPY) && (poa(p2) == azr)) {
                         reg = reg2i(pi0a(p));
+                            /* A8.8.37 */
                         if (pi1(p)->is_constant() && (pi1(p)->get_val() < 256) && (reg < 7)) {
                             o(0x2800 | (reg << 8) | ((uint32_t)pi1(p)->get_val()));
                             advance(it, 2);
@@ -987,10 +1052,14 @@ void thumb_gen::preprocess()
         fd->heritage_clear();
         fd->heritage();
     }
+#if 0
     ret = pass_regalloc.run();
     if (PASS_DO_STHING(ret)) {
         fd->heritage_clear();
         fd->heritage();
     }
+#endif
+    fd->bblocks.compute_local_live_sets_p();
+    fd->bblocks.compute_global_live_sets_p();
 }
 

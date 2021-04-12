@@ -142,7 +142,7 @@ public:
 
   /// Compare two sequence numbers with their natural order
   bool operator<(const SeqNum &op2) const {
-    if (pc == op2.pc)
+    //if (pc == op2.pc)
       return (uniq < op2.uniq);
     return (pc < op2.pc);
   }
