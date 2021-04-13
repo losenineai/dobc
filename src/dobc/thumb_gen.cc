@@ -441,16 +441,28 @@ void thumb_gen::_sub_sp_imm(int imm)
         o(stuff_const(0xf1ad0000 | (SP << 8), imm));
 }
 
-void _cmp_imm()
-{
-}
-
 void _cmp_reg(int rn, int rm)
 {
     if (rn < 8 && rm < 8)
         o(0x4280 | (rm << 3) | rn);
     else
         o(0x4500 | (rm << 3) | (rn & 7) | ((rn >> 3) << 7));
+}
+
+
+void thumb_gen::_cmp_imm(int rn, uint32_t imm)
+{
+    uint32_t x, rm;
+
+    if ((imm < 256) && (rn < 7))
+        o(0x2800 | (rn << 8) | imm);
+    else if ((x = stuff_const(0, imm)))
+        o(0xf1b00f00 | x | (rn << 16));
+    else {
+        rm = regalloc(curp);
+        _mov_imm(rm, imm);
+        _cmp_reg(rn, rm);
+    }
 }
 
 /* A8.8.72 */
@@ -710,13 +722,13 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
 {
     list<pcodeop *>::iterator it, it1;
     pcodeop *p, *p1, *p2, *p3;
-    uint32_t reg, x, rt, rd, rn, rm, setflags;
+    uint32_t x, rt, rd, rn, rm, setflags;
     int oind, imm, target_thumb ;
 
     b->cg.data = data + ind;
 
     for (it = b->ops.begin(); it != b->ops.end(); ++it) {
-        p = *it;
+        curp = p = *it;
 
         /* 这一坨代码都是相当于词法分析的token的预取 */
         it1 = it;
@@ -797,22 +809,21 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
         case CPUI_INT_SUB:
             if (poa(p) == ama) it = g_push(b, it);
             else if (istemp(p->output)) {
+                rn = d->reg2i(pi0a(p));
+                    /* A8.8.37 */
+                if (pi1(p)->is_constant()) 
+                    _cmp_imm(rn, pi1(p)->get_val());
+                /* A8.8.38 */
+                else if (isreg(pi0(p)) && isreg(pi1(p))) {
+                    rm = d->reg2i(pi1a(p));
+                    _cmp_reg(rn, rm);
+                }
+
                 if (p1->opcode == CPUI_INT_EQUAL) {
-                    if ((p2->opcode == CPUI_COPY) && (poa(p2) == azr)) {
-                        reg = reg2i(pi0a(p));
-                            /* A8.8.37 */
-                        if (pi1(p)->is_constant() && (pi1(p)->get_val() < 256) && (reg < 7)) {
-                            o(0x2800 | (reg << 8) | ((uint32_t)pi1(p)->get_val()));
-                            advance(it, 2);
-                        }
-                    }
-                    /* A8.8.38 */
-                    else if (isreg(pi0(p)) && isreg(pi1(p))) {
-                        rn = d->reg2i(pi0a(p));
-                        rm = d->reg2i(pi1a(p));
-                        _cmp_reg(rn, rm);
-                        it++;
-                    }
+                    if ((p2->opcode == CPUI_COPY) && (poa(p2) == azr)) 
+                        advance(it, 2);
+                    else 
+                        advance(it, 1);
                 }
             }
             else if (isreg(p->output)) {
@@ -823,13 +834,10 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                         /* A8.8.223 */
                         rm = reg2i(pi1a(p));
 
-                        it1 = it;
-                        p1 = *++it1;
                         setflags = 0;
                         if ((p1->opcode == CPUI_INT_EQUAL) && (p->output == pi0(p1))) {
-                            p2 = *++it1;
-                            it = it1;
                             setflags = 1;
+                            advance(it, 2);
                         }
 
                         if (setflags && rn < 8 && rm < 8 && rd < 8)
@@ -1090,3 +1098,18 @@ void thumb_gen::preprocess()
     fd->bblocks.compute_global_live_sets_p();
 }
 
+
+int thumb_gen::regalloc(pcodeop *p)
+{
+    int i;
+
+    for (i = R0; i <= R12; i++) {
+        if (!p->live_in.test(i)) {
+            p->live_in.set(i);
+            return i;
+        }
+    }
+
+    vm_error("regalloc failure on pcode[%d]", p->start.getTime());
+    return -1;
+}
