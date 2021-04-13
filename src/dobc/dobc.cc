@@ -8670,6 +8670,15 @@ int        dobc::reg2i(const Address &addr)
     return -1;
 }
 
+int         dobc::vreg2i(const Address &addr)
+{
+    if (get_addr("s0") <= addr && addr <= get_addr("s31"))
+        return (addr.getOffset()  - get_addr("s0").getOffset()) / 4;
+
+    throw LowlevelError("not support");
+    return -1;
+}
+
 Address     dobc::i2reg(int i)
 {
     if (i < 16)

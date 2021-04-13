@@ -1715,6 +1715,7 @@ struct dobc {
     /* status register */
     bool        is_sreg(const Address &addr) { return trans->getRegister("NG").getAddr() <= addr && addr <= trans->getRegister("OV").getAddr();  }
     int         reg2i(const Address &addr);
+    int         vreg2i(const Address &addr);
     Address     i2reg(int i);
     /* 获取经过call被破坏的寄存器，依赖于CPU架构 */
     void        get_scratch_regs(vector<int> &regs);

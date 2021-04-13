@@ -73,6 +73,18 @@ uint32_t bitcount(uint32_t x)
     return x;
 }
 
+int nlz(uint32_t x) 
+{
+    int n;
+    if (x == 0) return(32); n = 1;
+    if ((x >> 16) == 0) { n = n + 16; x = x << 16; }
+    if ((x >> 24) == 0) { n = n + 8; x = x << 8; }
+    if ((x >> 28) == 0) { n = n + 4; x = x << 4; }
+    if ((x >> 30) == 0) { n = n + 2; x = x << 2; }
+    n = n - (x >> 31);
+    return n;
+}
+
 int ntz(uint32_t x)
 {
     int n;
@@ -136,6 +148,9 @@ static void ott(uint32_t i)
 
 static void o(uint32_t i)
 {
+    if (i == 0)
+        vm_error("meet 0's value instruction");
+
     if ((i >> 16))
         ott(i);
     else
@@ -229,28 +244,36 @@ struct {
 };
 
 /* vector */
-uint32_t sutff_constv(uint32_t op, uint64_t c, int dt)
+uint32_t stuff_constv(uint32_t op, uint64_t c)
 {
-    int bw = 64, i, j, abc = 0;
-    uint64_t mask = (1 << dt) - 1, s, c0 = c;
+    int bw = 64, i, j, a = 0, dt;
+    uint64_t c0 = c, mask;
 
+    for (i = 0; i < (count_of_array(simd_imm_tab) - 1); i++) {
+        if (!ANDEQ(simd_imm_tab[i].mask, c)) continue;
+        if ((~simd_imm_tab[i].val & c) != c) continue;
+        dt = simd_imm_tab[i].dt;
+        mask = (1ll << dt) - 1;
 
-    if (dt == 64) {
+        for (bw = 64, c0 = c; bw; bw -= dt, c0 >>= dt) {
+            if ((c0 & mask) != (c & mask)) break;
+        }
+        if (bw) continue;
+
+        a = (c >> nlz((uint32_t)simd_imm_tab[i].val)) & 0xff;
+        break;
+    }
+
+    if (i == (count_of_array(simd_imm_tab) - 1)) {
         for (i = 0; i < 8; i++) {
             j = (c >> (i * 8)) & 0xff;
             if (j && (j < 255)) return 0;
-            abc |= (j & 1) << i;
+            a |= (j & 1) << i;
         }
+        i = count_of_array(simd_imm_tab) - 1;
     }
-    else {
-        s = c & mask;
-        /* 确认是否对称 */
-        for (; bw; bw -= dt) {
-            c >>= dt;
-            if (!(c & mask == c))
-                return 0;
-        }
-    }
+
+    return op | imm_map(a, 7, 1, 28) | imm_map(a, 4, 3, 16) | (a & 0xf) | (simd_imm_tab[i].op << 5) | (simd_imm_tab[i].cmode << 8);
 }
 
 /* 这里的m是规定c的bitwidth ，假如为0，则默认的12，因为大部分的数都是12位填法 */
@@ -494,8 +517,13 @@ void thumb_gen::_mov_imm(int rd, uint32_t v)
     }
 }
 
-void vmov_imm(int siz, int d, int imm)
+/* A8.8.339 */
+void vmov_imm(int siz, int vd, uint64_t imm)
 {
+    /* T1 , vd是以4字节为单位的，当传入后，需要转换到 Dd, Qd为单位 */
+    uint32_t x = 0xef800010, d = vd / 2;
+    if (siz == 16) x |= (1 << 6);
+    o(stuff_constv(x, imm) | imm_map(d, 4, 1, 22) | imm_map(d, 0, 4, 12));
 }
 
 uint32_t encbranch(int pos, int addr, int fail)
@@ -728,12 +756,11 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
             else if (pi0(p)->is_constant()) {
                 if (isreg(p->output))
                     _mov_imm(reg2i(poa(p)), pi0(p)->get_val());
-                else if (istemp(p->output) && isreg(p1->output)){
+                else if (istemp(p->output)){
                     if (isreg(p1->output))
                         _mov_imm(reg2i(poa(p1)), pi0(p)->get_val());
-                    else if (d->is_vreg(poa(p1))) {
-                        // FIXME: vmov_imm
-                    }
+                    else if (d->is_vreg(poa(p1)))
+                        vmov_imm(p1->output->get_size(), d->vreg2i(poa(p1)), pi0(p)->get_val());
                     advance(it, 1);
                 }
             }
