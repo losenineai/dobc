@@ -506,6 +506,24 @@ int _str(int rt, int rn, int rm, int imm)
     return 0;
 }
 
+/* A8.8.206 */
+void _strb_imm(int rt, int rn, int imm, int w)
+{
+    int x, u;
+
+    if (imm >= 0 && imm < 32 && rt < 8 && rn < 8) // t1
+        o(0x7000 | (rn << 3) | rt | (imm << 6));
+    else if (imm >= 0 && imm < 4096) // t2
+        o(0xf8800000 | (rn << 16) | (rt << 12) | imm);
+    else if (imm > -255 && imm < 256) { // T3
+        x = abs(imm);
+        u = imm >= 0;
+        /* op | P | */
+        o(0xf8000800 | (!imm << 10) | (rn << 16) | (rt << 12) | x | (w << 8) | (u << 9));
+    }
+
+}
+
 void thumb_gen::_mov_imm(int rd, uint32_t v)
 {
     /* A8.8.102 */
@@ -866,7 +884,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
 
         case CPUI_INT_ADD:
             if (istemp(p->output)) {
-                p1 = *++it;
+                ++it;
                 switch (p1->opcode) {
                 case CPUI_COPY:
                     if ((pi0a(p) == asp) && pi1(p)->is_constant() && a(pi1(p1)) == poa(p))
@@ -894,6 +912,15 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                             else if (imm < 4096) // T3
                                 o(0xf8d00000 | (rt << 12) | (reg2i(pi0a(p)) << 16) | imm);
                         }
+                    }
+                    break;
+
+                case CPUI_SUBPIECE:
+                    if (istemp(p1->output) && (p2->opcode == CPUI_STORE)) {
+                        rt = reg2i(pi0a(p1));
+                        rn = reg2i(pi0a(p));
+                        _strb_imm(rt, rn, pi1(p)->get_val(), 0);
+                        advance(it, 2);
                     }
                     break;
                 }
