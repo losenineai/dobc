@@ -1676,11 +1676,13 @@ struct dobc {
     Address     pc_addr;
     set<Address> cpu_regs;
 	/* r0-sp */
-    set<Address> cpu_base_regs;
+    set<Address> liveout_regs;
     vector<Address *>   argument_regs;
 
     AddrSpace *ram_spc = NULL;
     AddrSpace *reg_spc = NULL;
+
+    int wordsize = 4;
 
     dobc(const char *slafilename, const char *filename);
     ~dobc();
@@ -1702,8 +1704,10 @@ struct dobc {
     funcdata*   find_func(const Address &addr);
     AddrSpace *get_code_space() { return trans->getDefaultCodeSpace();  }
     AddrSpace *get_uniq_space() { return trans->getUniqueSpace();  }
+    bool        is_liveout_regs(const Address &addr) {
+        return is_greg(addr) || is_vreg(addr);
+    }
     bool        is_cpu_reg(const Address &addr) { return cpu_regs.find(addr) != cpu_regs.end();  }
-    bool        is_cpu_base_reg(const Address &addr) { return cpu_base_regs.find(addr) != cpu_base_regs.end();  }
     /* vector variable */
     bool        is_vreg(const Address &addr) { 
         return  trans->getRegister("s0").getAddr() <= addr && addr <= trans->getRegister("s31").getAddr();  
@@ -1714,6 +1718,8 @@ struct dobc {
     bool        is_tsreg(const Address &addr) { return trans->getRegister("tmpNG").getAddr() <= addr && addr <= trans->getRegister("tmpOV").getAddr();  }
     /* status register */
     bool        is_sreg(const Address &addr) { return trans->getRegister("NG").getAddr() <= addr && addr <= trans->getRegister("OV").getAddr();  }
+    /* is general purpose register */
+    bool        is_greg(const Address &addr) { return (get_addr("r0") <= addr) && (addr <= get_addr("pc"));  }
     int         reg2i(const Address &addr);
     int         vreg2i(const Address &addr);
     Address     i2reg(int i);

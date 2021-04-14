@@ -446,11 +446,6 @@ void dobc::init_regs()
         if (name.find("tmp") != string::npos) continue;
         if (name.find("multi") != string::npos) continue;
         cpu_regs.insert(it->first.getAddr());
-
-		/* 参考ARM.sinc, lr的地址是0x58 */
-		if (it->first.getAddr().getOffset() < 0x58)
-			cpu_base_regs.insert(it->first.getAddr());
-
     }
 }
 
@@ -7386,7 +7381,7 @@ void        funcdata::rename_recurse(blockbasic *bl, variable_stack &varstack, v
         vnout->version = ++vermap[vnout->get_addr()];
 
 		vector<varnode *> &stack(varstack[vnout->get_addr()]);
-		if (!stack.empty() && d->is_cpu_base_reg(vnout->get_addr())) {
+		if (!stack.empty() && d->is_liveout_regs(vnout->get_addr())) {
 			vnnew = stack.back();
 			vnnew->add_ref_point_simple(op);
 		}
@@ -7446,7 +7441,7 @@ void        funcdata::rename_recurse(blockbasic *bl, variable_stack &varstack, v
             1. 我们只处理了r0-r15寄存器
             */
 
-			if (!stack.empty() && d->is_cpu_base_reg((v = stack.back())->get_addr())  && v->def) {
+			if (!stack.empty() && d->is_liveout_regs((v = stack.back())->get_addr())  && v->def) {
                 topname.insert(v->def);
 				v->add_ref_point_simple(bl->last_op());
 			}
@@ -7509,7 +7504,7 @@ void        funcdata::build_liverange_recurse(blockbasic *bl, variable_stack &va
 		if (op->opcode == CPUI_STORE) continue;
 
 		vector<varnode *> &stack(varstack[vnout->get_addr()]);
-		if (!stack.empty() && d->is_cpu_base_reg(vnout->get_addr())) {
+		if (!stack.empty() && d->is_liveout_regs(vnout->get_addr())) {
 			vnnew = stack.back();
 			vnnew->add_ref_point(op);
 		}
@@ -7529,7 +7524,7 @@ void        funcdata::build_liverange_recurse(blockbasic *bl, variable_stack &va
             vector<varnode *> &stack = it->second;
             pair<pcodeop_def_set::iterator, bool> check;
             varnode *v;
-			if (!stack.empty() && d->is_cpu_base_reg((v = stack.back())->get_addr())) {
+			if (!stack.empty() && d->is_liveout_regs((v = stack.back())->get_addr())) {
 				v->add_ref_point(bl->last_op());
 			}
         }

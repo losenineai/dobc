@@ -13,7 +13,7 @@
 #define alr                 d->lr_addr
 #define azr                 d->zr_addr
 #define istemp(vn)          ((vn)->get_addr().getSpace()->getType() == IPTR_INTERNAL)
-#define isreg(vn)           d->is_cpu_base_reg(vn->get_addr())
+#define isreg(vn)           d->is_greg(vn->get_addr())
 #define as(st)              d->trans->getRegister(st).getAddr()
 
 #define ANDNEQ(r1, r2)      ((r1 & ~r2) == 0)
@@ -123,14 +123,7 @@ void thumb_gen::resort_blocks()
 
 uint32_t thumb_gen::reg2i(const Address &a)
 {
-    if (ar0 <= a && a <= apc)
-        return (a.getOffset() - ar0.getOffset()) / 4;
-
-    if (as("s0") <= a && a <= as("s31"))
-        return (a.getOffset() - as("s0").getOffset()) / 4;
-
-    vm_error("not support reg[%llx]", a.getOffset());
-    return -1;
+    return d->reg2i(a);
 }
 
 static void ot(uint16_t i)
@@ -607,8 +600,31 @@ pit thumb_gen::g_push(flowblock *b, pit pit)
     if ((poa(p) == asp) && (pi0a(p) == ama)) {
         if ((p->opcode == CPUI_COPY)
             /* FIXME: rn = rm + 0 == > rn = copy rm*/
-            || ((p->opcode == CPUI_INT_ADD) && pi1(p)->is_constant() && !pi1(p)->get_val()))
+            || ((p->opcode == CPUI_INT_ADD) && pi1(p)->is_constant())
+            || ((p->opcode == CPUI_INT_SUB) && pi1(p)->is_constant())) {
+            /* NOTE:
+            所有的push {reglist} 指令，在转成pcode以后，末尾对sp的操作都是等于copy的，一般有以下几种形式:
+
+            1. sp = COPY mult_addr
+            2. mult_addr = INT_SUB mult_addr, 4:4 
+               sp = INT_ADD mult_addr, 4:4
+
+            第2种情况，可以合并成 sp = copy multi_addr，大家认真看，上面的 -4 和 +4 可以合并掉
+
+            所以我们在把pcode转回push时，一般搜索到store的后一条指令为止，也就是 sp = copy multi_addr为止，
+            但是可能出现这样一种情况
+
+            1. sp = copy multi_addr
+            2  sp = add sp, 4
+
+            在某些情况下指令1， 2 合并成了 sp = add multi_addr, 4
+
+            针对这种情况，当我们发现store的最后一条指令不是等价的sp = copy multi_addr时，要退回pit指针
+            */
+            if ((p->opcode != CPUI_COPY) && pi1(p)->get_val())
+                pit--;
             _push(reglist);
+        }
     }
 
     return pit;
@@ -662,7 +678,7 @@ pit thumb_gen::g_vpush(flowblock *b, pit pit)
         if (((p->opcode == CPUI_INT_ADD) || (p->opcode == CPUI_COPY)) && (p1->opcode == CPUI_STORE) && (pi1a(p1) == ama)) {
             single = p1->get_in(2)->get_size() == 4;
             dsize += p1->get_in(2)->get_size();
-            x = reg2i(pi2a(p1));
+            x = d->vreg2i(pi2a(p1));
             if (single) reglist |= 1 << x;
             else 
                 reglist |= (1 << x) + (1 << (x + 1));
@@ -845,7 +861,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 }
             }
             else if (isreg(p->output)) {
-                if (isreg(pi0(p))) {
+                if (isreg(pi0(p)) || (pi0a(p) == ama)) {
                     rd = reg2i(poa(p));
                     rn = reg2i(pi0a(p));
                     if (isreg(pi1(p))) {
@@ -867,7 +883,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     A8.8.225.T1
                     */
                     else if (pi1(p)->is_constant()) {
-                        if ((pi0a(p) == asp) && (poa(p) == asp)) {
+                        if (((pi0a(p) == asp) || (pi0a(p) == ama)) && (poa(p) == asp)) {
                             if (p1 && p2 && (p1->opcode == CPUI_COPY) && (p2->opcode == CPUI_STORE) && d->is_vreg(pi2a(p2))) {
                                 it = g_vpush(b, it);
                                 goto inst_label;
