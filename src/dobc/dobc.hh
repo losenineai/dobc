@@ -8,11 +8,10 @@
 #include "types.h"
 #include "heritage.hh"
 #include "pcodefunc.hh"
+#include "funcdata.hh"
 #include <bitset>
 
-typedef struct funcdata     funcdata;
 typedef struct pcodeop      pcodeop;
-typedef struct varnode      varnode;
 typedef struct flowblock    flowblock, blockbasic;
 typedef struct dobc         dobc;
 typedef struct jmptable     jmptable;
@@ -38,73 +37,10 @@ typedef struct ollvmhead    ollvmhead;
 
 class blockgraph;
 
-class pcodeemit2 : public PcodeEmit {
-public:
-    funcdata *fd = NULL;
-    FILE *fp = stdout;
-    int itblock = 0;
-    virtual void dump(const Address &address, OpCode opc, VarnodeData *outvar, VarnodeData *vars, int size);
-
-    void set_fp(FILE *f) { fp = f;  }
-    void enter_itblock() { itblock = 1;  }
-    void exit_itblock() { itblock = 0;  }
-};
-
-#define COLOR_ASM_INST_MNEM             "#3933ff"               
-#define COLOR_ASM_INST_BODY             "#3933ff"               
-#define COLOR_ASM_ADDR                  "#33A2FF"               
-#define COLOR_ASM_STACK_DEPTH           "green"
-
-class AssemblyRaw : public AssemblyEmit {
-
-public:
-    char *buf = NULL;
-    FILE *fp = NULL;
-    int sp = 0;
-    int enable_html = 1;
-
-    virtual void dump(const Address &addr, const string &mnem, const string &body) {
-        if (buf) {
-            if (enable_html)
-                sprintf(buf, "<tr>"
-                    "<td><font color=\"" COLOR_ASM_STACK_DEPTH "\">%03x:</font></td>"
-                    "<td><font color=\"" COLOR_ASM_ADDR "\">0x%04x:</font></td>"
-                    "<td align=\"left\"><font color=\"" COLOR_ASM_INST_MNEM "\">%s </font></td>"
-                    "<td align=\"left\"><font color=\"" COLOR_ASM_INST_BODY "\">%s</font></td></tr>",
-                    sp, (int)addr.getOffset(), mnem.c_str(), body.c_str());
-            else
-                sprintf(buf, "0x%04x: %s %s", (int)addr.getOffset(), mnem.c_str(), body.c_str());
-            //sprintf(buf, "0x%08x:%10s %s", (int)addr.getOffset(), mnem.c_str(), body.c_str());
-        }
-        else {
-            if (fp)
-                fprintf(fp, "0x%04x: %s %s\n", (int)addr.getOffset(), mnem.c_str(), body.c_str());
-            else
-                fprintf(stdout, "0x%04x: %s %s\n", (int)addr.getOffset(), mnem.c_str(), body.c_str());
-        }
-    }
-
-    void set_buf(char *b) { buf = b; }
-    void set_fp(FILE *f) { fp = f; }
-    void set_sp(int s) { sp = s;  };
-    void disbable_html() { enable_html = 0;  }
-};
-
-enum ARMInstType {
-    a_null,
-    a_stmdb,
-    a_sub,
-    a_add,
-};
 
 struct VisitStat {
     SeqNum seqnum;
     int size;
-    struct {
-        unsigned condinst: 1;
-    } flags;
-
-    enum ARMInstType    inst_type;
 };
 
 enum height {
@@ -229,7 +165,8 @@ struct cover {
 	int dump(char *buf);
 };
 
-struct varnode {
+class varnode {
+public:
     /* varnode的值类型和值，在编译分析过后就不会被改*/
     valuetype   type;
 
@@ -913,7 +850,8 @@ struct ollvmhead {
     ~ollvmhead();
 };
 
-struct funcdata {
+class funcdata {
+public:
     struct {
         unsigned blocks_generated : 1;
         unsigned blocks_unreachable : 1;    // 有block无法到达
@@ -1277,6 +1215,7 @@ struct funcdata {
         vector<varnode *> &write, vector<varnode *> &input);
     void        heritage(void);
     void        heritage_clear(void);
+    bool        refinement(const Address &addr, int size, const vector<varnode *> &readvars);
     int         constant_propagation3();
     int         cond_constant_propagation();
     int         in_cbrlist(pcodeop *op) {
@@ -1733,5 +1672,6 @@ struct dobc {
     void init_abbrev();
     const string &get_abbrev(const string &name);
 };
+
 
 #endif
