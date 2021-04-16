@@ -5477,6 +5477,20 @@ void        funcdata::op_destroy_ssa(pcodeop *p)
     op_destroy(p, 1);
 }
 
+void        funcdata::total_replace(varnode *vn, varnode *newvn)
+{
+    list<pcodeop *>::const_iterator iter;
+    pcodeop *op;
+    int i;
+
+    iter = vn->uses.begin();
+    while (iter != vn->uses.end()) {
+        op = *iter++;
+        i = op->get_slot(vn);
+        op_set_input(op, newvn, i);
+    }
+}
+
 void		funcdata::remove_all_dead_op()
 {
 	list<pcodeop *>::iterator it, next;

@@ -2,6 +2,7 @@
 #include "sleigh.hh"
 #include "dobc.hh"
 #include <assert.h>
+#include "vm.h"
 
 int  funcdata::loop_dfa_connect(uint32_t flags)
 {
@@ -1309,3 +1310,126 @@ flowblock*  funcdata::split_block(flowblock *f, list<pcodeop *>::iterator it)
 
     return b;
 }
+
+bool        funcdata::refinement(const Address &addr, int size, const vector<varnode *> &readvars, const vector<varnode *> &writevars, const vector<varnode *> &inputvars)
+{
+    if (size > 128)
+        vm_error("refinement size too bigger %d\n", size);
+
+    vector<int> refine(size + 1, 0);
+    build_refinement(refine, addr, size, readvars);
+    build_refinement(refine, addr, size, writevars);
+    build_refinement(refine, addr, size, inputvars);
+    int lastpos = 0;
+    for (int curpos = 1; curpos < size; ++curpos) {
+        if (refine[curpos]) {
+            refine[lastpos] = curpos - lastpos;
+            lastpos = curpos;
+        }
+    }
+
+    if (lastpos == 0)
+        return false;
+    refine[lastpos] = size - lastpos;
+    remove13refinement(refine);
+    vector<varnode *> newvn;
+    for (int i = 0; i < readvars.size(); i++)
+        refine_read(readvars[i], addr, refine, newvn);
+
+    return true;
+}
+
+void        funcdata::refine_read(varnode *vn, const Address &addr, const vector<int> &refine, vector<varnode *> &newvn)
+{
+}
+
+void        funcdata::refine_write(varnode *vn, const Address &addr, const vector<int> &refine)
+{
+    vector<varnode *> newvn;
+    split_by_refinement(vn, addr, refine, newvn);
+    if (newvn.empty())
+        return;
+
+    varnode *replacevn = new_unique(vn->get_size());
+    pcodeop *def = vn->def;
+    op_set_output(def, replacevn);
+    split_pieces(newvn, def, vn->get_addr(), vn->get_size(), replacevn);
+    total_replace(vn, replacevn);
+    delete_varnode(vn);
+}
+void        funcdata::split_pieces(const vector<varnode *> &vnlist, pcodeop *insertop, const Address &addr, int size, varnode *startvn)
+{
+    Address opaddress;
+    uintb baseoff;
+    bool isbigendian;
+    blockbasic *bl;
+    list<pcodeop *>::iterator insertiter;
+
+    isbigendian = addr.isBigEndian();
+    if (isbigendian)
+        baseoff = addr.getOffset() + size;
+    else
+        baseoff = addr.getOffset();
+    if (insertop == NULL) {
+        bl = bblocks.get_entry_point();
+        insertiter = bl->ops.begin();
+        opaddress = get_addr();
+    }
+    else {
+        bl = insertop->parent;
+        insertiter = insertop->basiciter;
+        ++insertiter;
+        opaddress = insertop->get_addr();
+    }
+
+    for (int i = 0; i < vnlist.size(); i++) {
+        varnode *vn = vnlist[i];
+        pcodeop *p = newop(2, opaddress);
+        op_set_opcode(p, CPUI_SUBPIECE);
+        uintb diff;
+        if (isbigendian)
+            diff = baseoff - (vn->get_offset() + vn->get_size());
+        else
+            diff = vn->get_offset() - baseoff;
+        op_set_input(p, startvn, 0);
+        op_set_input(p, create_constant_vn(diff, 4), 1);
+        op_set_output(p, vn);
+        op_insert(p, bl, insertiter);
+    }
+}
+
+void        funcdata::split_by_refinement(varnode *vn, const Address &addr, const vector<int> &refine, vector<varnode *> &split)
+{
+    Address curaddr = vn->get_addr();
+    int sz = vn->get_size();
+    int diff = curaddr.getOffset() - addr.getOffset();
+    int cutsz = refine[diff];
+    if (sz <= cutsz)
+        return;
+    while (sz > 0) {
+        varnode *vn2 = new_varnode(cutsz, curaddr);
+        split.push_back(vn2);
+        curaddr = curaddr + cutsz;
+        sz -= cutsz;
+        diff = curaddr.getOffset() - addr.getOffset();
+        cutsz = refine[diff];
+        if (cutsz > sz)
+            cutsz = sz;
+    }
+}
+
+void        funcdata::build_refinement(vector<int> &refine, const Address &addr, int size, const vector<varnode *> &vnlist)
+{
+    for (int i = 0; i < vnlist.size(); i++) {
+        Address curaddr = vnlist[i]->get_addr();
+        int sz = vnlist[i]->get_size();
+        int diff = (int)(curaddr.getOffset() - addr.getOffset());
+        refine[diff] = 1;
+        refine[diff + sz] = 1;
+    }
+}
+
+void        funcdata::remove13refinement(vector<int> &refine)
+{
+}
+

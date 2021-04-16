@@ -11,11 +11,8 @@
 #include "funcdata.hh"
 #include <bitset>
 
-typedef struct pcodeop      pcodeop;
 typedef struct flowblock    flowblock, blockbasic;
-typedef struct dobc         dobc;
 typedef struct jmptable     jmptable;
-typedef struct cpuctx       cpuctx;
 typedef struct funcproto    funcproto;
 typedef struct rangenode    rangenode;
 typedef struct func_call_specs  func_call_specs;
@@ -25,6 +22,9 @@ typedef struct cover		cover;
 typedef struct valuetype    valuetype;
 typedef struct coverblock	coverblock;
 typedef struct ollvmhead    ollvmhead;
+
+class pcodeop;
+class dobc;
 
 #define pi0(p)              p->get_in(0)
 #define pi1(p)              p->get_in(1)
@@ -206,6 +206,7 @@ public:
 
     const Address &get_addr(void) const { return (const Address &)loc; }
     int             get_size() const { return size;  }
+    intb            get_offset() { return loc.getOffset(); }
     bool            is_heritage_known(void) const { return (flags.insert | flags.annotation) || is_constant(); }
     bool            has_no_use(void) { return uses.empty(); }
 
@@ -260,7 +261,8 @@ public:
 #define PCODE_DUMP_ALL              ~(PCODE_OMIT_MORE_USE | PCODE_OMIT_MORE_DEF | PCODE_OMIT_MORE_BUILD | PCODE_OMIT_MORE_IN)
 #define PCODE_DUMP_SIMPLE           0xffffffff
 
-struct pcodeop {
+class pcodeop {
+public:
     struct {
         unsigned startblock : 1;
         unsigned branch : 1;
@@ -1056,6 +1058,7 @@ public:
     void        op_destroy(pcodeop *op);
     void        op_destroy_ssa(pcodeop *op);
 	void		op_destroy(pcodeop *op, int remove);
+    void        total_replace(varnode *vn, varnode *newvn);
 	void		remove_all_dead_op();
     void        reset_out_use(pcodeop *p);
 
@@ -1215,7 +1218,22 @@ public:
         vector<varnode *> &write, vector<varnode *> &input);
     void        heritage(void);
     void        heritage_clear(void);
-    bool        refinement(const Address &addr, int size, const vector<varnode *> &readvars);
+    bool        refinement(const Address &addr, int size, const vector<varnode *> &readvars, const vector<varnode *> &writevars, const vector<varnode *> &inputvars);
+    void        build_refinement(vector<int> &refine, const Address &addr, int size, const vector<varnode *> &vnlist);
+    void        remove13refinement(vector<int> &refine);
+    void        refine_read(varnode *vn, const Address &addr, const vector<int> &refine, vector<varnode *> &newvn);
+    void        refine_write(varnode *vn, const Address &addr, const vector<int> &refine);
+    /*
+    \param vn 需要切割的varnode
+    \param addr refine数组的起始地址
+    \param refine 
+    \param split 切割以后的节点
+    */
+    void        split_by_refinement(varnode *vn, const Address &addr, const vector<int> &refine, vector<varnode *> &split);
+    /*
+
+    */
+    void        split_pieces(const vector<varnode *> &vnlist, pcodeop *insertop, const Address &addr, int size, varnode *startvn);
     int         constant_propagation3();
     int         cond_constant_propagation();
     int         in_cbrlist(pcodeop *op) {
@@ -1569,7 +1587,8 @@ struct func_call_specs {
     const Address &get_addr() { return fd->get_addr(); }
 };
 
-struct dobc {
+class dobc {
+public:
     ElfLoadImage *loader;
     string slafilename;
 
