@@ -499,7 +499,10 @@ int _str(int rt, int rn, int rm, int imm)
     return 0;
 }
 
-/* A8.8.206 */
+/* A8.8.206 
+
+@w  writeback
+*/
 void _strb_imm(int rt, int rn, int imm, int w)
 {
     int x, u;
@@ -809,6 +812,14 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                         vmov_imm(p1->output->get_size(), d->vreg2i(poa(p1)), pi0(p)->get_val());
                     advance(it, 1);
                 }
+                else if (d->is_vreg(poa(p))) {
+                    int size = p->output->get_size();
+                    if (p1 && d->is_vreg(poa(p1)) && pi0(p1)->is_constant() && pi0(p)->get_val() == pi0(p1)->get_val()) {
+                        size += p1->output->get_size();
+                        advance(it, 1);
+                    }
+                    vmov_imm(size, d->vreg2i(poa(p)), pi0(p)->get_val());
+                }
             }
             else if (isreg(p->output) && isreg(pi0(p))) {
                 rd = reg2i(poa(p));
@@ -905,6 +916,18 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 case CPUI_COPY:
                     if ((pi0a(p) == asp) && pi1(p)->is_constant() && a(pi1(p1)) == poa(p))
                         _add(reg2i(poa(p1)), SP, pi1(p)->get_val());
+                    else if (istemp(p1->output)) {
+                        if (p2 && (p2->opcode == CPUI_STORE) && (pi2(p2)->size == 1)) {
+                            if (!d->is_greg(pi0a(p1))) {
+                                rt = regalloc(p1);
+                                _mov_imm(rt, pi0(p1)->get_val());
+                            }
+                            else
+                                rt = d->reg2i(pi0a(p1));
+                            rn = d->reg2i(pi0a(p));
+                            _strb_imm(rt, rn, pi1(p)->get_val(), 0);
+                        }
+                    }
                     break;
 
                 case CPUI_STORE:
