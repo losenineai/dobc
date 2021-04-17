@@ -224,6 +224,7 @@ public:
 
     void            add_use(pcodeop *op);
     void            del_use(pcodeop *op);
+    pcodeop*        lone_use();
     bool            is_free() { return !flags.written && !flags.input; }
     /* 实现的简易版本的，判断某条指令是否在某个varnode的活跃范围内 */
     bool            in_liverange(pcodeop *p);
@@ -393,6 +394,7 @@ public:
     bool            have_virtualnode(void) { return inrefs.size() == 3;  }
     varnode*        get_virtualnode(void) { return inrefs.size() == 3 ? inrefs[2]:NULL;  }
     bool            is_call(void) { return (opcode == CPUI_CALL) || (opcode == CPUI_CALLIND) || callfd; }
+    bool            is_coderef(void) { return flags.coderef; }
     void            set_input() { flags.input = 1;  }
     intb            get_call_offset() { return get_in(0)->get_addr().getOffset(); }
     /* 当自己的结果值为output时，把自己整个转换成copy形式的constant */
@@ -1215,14 +1217,16 @@ public:
     void        build_liverange_recurse(blockbasic *bl, variable_stack &varstack);
 
     int         collect(Address addr, int size, vector<varnode *> &read,
-        vector<varnode *> &write, vector<varnode *> &input);
+        vector<varnode *> &write, vector<varnode *> &input, int &equal);
     void        heritage(void);
     void        heritage_clear(void);
     bool        refinement(const Address &addr, int size, const vector<varnode *> &readvars, const vector<varnode *> &writevars, const vector<varnode *> &inputvars);
     void        build_refinement(vector<int> &refine, const Address &addr, int size, const vector<varnode *> &vnlist);
     void        remove13refinement(vector<int> &refine);
-    void        refine_read(varnode *vn, const Address &addr, const vector<int> &refine, vector<varnode *> &newvn);
+    void        refine_read(varnode *vn, const Address &addr, const vector<int> &refine);
     void        refine_write(varnode *vn, const Address &addr, const vector<int> &refine);
+    void        refine_input(varnode *vn, const Address &addr, const vector<int> &refine);
+    varnode*    concat_pieces(const vector<varnode *> &vnlist, pcodeop *insertop, varnode *finalvn);
     /*
     \param vn 需要切割的varnode
     \param addr refine数组的起始地址
@@ -1641,6 +1645,7 @@ public:
     AddrSpace *reg_spc = NULL;
 
     int wordsize = 4;
+    vector<int>     insts;
 
     dobc(const char *slafilename, const char *filename);
     ~dobc();
@@ -1649,7 +1654,9 @@ public:
     void init();
     void init_spcs();
     /* 初始化位置位置无关代码，主要时分析原型 */
-    void        init_plt(void);
+    void init_plt(void);
+    void build_instructions();
+
     funcdata*   add_func(const Address &addr);
     void        set_shelltype(char *shelltype);
 

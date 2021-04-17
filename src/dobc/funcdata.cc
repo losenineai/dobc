@@ -4,6 +4,13 @@
 #include <assert.h>
 #include "vm.h"
 
+#define STACKBASE           0x4000000
+
+#define func_format_s					"%s"
+#define func_format()					""
+#undef print_level
+#define print_level		3
+
 int  funcdata::loop_dfa_connect(uint32_t flags)
 {
     int i, inslot, ret, end, nend;
@@ -309,7 +316,7 @@ void        funcdata::place_multiequal(void)
     pcodeop *multiop, *p;
     varnode *vnin;
     blockbasic *bl;
-    int max, i, j;
+    int max, i, j, equal;
 
     for (iter = disjoint.begin(); iter != disjoint.end(); ++iter) {
         Address addr = (*iter).first;
@@ -318,11 +325,20 @@ void        funcdata::place_multiequal(void)
         readvars.clear();
         writevars.clear();
         inputvars.clear();
-        max = collect(addr, size, readvars, writevars, inputvars);
-        if ((size > 4) && (max < size)) {
+        max = collect(addr, size, readvars, writevars, inputvars, equal);
+        /* FIXME:Ghidra这里的判断和我差别很大，后期必须得重新调试，深入分析下Ghidra逻辑 */
+        if (!equal) {
+            if (refinement(addr, max, readvars, writevars, inputvars)) {
+                iter = disjoint.find(addr);
+                size = (*iter).second.size;
+                readvars.clear();
+                writevars.clear();
+                inputvars.clear();
+                collect(addr, size, readvars, writevars, inputvars, equal);
+            }
         }
 
-        /* FIXME:后面那个判断我没看懂，抄Ghidra的 */
+        /* uniq变量，不出口活跃 */
         if (readvars.empty() && (addr.getSpace()->getType() == IPTR_INTERNAL))
             continue;
 
@@ -1332,15 +1348,95 @@ bool        funcdata::refinement(const Address &addr, int size, const vector<var
         return false;
     refine[lastpos] = size - lastpos;
     remove13refinement(refine);
-    vector<varnode *> newvn;
     for (int i = 0; i < readvars.size(); i++)
-        refine_read(readvars[i], addr, refine, newvn);
+        refine_read(readvars[i], addr, refine);
+    for (int i = 0; i < writevars.size(); i++)
+        refine_write(writevars[i], addr, refine);
+    for (int i = 0; i < inputvars.size(); i++)
+        refine_input(inputvars[i], addr, refine);
+
+    LocationMap::iterator iter = disjoint.find(addr);
+    int pass = (*iter).second.pass;
+    disjoint.erase(iter);
+    iter = globaldisjoint.find(addr);
+    globaldisjoint.erase(iter);
+    Address curaddr = addr;
+    int cut = 0;
+    int intersect;
+
+    while (cut < size) {
+        int sz = refine[cut];
+        disjoint.add(curaddr, sz, pass, intersect);
+        globaldisjoint.add(curaddr, sz, pass, intersect);
+        cut += sz;
+        curaddr = curaddr + sz;
+    }
 
     return true;
 }
 
-void        funcdata::refine_read(varnode *vn, const Address &addr, const vector<int> &refine, vector<varnode *> &newvn)
+varnode*        funcdata::concat_pieces(const vector<varnode *> &vnlist, pcodeop *insertop, varnode *finalvn)
 {
+    varnode *preexist = vnlist[0];
+    bool isbigendian = preexist->get_addr().isBigEndian();
+    Address opaddress;
+    blockbasic *bl;
+    list<pcodeop *>::iterator   insertiter;
+
+    if (insertop == NULL) {
+        bl = bblocks.get_entry_point();
+        insertiter = bl->ops.begin();
+        opaddress = get_addr();
+    }
+    else {
+        bl = insertop->parent;
+        insertiter = insertop->basiciter;
+        opaddress = insertop->get_addr();
+    }
+
+    for (int i = 0; i < vnlist.size(); i++) {
+        varnode *vn = vnlist[i];
+        pcodeop *op = newop(2, opaddress);
+        op_set_opcode(op, CPUI_PIECE);
+        varnode *newvn;
+        if (i == vnlist.size() - 1) {
+            newvn = finalvn;
+            op_set_output(op, newvn);
+        }
+        else
+            newvn = new_unique_out(preexist->get_size() + vn->get_size(), op);
+        if (isbigendian) {
+            op_set_input(op, preexist, 0);
+            op_set_input(op, vn, 1);
+        }
+        else {
+            op_set_input(op, vn, 0);
+            op_set_input(op, preexist, 1);
+
+        }
+        op_insert(op, bl, insertiter);
+        preexist = newvn;
+    }
+
+    return preexist;
+}
+
+void        funcdata::refine_read(varnode *vn, const Address &addr, const vector<int> &refine)
+{
+    vector<varnode *> newvn;
+    split_by_refinement(vn, addr, refine, newvn);
+    if (newvn.empty())
+        return;
+
+    varnode *replacevn = new_unique(vn->get_size());;
+    pcodeop *op = vn->lone_use();
+    int slot = op->get_slot(vn);
+    concat_pieces(newvn, op, replacevn);
+    op_set_input(op, replacevn, slot);
+    if (vn->has_no_use())
+        delete_varnode(vn);
+    else
+        throw LowlevelError("refining non-free varnode");
 }
 
 void        funcdata::refine_write(varnode *vn, const Address &addr, const vector<int> &refine)
@@ -1357,6 +1453,12 @@ void        funcdata::refine_write(varnode *vn, const Address &addr, const vecto
     total_replace(vn, replacevn);
     delete_varnode(vn);
 }
+
+void        funcdata::refine_input(varnode *vn, const Address &addr, const vector<int> &refine)
+{
+    assert(0);
+}
+
 void        funcdata::split_pieces(const vector<varnode *> &vnlist, pcodeop *insertop, const Address &addr, int size, varnode *startvn)
 {
     Address opaddress;
@@ -1433,3 +1535,435 @@ void        funcdata::remove13refinement(vector<int> &refine)
 {
 }
 
+int funcdata::collect(Address addr, int size, vector<varnode *> &read, vector<varnode *> &write, vector<varnode *> &input, int &equal)
+{
+    varnode *vn;
+    varnode_loc_set::const_iterator     viter = begin_loc(addr);
+    varnode_loc_set::const_iterator     enditer;
+    uintb start = addr.getOffset();
+    addr = addr + size;
+
+    if (addr.getOffset() < start) {
+        //assert(0);
+        Address tmp(addr.getSpace(), addr.getSpace()->getHighest());
+        enditer = end_loc(tmp);
+    }
+    else
+        enditer = begin_loc(addr);
+
+    int maxsize = 0, prev = 0;
+
+    equal = 1;
+    for (; viter != enditer; viter++) {
+        vn = *viter;
+
+        if (vn->flags.written) {
+            if (vn->size > maxsize)     maxsize = vn->size;
+            write.push_back(vn);
+        }
+        else if (!vn->is_heritage_known() && vn->uses.size())
+            read.push_back(vn);
+        else if (vn->flags.input)
+            input.push_back(vn);
+
+        if (prev && prev != vn->size) equal = 0;
+        prev = vn->size;
+    }
+
+    return maxsize;
+}
+
+void        funcdata::heritage(void)
+{
+    varnode_loc_set::const_iterator iter, enditer;
+    varnode *vn;
+    int i;
+
+    if (maxdepth == -1)
+        build_adt();
+
+    print_info("%sheritage scan node.... \n", print_indent());
+    for (i = 0; i < d->trans->numSpaces(); i++) {
+        AddrSpace *spc = d->trans->getSpace(i);
+
+        if (!spc->isHeritaged())
+            continue;
+
+        iter = begin_loc(spc);
+        enditer = end_loc(spc);
+
+        while (iter != enditer) {
+            vn = *iter++;
+
+            if (!vn->flags.written && vn->has_no_use() && !vn->flags.input)
+                continue;
+
+#if 0
+            char buf[128];
+            print_varnode(d->trans, buf, vn);
+            if (vn->def)
+                printf("%s - %d\n", buf, vn->def->start.getTime());
+            else
+                printf("%s\n", buf);
+#endif
+
+            int prev = 0;
+            LocationMap::iterator iter = globaldisjoint.add(vn->get_addr(), vn->size, pass, prev);
+            if (prev == 0)
+                disjoint.add((*iter).first, (*iter).second.size, pass, prev);
+            else {
+                assert(0);
+            }
+        }
+    }
+    place_multiequal();
+    rename();
+	//build_liverange();
+
+    long start = clock();
+
+    constant_propagation3();
+
+    print_info("%sheritage scan node end. CP spent [%lu]ms. \n", print_indent(), clock() - start);
+}
+
+void    funcdata::heritage_clear()
+{
+    topname.clear();
+    disjoint.clear();
+    globaldisjoint.clear();
+    domchild.clear();
+    augment.clear();
+    phiflags.clear();
+    domdepth.clear();
+    merge.clear();
+    alias_clear();
+
+    maxdepth = -1;
+    pass = 0;
+}
+
+int         funcdata::constant_propagation3()
+{
+    list<pcodeop *>::const_iterator iter;
+    list<pcodeop *>::const_iterator iter1;
+	vector<pcodeop *> topstorelist;
+    pcodeop_set::iterator it;
+    pcodeop_set set;
+	pcodeop_set maystore_set;
+    pcodeop *op, *use, *load, *store, *maystore;
+	int ret = 0, r, changed = 0;
+    flowblock *b;
+    varnode *out;
+
+    for (iter = deadlist.begin(); iter != deadlist.end(); iter++) {
+        op = *iter;
+        if (op->flags.dead) continue;
+        set.insert(op);
+    }
+
+cp_label1:
+    while (!set.empty()) {
+        it = set.begin();
+        op = *it;
+        set.erase(it);
+
+        if (op->flags.dead) continue;
+
+        if ((op->opcode == CPUI_STORE) && (op->get_in(1)->type.height != a_top)) {
+            for (iter1 = op->mayuses.begin(); iter1 != op->mayuses.end(); ++iter1) {
+                use = *iter1;
+                set.insert(use);
+            }
+            op->mayuses.clear();
+        }
+
+        r = op->compute(-1, &b);
+        if (!flags.disable_to_const)
+            op->to_constant1();
+        if (r == ERR_FREE_SELF) continue;
+        ret |= r;
+
+        out = op->output;
+
+        if (!out) continue;
+
+        if (out->is_constant() || out->is_rel_constant()) {
+            for (iter1 = out->uses.begin(); iter1 != out->uses.end(); ++iter1) {
+                set.insert(*iter1);
+            }
+        }
+        else if ((op->opcode == CPUI_LOAD) && !op->get_virtualnode() && !op->flags.input) {
+            load = op;
+            maystore = NULL;
+            store = store_query(load, NULL, load->get_in(1), &maystore);
+
+            if (!store) {
+                if (maystore) {
+                    maystore->add_mayuse(load);
+					maystore_set.insert(maystore);
+                }
+                continue;
+            }
+
+            if (store->opcode != CPUI_STORE) {
+                load->output->set_val(0);
+                load->flags.val_from_sp_alloc = 1;
+                continue;
+            }
+
+            safe_aliaslist.push_back(load);
+            set.insert(load);
+            if (store->parent->fd != this) {
+                load->output->type = store->get_in(2)->type;
+                load->flags.input = 1;
+                continue;
+            }
+
+            varnode *in = store->get_in(1);
+            safe_aliaslist.push_back(store);
+
+            /* 假如这个store已经被分析过，直接把store的版本设置过来 */
+            if (store->output) {
+                op_set_input(load, store->output, 2);
+            }
+            else {
+                Address oaddr(d->get_uniq_space(), virtualbase += in->size);
+                out = new_varnode_out(in->size, oaddr, store);
+
+                op_resize(load, 3);
+                op_set_input(load, out, 2);
+                set.insert(store);
+            }
+        }
+    }
+
+	topstorelist.clear();
+	while (!maystore_set.empty()) {
+        it = maystore_set.begin();
+        op = *it;
+        maystore_set.erase(it);
+
+		if (op->flags.dead) continue;
+
+		op->mayuses.clear();
+		if (op->get_in(1)->type.height == a_top)
+			topstorelist.push_back(op);
+	}
+
+	if (flags.enable_topstore_mark && !topstorelist.empty()) {
+		sort(topstorelist.begin(), topstorelist.end(), pcodeop_domdepth_cmp());
+
+		op = topstorelist[0];
+		flowblock *b = op->parent;
+		while (b) {
+			if (b->in.size() > 1) break;
+
+			b = b->in.size() ? b->get_in(0):NULL;
+		}
+
+		if (!b) {
+			changed = 1;
+			op->flags.uncalculated_store = 1;
+			for (iter1 = op->mayuses.begin(); iter1 != op->mayuses.end(); iter1++) {
+				set.insert(*iter1);
+			}
+
+			op->mayuses.clear();
+
+			goto cp_label1;
+		}
+	}
+
+    return ret;
+}
+
+
+int         funcdata::cond_constant_propagation()
+{
+    flowblock *parent, *to;
+    blockedge *del_edge;
+    pcodeop *op;
+    varnode *in;
+    int i;
+
+    for (i = 0; i < cbrlist.size(); i++) {
+        op = cbrlist[i];
+        parent = op->parent;
+
+        if (op->is_dead()) continue;
+
+        //printf("%sfind cbr block:%llx:%d\n", print_indent(), op->get_addr().getOffset(), parent->dfnum);
+
+        in = op->get_in(1);
+        assert(in->is_constant());
+
+        /* 获取要删除的边，所以要取相反条件的边 */
+        del_edge = in->get_val() ? parent->get_false_edge() : parent->get_true_edge();
+        to = del_edge->point;
+
+        /* 删除cbranch上的条件判断，已经不需要了, 前面定义这个条件的语句也会在后面的死代码删除中去掉*/
+        branch_remove_internal(parent, parent->get_out_index(to));
+
+        /* 清楚标记的时候，我们并不在乎删除的是哪条边，反正把a_true_edge的标记清除就可以了 */
+        parent->clear_out_edge_flag(0, a_true_edge);
+    }
+
+    cbrlist.clear();
+    remove_unreachable_blocks(true, true);
+
+    //printf("%safter cbr remove, now blocks size = %d, dead is = %d\n", print_indent(), bblocks.get_size(), bblocks.deadlist.size());
+
+    redundbranch_apply();
+    emptylist.clear();
+
+    heritage_clear();
+    heritage();
+
+    return 0;
+}
+
+void    funcdata::compute_sp(void)
+{
+    if (!flags.blocks_generated)
+        throw LowlevelError("compute sp need block generated");
+}
+
+void        funcdata::set_safezone(intb addr, int size)
+{
+    rangenode *range = new rangenode();
+
+    /* 现在的safezone只能设置stack space上的 */
+    range->start = STACKBASE + addr;
+    range->size = size;
+
+    safezone.push_back(range);
+}
+
+bool        funcdata::in_safezone(intb a, int size)
+{
+    rangenode *n;
+    list<rangenode *>::iterator  it;
+
+    a += STACKBASE;
+
+    for (it = safezone.begin(); it != safezone.end(); it++) {
+        n = *it;
+        if ((a >= n->start) && (a + size) <= n->end())
+            return true;
+    }
+
+    return false;
+}
+
+void        funcdata::enable_safezone(void)
+{
+    flags.safezone = 1;
+}
+
+void        funcdata::disable_safezone(void)
+{
+    flags.safezone = 0;
+}
+
+intb        funcdata::get_stack_value(intb offset, int size)
+{
+    u1 *p = memstack.bottom + offset;
+
+    if ((offset > 0) || (offset + size - 1) > 0)
+        throw LowlevelError(name + " memstack downflow");
+
+    if (size & (size - 1))
+        throw LowlevelError("get_stack_value not support size:" + size);
+
+    if (size == 8)
+        return *(intb *)p;
+    else if (size == 4)
+        return *(int *)p;
+    else if (size == 2)
+        return *(short *)p;
+    else
+        return p[0];
+}
+
+void        funcdata::set_stack_value(intb offset, int size, intb val)
+{
+    u1 *p = memstack.bottom + offset;
+
+    if ((offset > 0) || (offset + size - 1) > 0)
+        throw LowlevelError(name + " memstack downflow");
+
+    memcpy(p, (char *)&val, size);
+}
+
+void        funcdata::add_to_codelist(pcodeop *op)
+{
+    switch (op->opcode) {
+    case CPUI_STORE:
+        op->codeiter = storelist.insert(storelist.end(), op);
+        break;
+
+    case CPUI_LOAD:
+        op->codeiter = loadlist.insert(loadlist.end(), op);
+        break;
+
+    default:break;
+    }
+}
+
+void        funcdata::remove_from_codelist(pcodeop *op)
+{
+    switch (op->opcode) {
+    case CPUI_LOAD:
+        loadlist.erase(op->codeiter);
+        break;
+
+    case CPUI_STORE:
+        storelist.erase(op->codeiter);
+		break;
+    }
+}
+
+bool        funcdata::test_hard_inline_restrictions(funcdata *inlinefd, pcodeop *op, Address &retaddr)
+{
+    list<pcodeop *>::iterator iter = op->insertiter;
+    ++iter;
+
+    /* 理论上即使指向end也应该可以inline的，但是这里为了处理方便，不关心末尾的特殊情况 */
+    if (iter == deadlist.end())
+        throw LowlevelError("No fallthrough prevents inline here");
+ 
+    pcodeop *nextop = *iter;
+    retaddr = nextop->get_addr();
+
+    nextop->flags.startblock = 1;
+
+    return true;
+}
+
+bool        funcdata::is_first_op(pcodeop *op)
+{
+    if (!flags.blocks_generated)
+        return op == (*deadlist.begin());
+
+    flowblock *b = bblocks.get_block(0);
+    list<pcodeop *>::iterator it = b->ops.begin();
+
+    return *it == op;
+}
+
+flowblock*    funcdata::loop_pre_get(flowblock *h, int index)
+{
+    flowblock *pre = NULL;
+    int i, sizein = h->in.size();
+
+    /* 查找入口节点的非循环前驱节点，也就是哪个节点可以进来 */
+    for (i = 0; i < sizein; i++) {
+        pre = h->get_in(i);
+        
+        if (pre->dfnum < h->dfnum)
+            return pre;
+    }
+
+    return NULL;
+}
