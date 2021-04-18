@@ -304,6 +304,9 @@ public:
 		unsigned uncalculated_store : 1;	// 这个store节点是不可计算的
         unsigned itblock : 1;
         unsigned mark_cond_copy_prop: 1;    
+
+        /* 属于simd指令 */
+        unsigned simd : 1;
     } flags = { 0 };
 
     OpCode opcode;
@@ -891,6 +894,8 @@ public:
         */
         unsigned disable_to_const : 1;
         unsigned disable_inrefs_to_const : 1;
+        /* 关闭simid指令的常量化，否则处理起来很麻烦 */
+        unsigned disable_simd_to_const : 1;
     } flags = { 0 };
 
     enum {

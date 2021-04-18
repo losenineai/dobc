@@ -926,6 +926,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                                 rt = d->reg2i(pi0a(p1));
                             rn = d->reg2i(pi0a(p));
                             _strb_imm(rt, rn, pi1(p)->get_val(), 0);
+                            advance(it, 1);
                         }
                     }
                     break;

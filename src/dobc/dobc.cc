@@ -154,6 +154,7 @@ void pcodeemit2::dump(const Address &addr, OpCode opc, VarnodeData *outvar, Varn
     int i;
     pcodeop *op;
     varnode *vn;
+    static pcodeop *prevp = NULL;
 
     if (outvar != (VarnodeData *)0) {
         Address oaddr(outvar->space, outvar->offset);
@@ -179,7 +180,14 @@ void pcodeemit2::dump(const Address &addr, OpCode opc, VarnodeData *outvar, Varn
     for (; i < isize; i++) {
         vn = fd->new_varnode(vars[i].size, vars[i].space, vars[i].offset);
         fd->op_set_input(op, vn, i);
+
+        if (!op->flags.simd && fd->d->is_vreg(vn->get_addr())) 
+            op->flags.simd = 1;
+        else if (prevp && (prevp->start.getAddr() == addr) && prevp->flags.simd == 1)
+            op->flags.simd = 1;
     }
+
+    prevp = op;
 
 #if ENABLE_DUMP_PCODE
     fprintf(fp, "    ");
@@ -1978,6 +1986,8 @@ void            pcodeop::to_constant1(void)
     varnode *vn, *out = output;
     pcodeop *op;
 
+    if (flags.simd && fd->flags.disable_simd_to_const) return;
+
     /*
     非trace条件才能开启常量持久化
     */
@@ -3423,6 +3433,8 @@ int         funcdata::ollvm_deshell()
     char buf[16];
     flowblock *h;
 
+    //flags.disable_to_const = 1;
+    flags.disable_simd_to_const = 1;
     flags.disable_inrefs_to_const = 1;
     follow_flow();
     heritage();
@@ -5377,6 +5389,7 @@ pcodeop*    funcdata::cloneop(pcodeop *op, const SeqNum &seq)
     newop1->flags.startinst = op->flags.startinst;
     newop1->flags.startblock = op->flags.startblock;
 	newop1->flags.uncalculated_store = op->flags.uncalculated_store;
+    newop1->flags.simd = op->flags.simd;
     /* 我们有时候会给store分配一个虚拟的varnode节点，不要拷贝它 */
     if (op->output && (op->opcode != CPUI_STORE))
         op_set_output(newop1, clone_varnode(op->output));
