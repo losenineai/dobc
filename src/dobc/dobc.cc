@@ -501,6 +501,7 @@ dobc::dobc(const char *sla, const char *bin)
     filename.assign(basename(bin));
 
     loader = new ElfLoadImage(bin);
+    loader1 = new ElfLoadImage(bin);
     context = new ContextInternal();
     trans = new Sleigh(loader, context);
 
@@ -2948,14 +2949,11 @@ flowblock*        funcdata::combine_multi_in_before_loop(vector<flowblock *> ins
 
 void        funcdata::dump_exe()
 {
-
-#if 1
     thumb_gen gen(this);
 
     gen.run();
 
     gen.dump();
-#endif
 }
 
 void        funcdata::detect_calced_loops(vector<flowblock *> &loops)

@@ -1598,7 +1598,10 @@ struct func_call_specs {
 
 class dobc {
 public:
+    /* 代码生成以后需要被覆盖的loader */
     ElfLoadImage *loader;
+    /* 原始加载的elf文件 */
+    ElfLoadImage *loader1;
     string slafilename;
 
     string fullpath;

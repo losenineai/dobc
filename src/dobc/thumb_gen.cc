@@ -106,8 +106,13 @@ thumb_gen::thumb_gen(funcdata *f)
 {
     fd = f;
     d = fd->d;
-    data = f->bufptr;
     g_cg = this;
+
+    data = d->loader->filedata;
+    /* FIXME: thumb的指令是地址对齐的 */
+    ind = fd->bufptr - d->loader->filedata;
+    ind -= fd->flags.thumb;
+    memset(fd->bufptr, 0, fd->size);
 }
 
 thumb_gen::~thumb_gen()
@@ -126,6 +131,7 @@ uint32_t thumb_gen::reg2i(const Address &a)
     return d->reg2i(a);
 }
 
+
 static void ot(uint16_t i)
 {
     g_cg->data[g_cg->ind++] = i & 255;
@@ -137,6 +143,12 @@ static void ott(uint32_t i)
 {
     write_thumb2(i, g_cg->data + g_cg->ind);
     g_cg->ind += 4;
+}
+
+static void ob(uint8_t *buf, int siz)
+{
+    memcpy(g_cg->data + g_cg->ind, buf, siz);
+    g_cg->ind += siz;
 }
 
 static void o(uint32_t i)
@@ -447,7 +459,7 @@ void thumb_gen::_cmp_imm(int rn, uint32_t imm)
 {
     uint32_t x, rm;
 
-    if ((imm < 256) && (rn < 7))
+    if ((imm < 256) && (rn < 8))
         o(0x2800 | (rn << 8) | imm);
     else if ((x = stuff_const(0, imm)))
         o(0xf1b00f00 | x | (rn << 16));
@@ -579,15 +591,24 @@ uint32_t encbranch2(int pos, int addr, int arm)
     return  (s << 26) | (j1 << 13) | (j2 << 11) | imm_map(addr, 11, 10, 16) | imm_map(addr, 0, 11, 0);
 }
 
+char *vstl_slgh[] = {
+    "ma:4 = copy rn:4" ,
+    ""
+};
+
+pit thumb_gen::g_vstl(flowblock *b, pit pit)
+{
+    return retrieve_orig_inst(b, pit, 1);
+}
+
 pit thumb_gen::g_push(flowblock *b, pit pit)
 {
     int reglist = 0;
 
     pcodeop *p = *pit, *p1;
 
-    if ((p->opcode == CPUI_COPY) && p->get_in(0)->get_addr() == d->sp_addr) {
+    if ((p->opcode == CPUI_COPY) && pi0a(p) == asp) 
         p = *++pit;
-    }
 
     while (p->output->get_addr() != d->sp_addr) {
         p = *pit++;
@@ -710,13 +731,6 @@ int thumb_gen::run()
     //fd->bblocks.dump_live_set(fd->find_op(SeqNum(Address(), 2170)));
     fd->dump_cfg(fd->name, "exe_pre", 1);
 
-    /* 1. 设置写入位置
-    2. 清空原函数 */
-    data = d->loader->filedata;
-    ind = fd->bufptr - data;
-    ind -= fd->flags.thumb;
-    memset(fd->bufptr, 0, fd->size);
-
     /* 对block进行排序 */
     /* FIXME:这里直接用最土炮的方法来做了，实际上应该用topsort来做会好点，更具体的请参考:
 
@@ -767,31 +781,36 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
     for (it = b->ops.begin(); it != b->ops.end(); ++it) {
         curp = p = *it;
 
-        /* 这一坨代码都是相当于词法分析的token的预取 */
-        it1 = it;
-        p1 = p2 = NULL;
-        if ((p->start.getOrder() + 1) <= b->last_order())
-            p1 = *++it1;
-        if ((p->start.getOrder() + 2) <= b->last_order())
-            p2 = *++it1;
-        if ((p->start.getOrder() + 3) <= b->last_order())
-            p3 = *++it1;
-        it1 = it;
-
-        oind = ind;
-
         /* branch 指令不处理，由外层循环进行填充 */
         if (p->opcode == CPUI_BRANCH) continue;
         /* phi节点不处理 */
         if (p->opcode == CPUI_MULTIEQUAL) continue;
 
+        /* 这一坨代码都是相当于词法分析的token的预取 */
+        it1 = it;
+        p1 = p2 = p3 = NULL;
+        ++it1;
+        if (it1 != b->ops.end())
+            p1 = *it1++;
+        if (it1 != b->ops.end())
+            p2 = *it1++;
+        if (it1 != b->ops.end())
+            p3 = *it1++;
+        it1 = it;
+
+        oind = ind;
+
         setflags = 0;
         switch (p->opcode) {
         case CPUI_COPY:
             /* push */
-            if (poa(p) == ama) it = g_push(b, it);
+            if (poa(p) == ama) {
+                if (pi0a(p) == asp)
+                    it = g_push(b, it);
+                else if (d->is_greg(pi0a(p)))
+                    it = g_vstl(b, it);
+            }
             else if (poa(p) == alr) {
-                p1 = *++it;
                 if ((p1->opcode == CPUI_CALL) && (pi0(p1)->get_addr().getSpace() == d->ram_spc)) {
                     imm = pi0(p1)->get_addr().getOffset();
                     target_thumb = d->func_is_thumb(pi0(p1)->get_val());
@@ -800,14 +819,29 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                         o(0xf000c000 | encbranch2(ind, imm, !target_thumb));
                     else 
                         o(0xf000d000 | encbranch2(ind, imm, !target_thumb));
+                    advance(it, 1);
                 }
+                /* 有时候会对lr，生成phi节点，忽略掉就可以了 */
+                else if (p->flags.copy_from_phi) continue;
             }
             else if (pi0(p)->is_constant()) {
                 if (isreg(p->output))
                     _mov_imm(reg2i(poa(p)), pi0(p)->get_val());
                 else if (istemp(p->output)){
-                    if (isreg(p1->output))
-                        _mov_imm(reg2i(poa(p1)), pi0(p)->get_val());
+                    if (isreg(p1->output)) {
+                        switch (p1->opcode) {
+                        case CPUI_COPY:
+                            _mov_imm(reg2i(poa(p1)), pi0(p)->get_val());
+                            break;
+
+                        case CPUI_INT_ADD:
+                            _add(reg2i(poa(p1)), reg2i(pi0a(p1)), pi0(p)->get_val());
+                            break;
+
+                        case CPUI_LOAD:
+                            break;
+                        }
+                    }
                     else if (d->is_vreg(poa(p1)))
                         vmov_imm(p1->output->get_size(), d->vreg2i(poa(p1)), pi0(p)->get_val());
                     advance(it, 1);
@@ -977,10 +1011,11 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 rd = reg2i(poa(p));
                 rn = reg2i(pi0a(p));
                 /* A8.8.4 */
-                if (pi2(p)->is_constant()) {
+                if (pi1(p)->is_constant()) {
                     imm = (int)pi1(p)->get_val();
-                    if ((poa(p) == pi0a(p)) && rd < 8 && imm < 256)
+                    if ((poa(p) == pi0a(p)) && rd < 8 && imm < 256) {
                         o(0x3000 | (rd << 8) | (imm & 0xff));       // T2
+                    }
                     else {
                         x = stuff_const(0xf1000000, imm);           // T3
                         if (!x) {
@@ -990,6 +1025,9 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                         x |= (rn << 16) | (rd << 8);
                         o(x);
                     }
+
+                    if (p1 && p2 && poa(p1) == as("tmpZR") && poa(p2) == azr)
+                        advance(it, 2);
                 }
             }
             break;
@@ -1138,7 +1176,6 @@ void thumb_gen::dump()
     fd1->follow_flow();
     fd1->heritage();
     fd1->dump_cfg(fd1->name, "after_codegen", 1);
-    
 }
 
 void thumb_gen::preprocess()
@@ -1165,7 +1202,6 @@ void thumb_gen::preprocess()
     fd->bblocks.compute_global_live_sets_p();
 }
 
-
 int thumb_gen::regalloc(pcodeop *p)
 {
     int i;
@@ -1179,4 +1215,23 @@ int thumb_gen::regalloc(pcodeop *p)
 
     vm_error("regalloc failure on pcode[%d]", p->start.getTime());
     return -1;
+}
+
+pit thumb_gen::retrieve_orig_inst(flowblock *b, pit pit, int save)
+{
+    pcodeop *p, *prevp = *pit;
+
+    for (++pit; pit != b->ops.end(); prevp = p, pit++) {
+        p = *pit;
+        if (p->get_addr() != prevp->get_addr()) break;
+    }
+
+    int size = fd->inst_size(prevp->get_addr());
+    assert(size > 0);
+    d->loader1->loadFill(fillbuf, size, prevp->get_addr());
+
+    if (save)
+        ob(fillbuf, size);
+
+    return --pit;
 }

@@ -3,6 +3,7 @@
 #define __thumb_gen_h__
 
 #include "dobc.hh"
+#include "codegen.hh"
 
 typedef list<pcodeop *>::iterator pit;
 
@@ -36,24 +37,29 @@ struct fix_item {
     fix_item(int from1, flowblock *b1, int c) { from = from1; to_blk = b1; cond = c; }
 };
 
-class codegen {
-    funcdata *fd;
 
-    codegen(funcdata *f) { fd = f;  }
-    ~codegen();
-};
+/*
+ma:4 = copy r0:4
+t1:4 = copy #1:4
+*/
 
 int ntz(uint32_t x);
 
-struct thumb_gen {
+class thumb_gen  {
+public:
     funcdata *fd;
     dobc *d;
+    /* x86里面好像一条最长的变长指令是15字节，不清楚x64有没变多 */
+    unsigned char fillbuf[16];
+
     vector<flowblock *> blist;
     vector<fix_item *> flist;
     pcodeop *curp = NULL;
 
-    unsigned char *data;
-    int ind;
+    unsigned char *data = NULL;
+    int ind = 0;
+
+    cgtrie  cgtrie;
 
     thumb_gen(funcdata *f);
     ~thumb_gen();
@@ -76,12 +82,15 @@ struct thumb_gen {
 
     uint32_t reg2i(const Address &a);
 
+    /* save to so buf */
+    pit retrieve_orig_inst(flowblock *b, pit pit, int save);
+    pit g_vstl(flowblock *b, pit pit);
     pit g_push(flowblock *b, pit pit);
     pit g_pop(flowblock *b, pit pit);
     /* 
     我们假设有二行thumb代码:
     sub sp, sp, 4
-    vpush {D8,D(}
+    vpush {D8,D9}
 
     他们转成pcode以后，大约变成这样:
 
