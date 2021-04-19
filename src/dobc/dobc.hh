@@ -183,6 +183,17 @@ public:
 
         unsigned    covertdirty : 1;    // cover没跟新
         unsigned    virtualnode : 1;     // 虚拟节点，用来做load store分析用
+        /* 一般的so中可能有类似如下的代码: 
+        ldr r2, [#xxxx]
+        add r2, pc
+        这样写代码有一个好处就是，当so映射到内存段中以后，不需要重新修复重定向表，即可正常使用
+        所以当我们发现所有值是来自于pc寄存器时，都要标注起来，任何使用pc寄存器参与的运算，都要传播开
+
+        举例:
+        r2 = r2 + pc，以后r2.from_pc = 1
+        r1 = r2 + r1，以后r1.from_pc = 1
+        */
+        unsigned    from_pc : 1;
     } flags = { 0 };
 
     int size = 0;

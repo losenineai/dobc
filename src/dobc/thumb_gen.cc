@@ -408,6 +408,7 @@ void _or_reg(int rd, int rn, int rm, int setflags)
 
 int thumb_gen::_add(int rd, int rn, uint32_t imm)
 {
+    /* A8.8.9 */
     if (rn == SP) {
         if (align4(imm) && (imm < 1024) && (rd < 8))
             o(0xa800 | (rd << 8) | (imm >> 2));
@@ -483,19 +484,29 @@ void _ldrd_imm(int rn, int rt, int rt2, int imm)
     /* wback ? */
 }
 
-int _ldr(int rt, int rn, int rm, int imm, char *buf)
+/* A8.8.62 */
+void _ldr(int rt, int rn, int imm, int wback)
 {
-    if (rm != -1) {
-    }
-    else if (in_imm3(rt) && in_imm3(rn)){
-        if (!align4(imm) || !in_imm5(imm >> 2)) UNPREDICITABLE();
-        o(0x68 | ((imm >> 2) << 6) | (rn << 3) | rt);
+    int x = abs(imm), add = imm > 0, p = imm != 0;
+
+    if (!wback && add && align4(imm) && rt < 8) {
+        if (rn == SP && imm < 1024) {
+            o(0x9800 | (rt << 8) | (imm >> 2));     // T1
+            return;
+        }
+        else if (rn < 8 && imm < 128) {
+            o(0x6800 | ((imm >> 2) << 6) | (rn << 3) | rt);     // T2
+            return;
+        }
     }
 
-    return 0;
+    if (!wback && add && imm < 4096)
+        o(0xf8d00000 | (rn << 16) | (rt << 12) | imm);  // T3
+    else if (x < 256)
+        o(0xf8500800 | (rn << 16) | (rt << 12) | (add << 9) | x | (wback << 8) | (p << 10)); // T4
 }
 
-int _str(int rt, int rn, int rm, int imm)
+void _str(int rt, int rn, int rm, int imm)
 {
     if (rm != -1) {
     }
@@ -507,8 +518,6 @@ int _str(int rt, int rn, int rm, int imm)
         o(0x9000 | (rt << 8) | (imm >> 2));
     else if (imm < 4096)
         o(0xf8600000 | (rn << 16) | (rt << 12) | imm);
-
-    return 0;
 }
 
 /* A8.8.206 
@@ -839,6 +848,11 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                             break;
 
                         case CPUI_LOAD:
+                            if (pi0(p)->is_constant() && pi0(p)->flags.from_pc) {
+                                rn = reg2i(poa(p1));
+                                imm = pi0(p)->get_val();
+                                _mov_imm(rn, imm - ind);
+                            }
                             break;
                         }
                     }
