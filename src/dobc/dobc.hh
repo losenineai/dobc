@@ -118,15 +118,9 @@ struct pcodeop_cmp {
 
 typedef set<pcodeop *, pcodeop_cmp> pcodeop_set;
 
-struct varnode_cmp_gvn {
-    bool operator()(const varnode *a, const varnode *b) const;
-};
-
 struct varnode_const_cmp {
     bool operator()(const varnode *a, const varnode *b) const;
 };
-
-typedef map<varnode *, vector<pcodeop *>, varnode_cmp_gvn> varnode_gvn_map;
 
 struct coverblock {
 	short	version;

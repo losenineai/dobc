@@ -406,6 +406,18 @@ void _or_reg(int rd, int rn, int rm, int setflags)
 		vm_error ("internal error: th_orr_reg invalid parameters\n");
 }
 
+/* A8.8.6 */
+void _add_reg(int rd, int rn, int rm, int shift)
+{
+    if (shift)
+        return;
+
+    if (rn < 8 && rm < 8 && rd < 8) // t1
+        o(0x1800 | (rm << 6) | (rn << 3) | rd);
+    else if (rd == rn) // t2
+        o(0x4400 | (rm << 3) | (rd & 7) | (rd >> 3 << 7));
+}
+
 int thumb_gen::_add(int rd, int rn, uint32_t imm)
 {
     /* A8.8.9 */
@@ -485,9 +497,9 @@ void _ldrd_imm(int rn, int rt, int rt2, int imm)
 }
 
 /* A8.8.62 */
-void _ldr(int rt, int rn, int imm, int wback)
+void _ldr_imm(int rt, int rn, int imm, int wback)
 {
-    int x = abs(imm), add = imm > 0, p = imm != 0;
+    int x = abs(imm), add = imm >= 0, p = imm != 0;
 
     if (!wback && add && align4(imm) && rt < 8) {
         if (rn == SP && imm < 1024) {
@@ -606,6 +618,11 @@ char *vstl_slgh[] = {
 };
 
 pit thumb_gen::g_vstl(flowblock *b, pit pit)
+{
+    return retrieve_orig_inst(b, pit, 1);
+}
+
+pit thumb_gen::g_vpop(flowblock *b, pit pit)
 {
     return retrieve_orig_inst(b, pit, 1);
 }
@@ -814,8 +831,12 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
         case CPUI_COPY:
             /* push */
             if (poa(p) == ama) {
-                if (pi0a(p) == asp)
-                    it = g_push(b, it);
+                if (pi0a(p) == asp) {
+                    if (p1 && (p1->opcode == CPUI_LOAD) && d->is_vreg(poa(p1)))
+                        it = g_vpop(b, it);
+                    else
+                        it = g_push(b, it);
+                }
                 else if (d->is_greg(pi0a(p)))
                     it = g_vstl(b, it);
             }
@@ -847,11 +868,18 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                             _add(reg2i(poa(p1)), reg2i(pi0a(p1)), pi0(p)->get_val());
                             break;
 
+                        case CPUI_INT_SUB:
+                            _sub_imm(reg2i(poa(p1)), reg2i(pi0a(p1)), pi0(p)->get_val());
+                            break;
+
                         case CPUI_LOAD:
-                            if (pi0(p)->is_constant() && pi0(p)->flags.from_pc) {
+                            /* FIXME:假如load指令调用了一个常数，那么它一定是相对pc寄存器的？ */
+                            if (pi0(p)->is_constant()) {
                                 rn = reg2i(poa(p1));
                                 imm = pi0(p)->get_val();
-                                _mov_imm(rn, imm - ind);
+                                _mov_imm(rn, imm - ind - 4);
+                                _add_reg(rn, rn, PC, 0);
+                                _ldr_imm(rn, rn, 0, 0);
                             }
                             break;
                         }
@@ -1014,9 +1042,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 }
             }
             else if ((pi0a(p) == asp) && pi1(p)->is_constant()) {
-                it1 = it;
-                p1 = *++it1;
-                if (p1->opcode == CPUI_LOAD)
+                if (p1 && p1->opcode == CPUI_LOAD)
                     it = g_pop(b, it);
                 else
                     _add(reg2i(poa(p)), SP, pi1(p)->get_val());
@@ -1231,6 +1257,9 @@ int thumb_gen::regalloc(pcodeop *p)
     return -1;
 }
 
+/* 
+@save 写到so buf内
+*/
 pit thumb_gen::retrieve_orig_inst(flowblock *b, pit pit, int save)
 {
     pcodeop *p, *prevp = *pit;

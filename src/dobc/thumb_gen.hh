@@ -84,7 +84,6 @@ public:
 
     /* save to so buf */
     pit retrieve_orig_inst(flowblock *b, pit pit, int save);
-    pit g_vstl(flowblock *b, pit pit);
     pit g_push(flowblock *b, pit pit);
     pit g_pop(flowblock *b, pit pit);
     /* 
@@ -113,6 +112,7 @@ public:
     */
     pit g_vpush(flowblock *b, pit pit);
     pit g_vpop(flowblock *b, pit pit);
+    pit g_vstl(flowblock *b, pit pit);
 
     void dump();
     int dump_one_inst(int index, pcodeop *p);

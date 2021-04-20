@@ -185,6 +185,9 @@ void pcodeemit2::dump(const Address &addr, OpCode opc, VarnodeData *outvar, Varn
             op->flags.simd = 1;
         else if (prevp && (prevp->start.getAddr() == addr) && prevp->flags.simd == 1)
             op->flags.simd = 1;
+
+        if (vn->is_constant() && vn->get_val() == addr.getOffset())
+            vn->flags.from_pc = 1;
     }
 
     prevp = op;
@@ -893,38 +896,6 @@ bool pcodeop_domdepth_cmp::operator()(const pcodeop *a, const pcodeop *b) const
 	funcdata *fd = a->parent->fd;
 
 	return fd->domdepth[a->parent->index] < fd->domdepth[b->parent->index];
-}
-
-inline bool varnode_cmp_gvn::operator()(const varnode *a, const varnode *b) const
-{
-    pcodeop *op1, *op2;
-    if (a->type.height != b->type.height)  return a->type.height < b->type.height;
-
-    if (a->type.height == a_top) {
-        op1 = a->def;
-        op2 = b->def;
-
-        if (op1->opcode != op2->opcode) return op1->opcode < op2->opcode;
-
-        switch (op1->opcode) {
-        case CPUI_INT_ADD:
-        case CPUI_INT_MULT:
-            if (((op1->get_in(0) == op2->get_in(0)) && (op1->get_in(1) == op2->get_in(1)))
-                || ((op1->get_in(0) == op2->get_in(1)) && (op1->get_in(1) == op2->get_in(0))))
-                return false;
-
-        default:
-            return a->create_index < b->create_index;
-        }
-    }
-    else if (a->type.height == a_rel_constant) {
-        return (a->type.v < b->type.v);
-    }
-    else if (a->type.height == a_constant) {
-        return (a->type.v < b->type.v);
-    }
-
-    return false;
 }
 
 inline bool varnode_const_cmp::operator()(const varnode *a, const varnode *b) const
