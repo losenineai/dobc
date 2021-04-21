@@ -484,7 +484,7 @@ void thumb_gen::_cmp_imm(int rn, uint32_t imm)
 }
 
 /* A8.8.72 */
-void _ldrd_imm(int rn, int rt, int rt2, int imm)
+void _ldrd_imm(int rt, int rt2, int rn, int imm)
 {
     int add = imm > 0;
     imm = abs(imm);
