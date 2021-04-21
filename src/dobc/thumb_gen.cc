@@ -685,17 +685,18 @@ pit thumb_gen::g_pop(flowblock *b, pit pit)
     int reglist = 0;
     pcodeop *p = *pit, *p1;
 
-    while (poa(p) == asp || poa(p) == ama) {
+    p = *pit++;
+    p1 = *pit++;
+    reglist |= 1 << reg2i(poa(p1));
+
+    while (1) {
         p = *pit++;
         p1 = *pit++;
-        if ((p->opcode == CPUI_INT_ADD)) {
-            if (p1->opcode != CPUI_LOAD)
-                break;
+        if ((p->opcode == CPUI_INT_ADD) && (p1->opcode == CPUI_LOAD)) {
             reglist |= 1 << reg2i(poa(p1));
         }
-        else throw LowlevelError("not support");
-
-        p = *pit;
+        else
+            break;
     }
 
     if ((p1->opcode == CPUI_COPY)) {
@@ -831,9 +832,12 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
         case CPUI_COPY:
             /* push */
             if (poa(p) == ama) {
-                if (pi0a(p) == asp) {
-                    if (p1 && (p1->opcode == CPUI_LOAD) && d->is_vreg(poa(p1)))
+                if ((pi0a(p) == asp) && p1) {
+                    /* FIXME:把所有simd指令优先处理了，不走状态机 */
+                    if ((p1->opcode == CPUI_INT_MULT) && p1->flags.simd)
                         it = g_vpop(b, it);
+                    else if (p1->opcode == CPUI_LOAD)
+                        it = g_pop(b, it);
                     else
                         it = g_push(b, it);
                 }
