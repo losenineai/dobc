@@ -6,10 +6,12 @@
 
 class funcdata;
 class varnode;
+class pcodeop;
 
 class pcodeemit2 : public PcodeEmit {
 public:
     funcdata *fd = NULL;
+    pcodeop *prevp = NULL;
     FILE *fp = stdout;
     int itblock = 0;
     virtual void dump(const Address &address, OpCode opc, VarnodeData *outvar, VarnodeData *vars, int size);

@@ -151,15 +151,18 @@ static int print_varnode(Translate *trans, char *buf, varnode *data)
 
 void pcodeemit2::dump(const Address &addr, OpCode opc, VarnodeData *outvar, VarnodeData *vars, int4 isize)
 {
-    int i;
+    int i, simd = 0;
     pcodeop *op;
     varnode *vn;
-    static pcodeop *prevp = NULL;
+    dobc *d = fd->d;
 
     if (outvar != (VarnodeData *)0) {
         Address oaddr(outvar->space, outvar->offset);
         op = fd->newop(isize, addr);
         fd->new_varnode_out(outvar->size, oaddr, op);
+
+        if (d->is_vreg(poa(op)))
+            simd = 1;
     }
     else
         op = fd->newop(isize, addr);
@@ -181,14 +184,26 @@ void pcodeemit2::dump(const Address &addr, OpCode opc, VarnodeData *outvar, Varn
         vn = fd->new_varnode(vars[i].size, vars[i].space, vars[i].offset);
         fd->op_set_input(op, vn, i);
 
-        if (!op->flags.simd && fd->d->is_vreg(vn->get_addr())) 
-            op->flags.simd = 1;
-        else if (prevp && (prevp->start.getAddr() == addr) && prevp->flags.simd == 1)
-            op->flags.simd = 1;
+        if (!simd && d->is_vreg(vn->get_addr()))
+            simd = 1;
 
         if (vn->is_constant() && vn->get_val() == addr.getOffset())
             vn->flags.from_pc = 1;
     }
+
+    if (prevp && (prevp->get_addr() == addr)) {
+        if (!simd && prevp->flags.simd)
+            simd = 1;
+        if (simd && !prevp->flags.simd) {
+            list<pcodeop *>::iterator it = op->insertiter;
+
+            /* 发现了一条simd指令，回溯前面所有地址相等的指令，因为函数头条指令一定不是simd，所以这里不用判断头部 */
+            for (it--; ((*it)->get_addr() == op->get_addr()); it--)
+                (*it)->flags.simd = 1;
+        }
+    }
+
+    op->flags.simd = simd;
 
     prevp = op;
 
@@ -1312,6 +1327,7 @@ int				pcodeop::compute_add_sub()
 		*/
 		while (
 			_in0->is_rel_constant()
+            && !op->flags.simd  // simd的指令不要参与这些peephole的变形，会导致代码生成时，生成错误代码
 			&& (in0->uses.size() == 1) && _in1->is_constant() 
 			&& ((op->output->get_addr() == _in0->get_addr()) || _in0->in_liverange_simple(this))) {
 			intb v = in1->get_val();
