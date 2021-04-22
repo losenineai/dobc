@@ -352,14 +352,20 @@ void        funcdata::place_multiequal(void)
         for (i = 0; i < merge.size(); ++i) {
             bl = merge[i];
 
-            list<pcodeop *>::iterator it = bl->ops.begin();
+            list<pcodeop *>::iterator it = bl->ops.begin(), nextit;
             varnode *vnout = NULL;
 
-            for (multiop = NULL; it != bl->ops.end(); it++) {
-                p = *it;
+            for (multiop = NULL; it != bl->ops.end(); it = nextit) {
+                p = *it++;
+                nextit = it;
+
+                if ((p->opcode == CPUI_MULTIEQUAL) && (p->inrefs.size() != bl->in.size())) {
+                    op_destroy_ssa(p);
+                    continue;
+                }
 
                 if ((p->opcode != CPUI_MULTIEQUAL) && !p->flags.copy_from_phi) break;
-                if (p->output->get_addr() == addr) {
+                if ((p->output->get_addr() == addr)) {
                     multiop = p;
                     break;
                 }

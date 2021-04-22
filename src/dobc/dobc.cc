@@ -382,6 +382,8 @@ void dobc::plugin_ollvm()
 {
     //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
     funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
+    //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
+    //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x2f5d));
     fd_main->ollvm_deshell();
     loader->saveFile("test.so");
 }
@@ -3244,8 +3246,8 @@ int         funcdata::ollvm_combine_lcts(pcodeop *p)
         blks.push_back(b1);
     }
 
-    if (blks.size() < 2) 
-        return 0;
+    if (blks.size() < 2) return 0;
+    if (blks[0] == blks[1]) return 0;
 
     return combine_lcts(blks);
 }
@@ -3284,7 +3286,13 @@ int         funcdata::combine_lcts(vector<flowblock *> &blks)
             }
 
             for (j = 0; j < p->inrefs.size(); j++) {
-                if ((d->is_temp(poa(p)) != d->is_temp(poa(p1))) || (poa(p) != poa(p1))) break;
+                varnode *l = p->get_in(j);
+                varnode *r = p1->get_in(j);
+                bool istemp = d->is_temp(l->get_addr());
+                if ((istemp == d->is_temp(r->get_addr()))) continue;
+                if (!istemp && (l->get_addr() == r->get_addr()) && (l->get_size() == r->get_size())) continue;
+
+                break;
             }
         }
 
