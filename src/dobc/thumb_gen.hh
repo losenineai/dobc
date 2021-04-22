@@ -58,6 +58,8 @@ public:
 
     unsigned char *data = NULL;
     int ind = 0;
+    int end = 0;
+    int maxend = 0;
 
     cgtrie  cgtrie;
 
@@ -113,6 +115,8 @@ public:
     pit g_vpush(flowblock *b, pit pit);
     pit g_vpop(flowblock *b, pit pit);
     pit g_vstl(flowblock *b, pit pit);
+
+    int save_to_end(uint32_t imm);
 
     void dump();
     int dump_one_inst(int index, pcodeop *p);

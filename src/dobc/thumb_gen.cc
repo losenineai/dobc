@@ -496,6 +496,10 @@ void _ldrd_imm(int rt, int rt2, int rn, int imm)
     /* wback ? */
 }
 
+void _ldr_lit(int rt, int imm)
+{
+}
+
 /* A8.8.62 */
 void _ldr_imm(int rt, int rn, int imm, int wback)
 {
@@ -881,7 +885,11 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                             if (pi0(p)->is_constant()) {
                                 rn = reg2i(poa(p1));
                                 imm = pi0(p)->get_val();
-                                _mov_imm(rn, imm - ind - 4);
+                                /*
+                                pc - (ind) - 4
+                                */
+                                _mov_imm(rn, imm - (ind + 4 * (stuff_const(0, imm) ? 1:2)) - 4);
+
                                 _add_reg(rn, rn, PC, 0);
                                 _ldr_imm(rn, rn, 0, 0);
                             }
@@ -1281,4 +1289,15 @@ pit thumb_gen::retrieve_orig_inst(flowblock *b, pit pit, int save)
         ob(fillbuf, size);
 
     return --pit;
+}
+
+int thumb_gen::save_to_end(uint32_t imm)
+{
+    if ((end - 4) >= ind)
+        vm_error("filesize need expand");
+
+    end =- 4;
+    mbytes_write_int_little_endian_4b(data + end, imm);
+
+    return end;
 }
