@@ -130,7 +130,7 @@ static int print_udchain(char *buf, pcodeop *op, uint32_t flags)
     return i;
 }
 
-static int print_varnode(Translate *trans, char *buf, varnode *data)
+int print_varnode(Translate *trans, char *buf, varnode *data)
 {
     Address addr = data->get_addr();
     string name = trans->getRegisterName(addr.getSpace(), addr.getOffset(), data->size);
@@ -381,8 +381,8 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 void dobc::plugin_ollvm()
 {
     //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
-    funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
-    //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
+    //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
+    funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x2f5d));
     fd_main->ollvm_deshell();
     loader->saveFile("test.so");
@@ -3117,13 +3117,13 @@ int         funcdata::cond_copy_propagation(varnode *phi)
     return 0;
 }
 
-int         funcdata::cond_copy_expand(pcodeop *p, int outslot)
+int         funcdata::cond_copy_expand(pcodeop *p, flowblock *b, int outslot)
 {
-    flowblock *b = p->parent, *b1, *b2, *pb1, *pb2, *outb;
+    flowblock *b1, *b2, *pb1, *pb2, *outb;
     vector<varnode *> defs;
     int i, have_top;
     varnode *def;
-    assert(p->opcode == CPUI_COPY || p->opcode == CPUI_LOAD);
+    assert(p->opcode == CPUI_COPY || p->opcode == CPUI_LOAD || p->opcode == CPUI_MULTIEQUAL);
     assert(outslot >= 0);
     outb = b->get_out(outslot);
 
@@ -3222,6 +3222,20 @@ int         funcdata::collect_all_const_defs(pcodeop *start, vector<varnode *> &
 
     return have_top_def;
 }
+
+int         funcdata::cut_const_defs_on_condition(pcodeop *start, vector<varnode *> &defs)
+{
+    flowblock *b = start->parent;
+    pcodeop *p[4];
+
+    if (((p[0] = b->last_op())->opcode == CPUI_CBRANCH)
+        && (p[1] = p[0]->get_in(0)->def)
+        && (p[1]->opcode == CPUI_INT_EQUAL)) {
+    }
+
+    return 0;
+}
+
 
 int         funcdata::ollvm_combine_lcts(pcodeop *p)
 {
@@ -3449,10 +3463,13 @@ int         funcdata::ollvm_deshell()
     bblocks.clear_all_unsplice();
     bblocks.clear_all_vminfo();
 
-    while (!cbrlist.empty())
-        cond_constant_propagation();
     remove_dead_stores();
     dead_code_elimination(bblocks.blist, 0);
+
+    while (!cbrlist.empty() || !emptylist.empty()) {
+        cond_constant_propagation();
+        dead_code_elimination(bblocks.blist, 0);
+    }
 
     dump_cfg(name, "final", 1);
     dump_pcode("1");

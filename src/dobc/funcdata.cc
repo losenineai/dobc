@@ -20,7 +20,7 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
     varnode *iv = NULL;
     blockedge *chain = NULL;
 
-    if (ollvm_detect_propchains(from, chain)) {
+    if (ollvm_detect_propchains2(from, chain)) {
         printf("ollvm not found propchain\n");
         return -1;
     }
@@ -46,9 +46,15 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
             p->set_trace();
             ret = p->compute(inslot, &br);
 
-            if (flags & _DUMP_PCODE) {
+            //if (flags & _DUMP_PCODE) 
+            if ((p->opcode == CPUI_INT_SUB) && d->is_temp(poa(p)))
+            {
                 char buf[256];
-                p->dump(buf, PCODE_DUMP_SIMPLE & ~PCODE_HTML_COLOR);
+                int len = 0;
+                //p->dump(buf, PCODE_DUMP_SIMPLE & ~PCODE_HTML_COLOR);
+                len += print_vartype (d->trans, buf, p->get_in(0));
+                len += sprintf(buf + len, "  <>  ");
+                len += print_vartype(d->trans, buf + len, p->get_in(1));
                 printf("%s\n", buf);
             }
 
@@ -876,7 +882,7 @@ int         funcdata::ollvm_detect_frameworkinfo()
     return 0;
 }
 
-int         funcdata::ollvm_detect_propchains(flowblock *&from, blockedge *&outedge)
+int         funcdata::ollvm_detect_propchains2(flowblock *&from, blockedge *&outedge)
 {
     int i, ret;
 
@@ -893,7 +899,7 @@ int         funcdata::ollvm_detect_propchains(flowblock *&from, blockedge *&oute
 
         if (oh->h->flags.f_dead) continue;
 
-        if (!ollvm_detect_propchain(oh, from, outedge, F_OPEN_PHI)) return 0;
+        if (!ollvm_detect_propchain2(oh, from, outedge, 0)) return 0;
     }
 
     /* 尝试传递拷贝复制 */
@@ -902,16 +908,10 @@ int         funcdata::ollvm_detect_propchains(flowblock *&from, blockedge *&oute
 
         if (oh->h->flags.f_dead) continue;
 
-        ret = ollvm_detect_propchain(oh, from, outedge, F_OPEN_COPY);
-        /* 执行了 lcs，在来一次copy */
-        if (ret == 1)
-            ret = ollvm_detect_propchain(oh, from, outedge, F_OPEN_COPY);
+        /* lcs 或者拷贝传递 */
+        while ((ret = ollvm_detect_propchain2(oh, from, outedge, F_OPEN_COPY)) > 0);
 
-        /* 传递拷贝成功 */
-        if (ret == 0) {
-            /* 在搜索一次 */
-            if (!ollvm_detect_propchain(oh, from, outedge, F_OPEN_PHI)) return 0;
-        }
+        if (ret == 0) return 0;
     }
 
     return -1;
@@ -922,7 +922,7 @@ int block_dfnum_cmp(blockedge *l, blockedge *r)
     return l->point->dfnum < r->point->dfnum;
 }
 
-int         funcdata::ollvm_detect_propchain(ollvmhead *oh, flowblock *&from, blockedge *&outedge, uint32_t flags)
+int         funcdata::ollvm_detect_propchain2(ollvmhead *oh, flowblock *&from, blockedge *&outedge, uint32_t flags)
 {
     if (oh->h->flags.f_dead) return -1;
 
@@ -950,58 +950,63 @@ int         funcdata::ollvm_detect_propchain(ollvmhead *oh, flowblock *&from, bl
         cur = h;
         vn = p->get_in(e->index);
 
-        if (!vn->is_constant()) {
-            p1 = vn->def;
-            h1 = p1->parent;
+        p1 = vn->def;
+        h1 = p1->parent;
 
-            if (!p1->flags.mark_cond_copy_prop && ((p1->opcode == CPUI_COPY) || (p1->opcode == CPUI_LOAD)) && b_is_flag(flags,F_OPEN_COPY)) {
-                vector<varnode *> defs;
+        if (vn->is_constant()) {
+            from = pre;
+            e = &pre->out[pre->get_out_index(cur)];
+            /* 假如已经被标记过，不可计算了 */
+            if (e->is(a_unpropchain)) continue;
+            outedge = e;
+            return 0;
+        }
 
-                if ((p1->opcode == CPUI_LOAD) && !p1->have_virtualnode())
-                    throw LowlevelError("alias analysis error");
+        if ((p1->opcode == CPUI_MULTIEQUAL) && (h->get_inslot(h1) >= 0)) {
+            for (j = 0; j < h1->in.size(); j++) {
+                vn = p1->get_in(j);
+                pre = p1->parent->get_in(j);
+                cur = p1->parent;
 
-                if (p1->opcode == CPUI_COPY) {
-                    if (ollvm_combine_lcts(p1)) {
-                        heritage_clear();
-                        heritage();
-                        dump_cfg(name, "lcts", 1);
-                        return 1;
-                    }
-                }
-
-                top = collect_all_const_defs(p1, defs);
-                p1->flags.mark_cond_copy_prop = 1;
-
-                if (defs.size() > 1) {
-                    cond_copy_expand(p1, pre->get_out_index(cur));
-                    heritage_clear();
-                    heritage();
-                    dump_cfg(name, "cond_copy_expand", 1);
+                if (vn->is_constant()) {
+                    from = pre;
+                    e = &pre->out[pre->get_out_index(cur)];
+                    /* 假如已经被标记过，不可计算了 */
+                    if (e->is(a_unpropchain)) continue;
+                    outedge = e;
                     return 0;
-                }
-            }
-            else if ((p1->opcode == CPUI_MULTIEQUAL) && b_is_flag(flags, F_OPEN_PHI)) {
-                for (j = 0; j < h1->in.size(); j++) {
-                    vn = p1->get_in(j);
-                    pre = p1->parent->get_in(j);
-                    cur = p1->parent;
-
-                    if (vn->is_constant()) break;
                 }
             }
         }
 
-        if (!vn->is_constant()) continue;
+        if (!p1->flags.mark_cond_copy_prop 
+            && b_is_flag(flags,F_OPEN_COPY)
+            && ((p1->opcode == CPUI_COPY) || (p1->opcode == CPUI_LOAD) || (p1->opcode == CPUI_MULTIEQUAL))) {
+            vector<varnode *> defs;
 
-        from = pre;
-        e = &pre->out[pre->get_out_index(cur)];
+            if ((p1->opcode == CPUI_LOAD) && !p1->have_virtualnode())
+                throw LowlevelError("alias analysis error");
 
-        /* 假如已经被标记过，不可计算了 */
-        if (e->is(a_unpropchain)) continue;
+            if (p1->opcode == CPUI_COPY) {
+                if (ollvm_combine_lcts(p1)) {
+                    heritage_clear();
+                    heritage();
+                    dump_cfg(name, "lcts", 1);
+                    return 2;
+                }
+            }
 
-        outedge = e;
+            top = collect_all_const_defs(p1, defs);
+            p1->flags.mark_cond_copy_prop = 1;
 
-        return 0;
+            if (defs.size() > 1) {
+                cond_copy_expand(p1, pre, pre->get_out_index(cur));
+                heritage_clear();
+                heritage();
+                dump_cfg(name, "cond_copy_expand", 1);
+                return 1;
+            }
+        }
     }
 
     return -1;

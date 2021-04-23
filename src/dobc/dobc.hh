@@ -159,6 +159,8 @@ struct cover {
 	int dump(char *buf);
 };
 
+int print_varnode(Translate *trans, char *buf, varnode *data);
+
 class varnode {
 public:
     /* varnode的值类型和值，在编译分析过后就不会被改*/
@@ -1339,7 +1341,9 @@ public:
 #define F_OPEN_COPY             0x01
 #define F_OPEN_PHI              0x02
     int         ollvm_detect_propchain(ollvmhead *oh, flowblock *&from, blockedge *&outedge, uint32_t flags);
+    int         ollvm_detect_propchain2(ollvmhead *oh, flowblock *&from, blockedge *&outedge, uint32_t flags);
     int         ollvm_detect_propchains(flowblock *&from, blockedge *&outedge);
+    int         ollvm_detect_propchains2(flowblock *&from, blockedge *&outedge);
     int         ollvm_detect_fsm(ollvmhead *oh);
 
     bool        use_outside(varnode *vn);
@@ -1505,7 +1509,7 @@ public:
 
     这个改完以后，程序的语义没有发生任何变化
     */
-    int         cond_copy_expand(pcodeop *p, int outslot);
+    int         cond_copy_expand(pcodeop *p, flowblock *b, int outslot);
     /*
     收集vn的所有def，维护一个队列
 
@@ -1517,6 +1521,18 @@ public:
                 1           v有值类型为top的def
     */
     int         collect_all_const_defs(pcodeop *start, vector<varnode *> &defs);
+    /* 裁剪由collect_all_const_defs收集到的常量定义 
+
+    有如下代码:
+
+    1:  cpy r2, r0
+    2:  cmp r0, #ebfa4275
+    3.  beq r370a
+
+    我们收集到了r2的所有常量定义，都不等于 #bfa4275，那么进行常量条件展开是无意义的，
+    我们会从defs里面删除不等于对应常量的常量
+    */
+    int         cut_const_defs_on_condition(pcodeop *start, vector<varnode *> &defs);
 
     /* 合并这些block中，最长公共尾串 
     action:
