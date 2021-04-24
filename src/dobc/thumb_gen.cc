@@ -536,6 +536,14 @@ void _str(int rt, int rn, int rm, int imm)
         o(0xf8600000 | (rn << 16) | (rt << 12) | imm);
 }
 
+void _strd(int rt, int rt2, int rn, int imm, int w)
+{
+    int add = imm >= 0, pos = abs(imm), p = imm != 0;
+
+    if (align4(pos) && (pos < 1024))
+        o(0xe8400000 | (pos >> 2) | (add << 23) | (rn << 16) | (rt << 12) | (rt2 << 8) | (p << 24) | (w << 21));
+}
+
 /* A8.8.206 
 
 @w  writeback
@@ -1002,7 +1010,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 ++it;
                 switch (p1->opcode) {
                 case CPUI_COPY:
-                    if ((pi0a(p) == asp) && pi1(p)->is_constant() && a(pi1(p1)) == poa(p))
+                    if ((pi0a(p) == asp) && pi1(p)->is_constant() && a(pi0(p1)) == poa(p))
                         _add(reg2i(poa(p1)), SP, pi1(p)->get_val());
                     else if (istemp(p1->output)) {
                         if (p2 && (p2->opcode == CPUI_STORE) && (pi2(p2)->size == 1)) {
@@ -1020,8 +1028,15 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     break;
 
                 case CPUI_STORE:
-                    if (a(pi1(p1)) == poa(p))
-                        _str(reg2i(pi2a(p1)), reg2i(pi0a(p)), -1, pi1(p)->get_val());
+                    if (a(pi1(p1)) == poa(p)) {
+                        if (p2 && p3 && (p2->opcode == CPUI_INT_ADD) 
+                            && (p3->opcode == CPUI_STORE) && (pi0a(p2) == poa(p))) {
+                            _strd(reg2i(pi2a(p1)), reg2i(pi2a(p3)), reg2i(pi0a(p)), pi1(p)->get_val(), 0);
+                            advance(it, 2);
+                        }
+                        else
+                            _str(reg2i(pi2a(p1)), reg2i(pi0a(p)), -1, pi1(p)->get_val());
+                    }
                     break;
 
                 case CPUI_LOAD:
