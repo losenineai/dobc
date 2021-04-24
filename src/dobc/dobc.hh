@@ -220,6 +220,7 @@ public:
     void            set_def(pcodeop *op);
     pcodeop*        get_def() { return def; }
     bool            is_constant(void) const { return type.height == a_constant; }
+    bool            is_hard_constant(void) const { return (type.height == a_constant) && get_addr().isConstant(); }
     bool            in_constant_space() { return get_addr().isConstant(); }
     void            set_val(intb v) { type.height = a_constant;  type.v = v; }
     void            set_top() { type.height = a_top;  }
