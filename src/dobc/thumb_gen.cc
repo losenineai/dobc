@@ -12,6 +12,9 @@
 #define apc                 d->pc_addr
 #define alr                 d->lr_addr
 #define azr                 d->zr_addr
+#define ang                 as("NG")
+#define aov                 as("OV")
+#define acv                 as("CV")
 #define istemp(vn)          ((vn)->get_addr().getSpace()->getType() == IPTR_INTERNAL)
 #define isreg(vn)           d->is_greg(vn->get_addr())
 #define as(st)              d->trans->getRegister(st).getAddr()
@@ -112,6 +115,9 @@ thumb_gen::thumb_gen(funcdata *f)
     /* FIXME: thumb的指令是地址对齐的 */
     ind = fd->bufptr - d->loader->filedata;
     ind -= fd->flags.thumb;
+
+    maxend = f->size + ind;
+    end = f->size + ind;
     memset(fd->bufptr, 0, fd->size);
 }
 
@@ -155,6 +161,9 @@ static void o(uint32_t i)
 {
     if (i == 0)
         vm_error("meet 0's value instruction");
+
+    if (g_cg->ind >= g_cg->end)
+        vm_error("exceed function max size");
 
     if ((i >> 16))
         ott(i);
@@ -578,7 +587,7 @@ void _strd(int rt, int rt2, int rn, int imm, int w)
     int add = imm >= 0, pos = abs(imm), p = imm != 0;
 
     if (align4(pos) && (pos < 1024))
-        o(0xe8400000 | (pos >> 2) | (add << 23) | (rn << 16) | (rt << 12) | (rt2 << 8) | (p << 24) | (w << 21));
+        o(0xe8400000 | (pos >> 2) | (add << 23) | (rn << 16) | (rt << 12) | (rt2 << 8) | (1 << 24) | (w << 21));
 }
 
 /* A8.8.206 
@@ -848,7 +857,7 @@ void thumb_gen::save(void)
 int thumb_gen::run_block(flowblock *b, int b_ind)
 {
     list<pcodeop *>::iterator it, it1;
-    pcodeop *p, *p1, *p2, *p3;
+    pcodeop *p, *p1, *p2, *p3, *p4, *tp;
     uint32_t x, rt, rd, rn, rm, setflags;
     int oind, imm, target_thumb ;
 
@@ -872,7 +881,6 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
             p2 = *it1++;
         if (it1 != b->ops.end())
             p3 = *it1++;
-        it1 = it;
 
         oind = ind;
 
@@ -971,15 +979,21 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
 
         case CPUI_INT_NOTEQUAL:
         case CPUI_INT_EQUAL:
-            if (istemp(p->output) && (pi0a(p) == azr) && pi1(p)->is_constant()) {
-                imm = pi1(p)->get_val();
-                if (!imm && (p1->opcode == CPUI_BOOL_NEGATE) && (p2->opcode == CPUI_CBRANCH)) {
-                    write_cbranch(b, p->opcode);
-                    advance(it, 2);
+            if (istemp(p->output) ) {
+                if ((pi0a(p) == azr) && pi1(p)->is_constant()) {
+                    imm = pi1(p)->get_val();
+                    if (!imm && (p1->opcode == CPUI_BOOL_NEGATE) && (p2->opcode == CPUI_CBRANCH)) {
+                        write_cbranch(b, ((p->opcode == CPUI_INT_NOTEQUAL)?COND_NE:COND_EQ));
+                        advance(it, 2);
+                    }
+                    else if (imm && p1->opcode == CPUI_CBRANCH) {
+                        write_cbranch(b, ((p->opcode == CPUI_INT_NOTEQUAL)?COND_NE:COND_EQ));
+                        advance(it, 1);
+                    }
                 }
-                else if (imm && p1->opcode == CPUI_CBRANCH) {
-                    write_cbranch(b, p->opcode);
-                    advance(it, 1);
+                else if (pi0a(p) == ang && pi1a(p) == aov && p1->opcode == CPUI_BOOL_NEGATE && p2->opcode == CPUI_CBRANCH) {
+                    write_cbranch(b, COND_LT);
+                    advance(it, 2);
                 }
             }
             break;
@@ -1057,19 +1071,25 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 ++it;
                 switch (p1->opcode) {
                 case CPUI_COPY:
-                    if ((pi0a(p) == asp) && pi1(p)->is_constant() && a(pi0(p1)) == poa(p))
+                    if ((pi0a(p) == asp) && pi1(p)->is_constant() && a(pi0(p1)) == poa(p) && isreg(p1->output))
                         _add(reg2i(poa(p1)), SP, pi1(p)->get_val());
                     else if (istemp(p1->output)) {
-                        if (p2 && (p2->opcode == CPUI_STORE) && (pi2(p2)->size == 1)) {
-                            if (!d->is_greg(pi0a(p1))) {
-                                rt = regalloc(p1);
-                                _mov_imm(rt, pi0(p1)->get_val());
+                        if (p2 && (p2->opcode == CPUI_STORE)) {
+                            if (pi2(p2)->size == 1) {
+                                if (!d->is_greg(pi0a(p1))) {
+                                    rt = regalloc(p1);
+                                    _mov_imm(rt, pi0(p1)->get_val());
+                                }
+                                else
+                                    rt = d->reg2i(pi0a(p1));
+                                rn = d->reg2i(pi0a(p));
+                                _strb_imm(rt, rn, pi1(p)->get_val(), 0);
+                                advance(it, 1);
                             }
-                            else
-                                rt = d->reg2i(pi0a(p1));
-                            rn = d->reg2i(pi0a(p));
-                            _strb_imm(rt, rn, pi1(p)->get_val(), 0);
-                            advance(it, 1);
+                            else if (p3 && (p3->opcode == CPUI_INT_ADD) && pi0(p3) == p1->output && (p4 = *it1)->opcode == CPUI_STORE) {
+                                _strd(reg2i(pi2a(p2)), reg2i(pi2a(p4)), reg2i(pi0a(p)), pi1(p)->get_val(), 0);
+                                advance(it, 3);
+                            }
                         }
                     }
                     break;
@@ -1181,6 +1201,21 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
             }
             break;
 
+        case CPUI_INT_SBORROW:
+            if (d->is_tsreg(poa(p))) {
+                if (p1->opcode == CPUI_INT_SUB && istemp(p1->output)) {
+                    if (pi1(p)->is_hard_constant())
+                        _cmp_imm(reg2i(pi0a(p)), pi1(p)->get_val());
+                    else if (isreg(pi1(p)))
+                        _cmp_reg(reg2i(pi0a(p)), reg2i(pi1a(p)));
+
+                    advance(it, 2);
+                    while ((tp = *it)->output && (d->is_sreg(poa(tp)) || d->is_tsreg(poa(tp)))) it++;
+                    it--;
+                }
+            }
+            break;
+
         case CPUI_INT_OR:
             if (isreg(p->output)) {
                 if (p1 && p2 && p1->opcode == CPUI_INT_EQUAL && p2->opcode == CPUI_COPY && d->is_tsreg(poa(p1)) && d->is_sreg(poa(p2))) {
@@ -1194,14 +1229,22 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
 
         case CPUI_INT_LEFT:
             if (istemp(p->output)) {
-                if (istemp(p1->output) && (p1->opcode == CPUI_INT_ADD)) {
-                    if (p2->opcode == CPUI_LOAD) {
-                        _ldr_reg(reg2i(poa(p2)), reg2i(pi0a(p1)), reg2i(pi0a(p)), pi1(p)->get_val());
-                        advance(it, 2);
+                if (istemp(p1->output)) {
+                    if (p1->opcode == CPUI_INT_ADD) {
+                        if (p2->opcode == CPUI_LOAD) {
+                            _ldr_reg(reg2i(poa(p2)), reg2i(pi0a(p1)), reg2i(pi0a(p)), pi1(p)->get_val());
+                            advance(it, 2);
+                        }
+                        else if (p2->opcode == CPUI_STORE) {
+                            _str_reg(reg2i(pi2a(p2)), reg2i(pi0a(p1)), reg2i(pi0a(p)), pi1(p)->get_val());
+                            advance(it, 2);
+                        }
                     }
-                    else if (p2->opcode == CPUI_STORE) {
-                        _str_reg(reg2i(pi2a(p2)), reg2i(pi0a(p1)), reg2i(pi0a(p)), pi1(p)->get_val());
-                        advance(it, 2);
+                    else if (p1->opcode == CPUI_COPY) {
+                        if (p2->opcode == CPUI_INT_ADD) {
+                            _add_reg(reg2i(poa(p2)), reg2i(pi0a(p2)), reg2i(pi0a(p)), SRType_LSL, pi1(p)->get_val());
+                            advance(it, 2);
+                        }
                     }
                 }
             }
@@ -1258,11 +1301,11 @@ inst_label:
     return 0;
 }
 
-void thumb_gen::write_cbranch(flowblock *b, uint32_t opcode)
+void thumb_gen::write_cbranch(flowblock *b, uint32_t cond)
 {
     uint32_t x;
     flowblock *t = b->get_true_edge()->point;
-    x = (((opcode == CPUI_INT_NOTEQUAL)?COND_NE:COND_EQ) << 22);
+    x = (cond << 22);
     x |=  t->cg.data ?  encbranch(ind, t->cg.data - data, 0):encbranch(0, 0, 0);
     if (!t->cg.data)
         add_fix_list(ind, t, 0);
