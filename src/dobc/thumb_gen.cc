@@ -872,6 +872,23 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
             if (istemp(p->output) ) {
                 if ((pi0a(p) == azr) && pi1(p)->is_constant()) {
                     imm = pi1(p)->get_val();
+                    /*
+
+                mov.eq r1, xxxx 转换以后
+
+                    t0 = INT_NOTEQUAL zr, 0
+                    t1 = BOOL_NEGATE t0
+                    cbranch true_label t1
+         false_label:
+
+
+          true_label: 
+
+                    这个是ne
+
+
+                    warn: sleigh在转it指令时，mov.后面的条件，走的是false的分支，为真的条件实际上是相反的。
+                    */
                     if (!imm && (p1->opcode == CPUI_BOOL_NEGATE) && (p2->opcode == CPUI_CBRANCH)) {
                         write_cbranch(b, ((p->opcode == CPUI_INT_NOTEQUAL)?COND_NE:COND_EQ));
                         advance(it, 2);
@@ -882,7 +899,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     }
                 }
                 else if (pi0a(p) == ang && pi1a(p) == aov && p1->opcode == CPUI_BOOL_NEGATE && p2->opcode == CPUI_CBRANCH) {
-                    write_cbranch(b, COND_LT);
+                    write_cbranch(b, COND_GE);
                     advance(it, 2);
                 }
             }
