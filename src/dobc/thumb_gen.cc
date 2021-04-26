@@ -474,6 +474,14 @@ void thumb_gen::_sub_sp_imm(int imm)
         o(stuff_const(0xf1ad0000 | (SP << 8), imm));
 }
 
+void _sub_reg(int rd, int rn, int rm, SRType shtype, int sh)
+{
+    if (!sh && rd < 8 && rn < 8 && rm < 8)
+        o(0x1a00 | (rm << 6) | (rn << 3) | rd);
+    else
+        o(0xeba00000 | (rn << 16) | (rd << 8) | rm | (shtype << 4) | ((sh & 3) << 6) | (sh >> 2 << 12));
+}
+
 void _cmp_reg(int rn, int rm)
 {
     if (rn < 8 && rm < 8)
@@ -683,124 +691,6 @@ pit thumb_gen::g_vstl(flowblock *b, pit pit)
 pit thumb_gen::g_vpop(flowblock *b, pit pit)
 {
     return retrieve_orig_inst(b, pit, 1);
-}
-
-pit thumb_gen::g_push(flowblock *b, pit pit)
-{
-    int reglist = 0;
-
-    pcodeop *p = *pit, *p1;
-
-    if ((p->opcode == CPUI_COPY) && pi0a(p) == asp) 
-        p = *++pit;
-
-    while (p->output->get_addr() != d->sp_addr) {
-        p = *pit++;
-        p1 = *pit++;
-        if ((p->opcode == CPUI_INT_SUB) && (p1->opcode == CPUI_STORE) && (pi1a(p1) == ama)) {
-            reglist |= 1 << reg2i(pi2a(p1));
-        }
-        else throw LowlevelError("not support");
-
-        p = *pit;
-    }
-
-    if ((poa(p) == asp) && (pi0a(p) == ama)) {
-        if ((p->opcode == CPUI_COPY)
-            /* FIXME: rn = rm + 0 == > rn = copy rm*/
-            || ((p->opcode == CPUI_INT_ADD) && pi1(p)->is_constant())
-            || ((p->opcode == CPUI_INT_SUB) && pi1(p)->is_constant())) {
-            /* NOTE:
-            所有的push {reglist} 指令，在转成pcode以后，末尾对sp的操作都是等于copy的，一般有以下几种形式:
-
-            1. sp = COPY mult_addr
-            2. mult_addr = INT_SUB mult_addr, 4:4 
-               sp = INT_ADD mult_addr, 4:4
-
-            第2种情况，可以合并成 sp = copy multi_addr，大家认真看，上面的 -4 和 +4 可以合并掉
-
-            所以我们在把pcode转回push时，一般搜索到store的后一条指令为止，也就是 sp = copy multi_addr为止，
-            但是可能出现这样一种情况
-
-            1. sp = copy multi_addr
-            2  sp = add sp, 4
-
-            在某些情况下指令1， 2 合并成了 sp = add multi_addr, 4
-
-            针对这种情况，当我们发现store的最后一条指令不是等价的sp = copy multi_addr时，要退回pit指针
-            */
-            if ((p->opcode != CPUI_COPY) && pi1(p)->get_val())
-                pit--;
-            _push(reglist);
-        }
-    }
-
-    return pit;
-}
-
-pit thumb_gen::g_pop(flowblock *b, pit pit)
-{
-    int reglist = 0;
-    pcodeop *p = *pit, *p1;
-
-    p = *pit++;
-    p1 = *pit++;
-    reglist |= 1 << reg2i(poa(p1));
-
-    while (1) {
-        p = *pit++;
-        p1 = *pit++;
-        if ((p->opcode == CPUI_INT_ADD) && (p1->opcode == CPUI_LOAD)) {
-            reglist |= 1 << reg2i(poa(p1));
-        }
-        else
-            break;
-    }
-
-    if ((p1->opcode == CPUI_COPY)) {
-        _pop(reglist);
-
-        if ((reglist & (1 << PC))) {
-            if ((*pit++)->opcode != CPUI_INT_AND
-                || (*pit)->opcode != CPUI_RETURN)
-                vm_error("pop need pc operation ");
-        }
-
-        return pit;
-    }
-    vm_error("pop meet error pcode, %d", p->start.getTime());
-    return pit;
-}
-
-pit thumb_gen::g_vpush(flowblock *b, pit pit)
-{
-    pcodeop *p = *pit, *p1;
-    uint32_t reglist = 0, size = 0, dsize = 0, single = 0, x;
-
-    assert(p->opcode == CPUI_INT_SUB);
-    size = p->get_in(1)->get_val();
-    p = *++pit;
-
-    while (poa(p) == ama) {
-        p = *pit++;
-        p1 = *pit++;
-        if (((p->opcode == CPUI_INT_ADD) || (p->opcode == CPUI_COPY)) && (p1->opcode == CPUI_STORE) && (pi1a(p1) == ama)) {
-            single = p1->get_in(2)->get_size() == 4;
-            dsize += p1->get_in(2)->get_size();
-            x = d->vreg2i(pi2a(p1));
-            if (single) reglist |= 1 << x;
-            else 
-                reglist |= (1 << x) + (1 << (x + 1));
-        }
-        else throw LowlevelError("not support");
-
-        p = *pit;
-    }
-
-    _sub_sp_imm(size - dsize);
-    _vpush(single, reglist);
-
-    return pit;
 }
 
 void thumb_gen::topologsort()
@@ -1042,10 +932,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                             advance(it, 2);
                         }
 
-                        if (setflags && rn < 8 && rm < 8 && rd < 8)
-                            o(0x1a00 | rd | (rn << 3) || (rm << 6));
-                        else
-                            o(0xeba00000 | rm | (rd << 8) | (rn << 16) || (setflags << 20));
+                        _sub_reg(rd, rn, rm, SRType_LSL, 0);
                     }
                     /* sub sp, sp, c 
                     A8.8.225.T1
@@ -1423,3 +1310,122 @@ int thumb_gen::save_to_end(uint32_t imm)
 
     return end;
 }
+
+pit thumb_gen::g_push(flowblock *b, pit pit)
+{
+    int reglist = 0;
+
+    pcodeop *p = *pit, *p1;
+
+    if ((p->opcode == CPUI_COPY) && pi0a(p) == asp) 
+        p = *++pit;
+
+    while (p->output->get_addr() != d->sp_addr) {
+        p = *pit++;
+        p1 = *pit++;
+        if ((p->opcode == CPUI_INT_SUB) && (p1->opcode == CPUI_STORE) && (pi1a(p1) == ama)) {
+            reglist |= 1 << reg2i(pi2a(p1));
+        }
+        else throw LowlevelError("not support");
+
+        p = *pit;
+    }
+
+    if ((poa(p) == asp) && (pi0a(p) == ama)) {
+        if ((p->opcode == CPUI_COPY)
+            /* FIXME: rn = rm + 0 == > rn = copy rm*/
+            || ((p->opcode == CPUI_INT_ADD) && pi1(p)->is_constant())
+            || ((p->opcode == CPUI_INT_SUB) && pi1(p)->is_constant())) {
+            /* NOTE:
+            所有的push {reglist} 指令，在转成pcode以后，末尾对sp的操作都是等于copy的，一般有以下几种形式:
+
+            1. sp = COPY mult_addr
+            2. mult_addr = INT_SUB mult_addr, 4:4 
+               sp = INT_ADD mult_addr, 4:4
+
+            第2种情况，可以合并成 sp = copy multi_addr，大家认真看，上面的 -4 和 +4 可以合并掉
+
+            所以我们在把pcode转回push时，一般搜索到store的后一条指令为止，也就是 sp = copy multi_addr为止，
+            但是可能出现这样一种情况
+
+            1. sp = copy multi_addr
+            2  sp = add sp, 4
+
+            在某些情况下指令1， 2 合并成了 sp = add multi_addr, 4
+
+            针对这种情况，当我们发现store的最后一条指令不是等价的sp = copy multi_addr时，要退回pit指针
+            */
+            if ((p->opcode != CPUI_COPY) && pi1(p)->get_val())
+                pit--;
+            _push(reglist);
+        }
+    }
+
+    return pit;
+}
+
+pit thumb_gen::g_pop(flowblock *b, pit pit)
+{
+    int reglist = 0;
+    pcodeop *p = *pit, *p1;
+
+    p = *pit++;
+    p1 = *pit++;
+    reglist |= 1 << reg2i(poa(p1));
+
+    while (1) {
+        p = *pit++;
+        p1 = *pit++;
+        if ((p->opcode == CPUI_INT_ADD) && (p1->opcode == CPUI_LOAD)) {
+            reglist |= 1 << reg2i(poa(p1));
+        }
+        else
+            break;
+    }
+
+    if ((p1->opcode == CPUI_COPY)) {
+        _pop(reglist);
+
+        if ((reglist & (1 << PC))) {
+            if ((*pit++)->opcode != CPUI_INT_AND
+                || (*pit)->opcode != CPUI_RETURN)
+                vm_error("pop need pc operation ");
+        }
+
+        return pit;
+    }
+    vm_error("pop meet error pcode, %d", p->start.getTime());
+    return pit;
+}
+
+pit thumb_gen::g_vpush(flowblock *b, pit pit)
+{
+    pcodeop *p = *pit, *p1;
+    uint32_t reglist = 0, size = 0, dsize = 0, single = 0, x;
+
+    assert(p->opcode == CPUI_INT_SUB);
+    size = p->get_in(1)->get_val();
+    p = *++pit;
+
+    while (poa(p) == ama) {
+        p = *pit++;
+        p1 = *pit++;
+        if (((p->opcode == CPUI_INT_ADD) || (p->opcode == CPUI_COPY)) && (p1->opcode == CPUI_STORE) && (pi1a(p1) == ama)) {
+            single = p1->get_in(2)->get_size() == 4;
+            dsize += p1->get_in(2)->get_size();
+            x = d->vreg2i(pi2a(p1));
+            if (single) reglist |= 1 << x;
+            else 
+                reglist |= (1 << x) + (1 << (x + 1));
+        }
+        else throw LowlevelError("not support");
+
+        p = *pit;
+    }
+
+    _sub_sp_imm(size - dsize);
+    _vpush(single, reglist);
+
+    return pit;
+}
+
