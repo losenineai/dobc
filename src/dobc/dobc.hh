@@ -19,12 +19,12 @@ typedef struct func_call_specs  func_call_specs;
 typedef map<Address, vector<varnode *> > variable_stack;
 typedef map<Address, int> version_map;
 typedef struct cover		cover;
-typedef struct valuetype    valuetype;
 typedef struct coverblock	coverblock;
 typedef struct ollvmhead    ollvmhead;
 
 class pcodeop;
 class dobc;
+class valuetype;
 
 #define pi0(p)              p->get_in(0)
 #define pi1(p)              p->get_in(1)
@@ -74,18 +74,21 @@ enum height {
     3. sp.rel_const op sp.rel_const = sp.rel_const      (这种情况起始非常少见，)
     4. sp.rel_const op rN.rel_const (top)   (不同地址的相对常量不能参与互相运算)
     */ 
-    a_rel_constant,
+    a_sp_constant,
+    /* 当某个数和pc寄存器相加的时候，这个值就是pc_constant */
+    a_pc_constant,
     a_bottom,
 
     /* */
 };
 
-struct valuetype {
+class valuetype {
+public:
     enum height height = a_top;
     intb v = 0;
-    Address rel;
 
     int cmp(const valuetype &b) const;
+    valuetype &operator=(const valuetype &op2);
     bool operator<(const valuetype &b) const { return cmp(b) < 0; }
     bool operator==(const valuetype &b) { return cmp(b) == 0;  }
     bool operator!=(const valuetype &b) { return !operator==(b); }
@@ -222,13 +225,14 @@ public:
     bool            is_constant(void) const { return type.height == a_constant; }
     bool            is_hard_constant(void) const { return (type.height == a_constant) && get_addr().isConstant(); }
     bool            in_constant_space() { return get_addr().isConstant(); }
+    bool            is_pc_constant() { return type.height == a_pc_constant;  }
     void            set_val(intb v) { type.height = a_constant;  type.v = v; }
     void            set_top() { type.height = a_top;  }
-    bool            is_rel_constant(void) { return type.height == a_rel_constant; }
+    bool            is_sp_constant(void) { return type.height == a_sp_constant; }
     bool            is_input(void) { return flags.input; }
-    void            set_rel_constant(Address &r, int v) { type.height = a_rel_constant; type.v = v;  type.rel = r; }
+    void            set_sp_constant(int v) { type.height = a_sp_constant; type.v = v;  }
+    void            set_pc_constant(intb v) { type.height = a_pc_constant; type.v = v; }
     intb            get_val(void) const;
-    Address         &get_rel(void) { return type.rel; }
 
     void            add_use(pcodeop *op);
     void            del_use(pcodeop *op);
@@ -1268,7 +1272,7 @@ public:
     */
     void        compute_sp(void);
     bool        is_code(varnode *v, varnode *v1);
-    bool        is_sp_rel_constant(varnode *v);
+    bool        is_sp_constant(varnode *v);
 
     void        set_safezone(intb addr, int size);
     bool        in_safezone(intb addr, int size);

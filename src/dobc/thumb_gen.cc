@@ -1037,6 +1037,15 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                         advance(it, 2);
                     }
                     break;
+
+                case CPUI_INT_ADD:
+                    if (pi0(p)->flags.from_pc && isreg(p1->output)) {
+                        rd = reg2i(poa(p1));
+                        imm = p1->output->get_val();
+                        _mov_imm(rd, imm - (ind + 4 * (stuff_const(0, imm) ? 1:2)) - 4);
+                        _add_reg(rd, rd, PC, SRType_LSL, 0);
+                    }
+                    break;
                 }
             }
             else if ((pi0a(p) == asp) && pi1(p)->is_constant()) {

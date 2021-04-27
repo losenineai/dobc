@@ -62,12 +62,15 @@ int print_vartype(Translate *trans, char *buf, varnode *data)
         else 
             return sprintf(buf, "%x", (u4)data->type.v);
     }
-    else if (data->type.height == a_rel_constant) {
-        Address &addr = data->get_rel();
-        string name = trans->getRegisterName(addr.getSpace(), addr.getOffset(), data->size);
+    else if (data->type.height == a_sp_constant) {
+        string name = "sp";
+        Address &addr = trans->getRegister(name).getAddr();
         name = g_dobc->get_abbrev(name);
 
         return sprintf(buf, "%c%s%c%llx", addr.getShortcut(), name.c_str(), data->type.v > 0 ? '+':'-', abs(data->type.v));
+    }
+    else if (data->type.height == a_pc_constant) {
+        return sprintf(buf, "z%c%llx", data->type.v > 0 ? '+':'-', abs(data->type.v));
     }
     else 
         return sprintf(buf, "T");
@@ -181,14 +184,16 @@ void pcodeemit2::dump(const Address &addr, OpCode opc, VarnodeData *outvar, Varn
     }
 
     for (; i < isize; i++) {
+        /* 任何有pc寄存器参与的运算，所有的值转换为ram constant*/
         vn = fd->new_varnode(vars[i].size, vars[i].space, vars[i].offset);
         fd->op_set_input(op, vn, i);
 
         if (!simd && d->is_vreg(vn->get_addr()))
             simd = 1;
-
-        if (vn->is_constant() && vn->get_val() == addr.getOffset())
+        if (vn->is_constant() && vn->get_offset() == addr.getOffset()) {
+            vn->set_pc_constant(vn->get_offset());
             vn->flags.from_pc = 1;
+        }
     }
 
     if (prevp && (prevp->get_addr() == addr)) {
@@ -243,17 +248,18 @@ int valuetype::cmp(const valuetype &b) const
         */
         if (height == a_top) return 1;
 
-        if (height == a_constant)
-            return v - b.v;
-
-        if (height == a_rel_constant) {
-            if (rel == b.rel) return v - b.v;
-
-            assert(0);
-        }
+        return v - b.v;
     }
 
     return height - b.height;
+}
+
+valuetype &valuetype::operator=(const valuetype &op2)
+{
+    height = op2.height;
+    v = op2.v;
+
+    return *this;
 }
 
 int         dobc::func_is_thumb(int offset)
@@ -410,7 +416,7 @@ void    funcdata::vmp360_marker(pcodeop *p)
     if (p->opcode == CPUI_LOAD) {
         varnode *in1 = p->get_in(1);
 
-        if ((in1->type.height == a_rel_constant) && (in1->get_val() == vmeip)) {
+        if ((in1->type.height == a_sp_constant) && (in1->get_val() == vmeip)) {
             p->flags.vm_eip = 1;
         }
     }
@@ -419,7 +425,7 @@ void    funcdata::vmp360_marker(pcodeop *p)
         varnode *in2 = p->get_in(2);
 
         /* 加入跟新 VMEIP 指针的值不是常量直接报错 */
-        if ((in1->type.height == a_rel_constant) && (in1->get_val() == vmeip)) {
+        if ((in1->type.height == a_sp_constant) && (in1->get_val() == vmeip)) {
             p->flags.vm_eip = 1;
             if (!p->flags.vm_vis && (in2->type.height == a_constant)) {
                 //printf("addr = %llx, p%d, store VMEIP = %lld\n", p->get_dis_addr().getOffset(), p->start.getTime(), in2->get_val());
@@ -1170,10 +1176,10 @@ bool            pcodeop::in_sp_alloc_range(varnode *pos)
     varnode *in0 = get_in(0);
     varnode *in1 = get_in(1);
 
-    if (output && output->is_rel_constant()
-        && in0->is_rel_constant()
+    if (output && output->is_sp_constant()
+        && in0->is_sp_constant()
         && in1->is_constant()
-        && pos->is_rel_constant()
+        && pos->is_sp_constant()
         && (-pos->get_val() > -in0->get_val()) 
         && (-pos->get_val() <= -output->get_val())) {
         return true;
@@ -1328,7 +1334,7 @@ int				pcodeop::compute_add_sub()
 		当前r0, r1位置的寄存器相等时，需要判断ma的范围
 		*/
 		while (
-			_in0->is_rel_constant()
+			_in0->is_sp_constant()
             && !op->flags.simd  // simd的指令不要参与这些peephole的变形，会导致代码生成时，生成错误代码
 			&& (in0->uses.size() == 1) && _in1->is_constant() 
 			&& ((op->output->get_addr() == _in0->get_addr()) || _in0->in_liverange_simple(this))) {
@@ -1363,9 +1369,9 @@ int				pcodeop::compute_add_sub()
 	}
 
 	if (opcode == CPUI_INT_ADD)
-		out->set_rel_constant(in0->get_rel(), in0->type.v + in1->type.v);
+		out->set_sp_constant(in0->type.v + in1->type.v);
 	else
-		out->set_rel_constant(in0->get_rel(), in0->type.v - in1->type.v);
+		out->set_sp_constant(in0->type.v - in1->type.v);
 
 	return 0;
 }
@@ -1402,24 +1408,24 @@ int             pcodeop::compute(int inslot, flowblock **branch)
 
             out->set_val(in0->get_val());
         }
-        else if (fd->is_sp_rel_constant(in0)) {
-            out->set_rel_constant(in0->get_rel(), in0->get_val());
+        else if (fd->is_sp_constant(in0)) {
+            out->set_sp_constant(in0->get_val());
 
-            /* 识别这种特殊形式 
-            
+            /* 识别这种特殊形式
+
             sp = ma + 4;
 
             ma = sp
 
-            转换成 
+            转换成
             ma = ma + 4;
 
             不处理load是怕会影响别名分析
             */
             op = in0->def;
             if (!is_trace()
-                && (in0->uses.size() == 1) 
-                && !in0->flags.input 
+                && (in0->uses.size() == 1)
+                && !in0->flags.input
                 && (op->opcode == CPUI_INT_ADD)) {
                 _in0 = op->get_in(0);
                 _in1 = op->get_in(1);
@@ -1439,7 +1445,7 @@ int             pcodeop::compute(int inslot, flowblock **branch)
             }
         }
         else
-            out->type.height = in0->type.height;
+            out->type = in0->type;
 
         break;
 
@@ -1692,11 +1698,15 @@ int             pcodeop::compute(int inslot, flowblock **branch)
             else 
                 out->set_val(in0->type.v + in1->type.v);
         }
-        else if (fd->is_sp_rel_constant(in0) && in1->is_constant()) {
+        else if ((in0->is_pc_constant() && in1->is_constant())
+            || (in0->is_constant() && in1->is_pc_constant())) {
+            out->set_pc_constant(in0->get_val() + in1->get_val());
+        }
+        else if (fd->is_sp_constant(in0) && in1->is_constant()) {
 			compute_add_sub();
         }
-        else if (in0->is_constant() && fd->is_sp_rel_constant(in1)) {
-            out->set_rel_constant(in1->get_rel(), in0->type.v + in1->type.v);
+        else if (in0->is_constant() && fd->is_sp_constant(in1)) {
+            out->set_sp_constant(in0->type.v + in1->type.v);
         }
         else
             out->type.height = a_top;
@@ -1717,9 +1727,8 @@ int             pcodeop::compute(int inslot, flowblock **branch)
         }
         /*      out                             0                   1       */
         /* 0:(register,mult_addr,4) = INT_SUB (register,sp,4) (const,0x4,4) */
-        else if (fd->is_sp_rel_constant(in0) && in1->is_constant()) {
+        else if (fd->is_sp_constant(in0) && in1->is_constant()) {
 			compute_add_sub();
-            //out->set_rel_constant(in0->get_rel(), in0->type.v - in1->type.v);
         }
         else
             out->type.height = a_top;
@@ -1822,8 +1831,8 @@ int             pcodeop::compute(int inslot, flowblock **branch)
         /* (sp - even) & 0xfffffffe == sp - even
         因为sp一定是偶数，减一个偶数，也一定还是偶数，所以他和 0xfffffffe 相与值不变
         */
-        else if (in0->is_rel_constant() && in1->is_constant() && (in1->get_val() == 0xfffffffffffffffe)) {
-            out->set_rel_constant(in0->get_rel(), in0->get_val());
+        else if (in0->is_sp_constant() && in1->is_constant() && (in1->get_val() == 0xfffffffffffffffe)) {
+            out->set_sp_constant(in0->get_val());
         }
         /* 相与时，任意一个数为0，则为0 */
         else if ((in0->is_constant() && (in0->get_val() == 0)) || (in1->is_constant() && (in1->get_val() == 0))) {
@@ -1985,8 +1994,10 @@ void            pcodeop::to_constant1(void)
         /* 
         1. 当有output节点，且output节点为常量时，运行进行常量持久化 
         2. opcode不能为copy，因为常量持久化就是把常量节点，改成copy操作 
-        3. opcode不能为store，因为store有副作用，它的use也不是特别好计算 */
-        if (output && output->is_constant() && (opcode != CPUI_COPY) && (opcode != CPUI_STORE)) {
+        3. opcode可以为copy，除非是操作ramspace的节点，这个时候它实际上上有一个load的行为在里面
+        4. opcode不能为store，因为store有副作用，它的use也不是特别好计算 
+        */
+        if (output && output->is_constant() && (opcode != CPUI_COPY || get_in(0)->get_addr().getSpace() == fd->d->ram_spc) && (opcode != CPUI_STORE)) {
             /* phi节点转成 copy指令时，需要记录下这个copy节点来自于phi节点，在删除phi节点时，假如有需要可以删除这个copy  */
             if (opcode == CPUI_MULTIEQUAL) flags.copy_from_phi = 1;
             while (num_input() > 0) 
@@ -3054,7 +3065,7 @@ void        funcdata::remove_calculated_loop(flowblock *lheader)
         vn = p->output;
         if (!vn) continue;
         if (vn->is_constant()) p->to_constant();
-        if (vn->is_rel_constant()) p->to_rel_constant();
+        if (vn->is_sp_constant()) p->to_rel_constant();
     }
 
     structure_reset();
@@ -3396,7 +3407,7 @@ bool        funcdata::vmp360_detect_vmeip()
         def = op->get_in(i)->def;
         if (def->opcode != CPUI_LOAD) continue;
         pos = def->get_in(1);
-        if (pos->type.height == a_rel_constant) {
+        if (pos->type.height == a_sp_constant) {
             print_varnode(d->trans, buf, pos);
 
             printf("****found VMEIP [%s]\n", buf);
@@ -5332,6 +5343,9 @@ varnode*    funcdata::clone_varnode(const varnode *vn)
     newvn->flags.annotation = vn->flags.annotation;
     newvn->flags.readonly = vn->flags.readonly;
     newvn->flags.virtualnode = vn->flags.virtualnode;
+    newvn->flags.from_pc = vn->flags.from_pc;
+    if (newvn->flags.from_pc)
+        newvn->type = vn->type;
 
     return newvn;
 }
@@ -5381,7 +5395,7 @@ varnode*    funcdata::set_input_varnode(varnode *vn)
         vn->type = v1->type;
     }
     else if (vn->get_addr() == d->sp_addr) {
-        vn->set_rel_constant(d->sp_addr, 0);
+        vn->set_sp_constant(0);
     }
 
     vn->flags.input = 1;
@@ -6616,47 +6630,6 @@ bool        funcdata::have_side_effect(pcodeop *op, varnode *pos)
     if (!op->is_call()) return false;
 
     dobc *d = op->parent->fd->d;
-
-#if 0
-    if (fd->name == "memcpy") {
-        varnode *in0 = op->get_in(d->r0_addr);
-        varnode *in2 = op->get_in(d->r2_addr);
-
-        //printf("op.id = %d, is_rel_const=%d, val.0=%lld, val.2=%lld, pos.val = %lld\n", op->start.getTime(), in0->is_rel_constant(), in0->get_val(), in2->get_val(), pos->get_val());
-        if (in0->is_rel_constant() && in2->is_constant()) {
-            /*
-            假如:
-
-            1. pos的位置，刚好在memcpy计算的区域外
-            2. pos的位置+长度，刚好小于memcpy的dst起点之前
-
-            则认为没有副作用
-            */
-            if ((pos->get_val() >= (in0->get_val() + in2->get_val())) || ((pos->get_val() + pos->size) < in0->get_val())) {
-                return false;
-            }
-        }
-    }
-    else if (fd->name == "dec_str") {
-        varnode *in0 = op->get_in(d->r0_addr);
-        varnode *in2 = op->get_in(d->r1_addr);
-
-        //printf("op.id = %d, is_rel_const=%d, val.0=%lld, val.2=%lld, pos.val = %lld\n", op->start.getTime(), in0->is_rel_constant(), in0->get_val(), in2->get_val(), pos->get_val());
-        if (in0->is_rel_constant() && in2->is_constant()) {
-            /*
-            假如:
-
-            1. pos的位置，刚好在memcpy计算的区域外
-            2. pos的位置+长度，刚好小于memcpy的dst起点之前
-
-            则认为没有副作用
-            */
-            if ((pos->get_val() >= (in0->get_val() + in2->get_val())) || ((pos->get_val() + pos->size) < in0->get_val())) {
-                return false;
-            }
-        }
-    }
-#endif
 
 #if 1
     if (in_safezone(pos->get_val(), pos->size) && (!d->test_cond_inline || !d->test_cond_inline(d, op->get_call_offset())))
