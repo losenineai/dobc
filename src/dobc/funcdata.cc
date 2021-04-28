@@ -334,6 +334,7 @@ void        funcdata::place_multiequal(void)
         max = collect(addr, size, readvars, writevars, inputvars, equal);
         /* FIXME:Ghidra这里的判断和我差别很大，后期必须得重新调试，深入分析下Ghidra逻辑 */
         if (!equal) {
+#if 1
             if (refinement(addr, max, readvars, writevars, inputvars)) {
                 iter = disjoint.find(addr);
                 size = (*iter).second.size;
@@ -342,6 +343,7 @@ void        funcdata::place_multiequal(void)
                 inputvars.clear();
                 collect(addr, size, readvars, writevars, inputvars, equal);
             }
+#endif
         }
 
         /* uniq变量，不出口活跃 */

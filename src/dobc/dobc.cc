@@ -390,9 +390,9 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 void dobc::plugin_ollvm()
 {
 #if 0
-    funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
+    /funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
-    //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
+    funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
 #else
     funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
 #endif
@@ -3464,6 +3464,8 @@ int         funcdata::ollvm_deshell()
     heritage();
     dump_cfg(name, "orig", 1);
 
+    return 0;
+
     ollvm_detect_frameworkinfo();
 
     h = ollvm_get_head();
@@ -4240,8 +4242,40 @@ the a-DF graph.
     }
 }
 
-/* FIXME:似乎是一个pcode产生了跳转，但是这个跳转发生在归属instruction中
-但是看名字，它又是像一个相对跳转 */
+/*
+某些指令会生成内部跳转指令，比如
+        0002565e 63 f9 0f 28     vld2.8     {d18,d19},[param_4]
+                                                        $U25e0:4 = COPY 1:4
+                                                        mult_addr = COPY r3
+                                                        $U25e0:4 = COPY 1:4
+                                                        $U3780:4 = COPY 0x390:4
+                                                        $U3790:4 = INT_MULT 1:4, 8:4
+                                                        $U37b0:4 = INT_ADD 0x390:4, $U3790:4
+                                                        mult_dat8 = COPY 8:8
+                                                      <1>
+                                                        $U37c0:1 = LOAD ram(mult_addr)
+                                                        STORE register($U3780:4), $U37c0:1
+                                                        mult_addr = INT_ADD mult_addr, 1:4
+                                                        $U37e0:1 = LOAD ram(mult_addr)
+                                                        STORE register($U37b0:4), $U37e0:1
+                                                        mult_addr = INT_ADD mult_addr, 1:4
+                                                        mult_dat8 = INT_SUB mult_dat8, 1:8
+                                                        $U3810:1 = INT_EQUAL mult_dat8, 0:8
+                                                        CBRANCH <0>, $U3810:1
+                                                        $U3780:4 = INT_ADD $U3780:4, 1:4
+                                                        $U37b0:4 = INT_ADD $U37b0:4, 1:4
+                                                        BRANCH <1>
+                                                      <0>
+                                                        $U25e0:4 = COPY 1:4
+                                                        $U39f0:4 = COPY 2:4
+
+里面的cbranch实际上都在指令里面跳,这个时候它的in[0]，实际上是一个相对于当前位置的常数，上图的似乎被修正过了，
+实际上是这样:
+
+pcode27:    cbranch 4, 0
+
+那么pcode27实际上跳往的地址是pcode31
+*/
 pcodeop*    funcdata::find_rel_target(pcodeop *op, Address &res) const
 {
     const Address &addr(op->get_in(0)->get_addr());
@@ -4249,7 +4283,7 @@ pcodeop*    funcdata::find_rel_target(pcodeop *op, Address &res) const
     SeqNum seqnum(op->start.getAddr(), id);
     pcodeop *retop = find_op(seqnum);
     if (retop)
-        return op;
+        return retop;
 
     SeqNum seqnum1(op->get_addr(), id - 1);
     retop = find_op(seqnum1);
@@ -4526,7 +4560,7 @@ bool        funcdata::process_instruction(const Address &curaddr, bool &startbas
         emitter.exit_itblock();
     }
 
-    //if (flags.dump_inst)
+    if (flags.dump_inst)
         d->trans->printAssembly(assem, curaddr);
 
     step = d->trans->oneInstruction(emitter, curaddr);
