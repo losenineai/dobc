@@ -963,7 +963,6 @@ public:
         long uniqbase = 0;
         int uniqid = 0;
         int create_index = 0;
-        struct dynarray all = { 0 };
     } vbank;
 
     varnode_loc_set     loc_tree;

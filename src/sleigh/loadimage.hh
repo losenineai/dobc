@@ -37,14 +37,13 @@ struct LoadImageFunc {
   Address address;	///< Start of function
   string name;		///< Name of function
   int size;
-  /* 内部的elf内存指针 */
   unsigned char *bufptr;
 };
 
 /// \brief A record describing a section bytes in the executable
 ///
 /// A lightweight object specifying the location and size of the section and basic properties
-struct LoadImageBSection {
+struct LoadImageSection {
   /// Boolean properties a section might have
   enum {
     unalloc = 1,		///< Not allocated in memory (debug info)
@@ -84,7 +83,7 @@ public:
   virtual bool getNextSymbol(LoadImageFunc &record) const; ///< Get the next symbol record
   virtual void openSectionInfo(void) const; ///< Prepare to read section info
   virtual void closeSectionInfo(void) const; ///< Stop reading section info
-  virtual bool getNextSection(LoadImageBSection &sec) const; ///< Get info on the next section
+  virtual bool getNextSection(LoadImageSection &sec) const; ///< Get info on the next section
   virtual void getReadonly(RangeList &list) const; ///< Return list of \e readonly address ranges
   virtual string getArchType(void) const=0; ///< Get a string indicating the architecture type
   virtual void adjustVma(long adjust)=0; ///< Adjust load addresses with a global offset
@@ -102,10 +101,10 @@ class RawLoadImage : public LoadImageB {
   uintb filesize;		///< Total number of bytes in the loadimage/file
   AddrSpace *spaceid;		///< Address space that the file bytes are mapped to
 public:
-  RawLoadImage(const string &f); ///< RawLoadImageB constructor
+  RawLoadImage(const string &f); ///< RawLoadImage constructor
   void attachToSpace(AddrSpace *id) { spaceid = id; }	///< Attach the raw image to a particular space
   void open(void);					///< Open the raw file for reading
-  virtual ~RawLoadImage(void);				///< RawLoadImageB destructor
+  virtual ~RawLoadImage(void);				///< RawLoadImage destructor
   virtual int loadFill(uint1 *ptr,int4 size,const Address &addr);
   virtual string getArchType(void) const;
   virtual void adjustVma(long adjust);
@@ -144,7 +143,7 @@ inline void LoadImageB::closeSymbols(void) const {
 }
 
 /// This method is used to read out an individual symbol record,
-/// LoadImageBFunc, from the load image.  Right now, the only
+/// LoadImageFunc, from the load image.  Right now, the only
 /// information that can be read out are function starts and the
 /// associated function name.  This method can be called repeatedly
 /// to iterate through all the symbols, until it returns \b false.
@@ -174,7 +173,7 @@ inline void LoadImageB::closeSectionInfo(void) const {
 /// to get info on additional sections.
 /// \param record is a reference to the info record to be filled in
 /// \return \b true if there are more records to read
-inline bool LoadImageB::getNextSection(LoadImageBSection &record) const {
+inline bool LoadImageB::getNextSection(LoadImageSection &record) const {
   return false;
 }
 
@@ -187,7 +186,7 @@ inline bool LoadImageB::getNextSection(LoadImageBSection &record) const {
 inline void LoadImageB::getReadonly(RangeList &list) const {
 }
 
-/// \fn void LoadImage::adjustVma(long adjust)
+/// \fn void LoadImageB::adjustVma(long adjust)
 /// Most load image formats automatically encode information
 /// about the true loading address(es) for the data in the image.
 /// But if this is missing or incorrect, this routine can be

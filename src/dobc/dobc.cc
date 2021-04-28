@@ -311,7 +311,7 @@ struct pltentry {
 funcdata *dobc::add_func(const Address &a)
 {
     char buf[128];
-    funcdata *fd;
+    funcdata *fd = NULL;
     if ((fd = find_func(a))) return fd;
 
     if (a.getSpace() == ram_spc) {
@@ -319,10 +319,13 @@ funcdata *dobc::add_func(const Address &a)
 
         sprintf(buf, "sub_%llx", a.getOffset());
         fd = new funcdata(buf, addr, 0, this);
-        return fd;
+    }
+    else if (a.getSpace() == trans->getDefaultCodeSpace()) {
+        sprintf(buf, "sub_%llx", a.getOffset());
+        fd = new funcdata(buf, a, 0, this);
     }
 
-    return NULL;
+    return fd;
 }
 
 void dobc::init_plt()
@@ -386,10 +389,13 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 
 void dobc::plugin_ollvm()
 {
-    //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
+#if 0
+    funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
-    funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
-    //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x2f5d));
+    //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
+#else
+    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
+#endif
     fd_main->ollvm_deshell();
     loader->saveFile("test.so");
 }
@@ -1053,7 +1059,7 @@ pcodeop::pcodeop(int s, const SeqNum &sq)
     parent = 0;
 
     output = 0;
-    opcode = CPUI_NULL;
+    opcode = CPUI_MAX;
 }
 pcodeop::~pcodeop()
 {
@@ -1061,7 +1067,7 @@ pcodeop::~pcodeop()
 
 void    pcodeop::set_opcode(OpCode op)
 {
-    if (opcode != CPUI_NULL)
+    if (opcode != CPUI_MAX)
         flags.changed = 1;
 
     opcode = op;
@@ -4520,7 +4526,7 @@ bool        funcdata::process_instruction(const Address &curaddr, bool &startbas
         emitter.exit_itblock();
     }
 
-    if (flags.dump_inst)
+    //if (flags.dump_inst)
         d->trans->printAssembly(assem, curaddr);
 
     step = d->trans->oneInstruction(emitter, curaddr);

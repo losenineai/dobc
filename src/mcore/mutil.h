@@ -19,6 +19,8 @@ extern "C" {
 # define PATHSEP ":"
 #endif
 
+#define count_of_array(a)       (sizeof (a) / sizeof (a[0]))
+
 /* 使用这个函数时自己注意obuf的大小，是前面的len * 2 + 1，因为要加0 */
 unsigned char *hex2str(unsigned char *hex, int len, unsigned char *obuf);
 

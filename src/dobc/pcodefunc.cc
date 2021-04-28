@@ -2,8 +2,6 @@
 #include "sleigh.hh"
 #include "pcodefunc.hh"
 
-#define count_of_array(a)       (sizeof(a) / sizeof (a[0]))
-
 pcodefunc::pcodefunc(funcdata *f)
 {
     fd = f;

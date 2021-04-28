@@ -308,9 +308,9 @@ bool        funcdata::is_code(varnode *v0, varnode *v1)
     return false;
 }
 
-bool        funcdata::is_sp_rel_constant(varnode *v)
+bool        funcdata::is_sp_constant(varnode *v)
 {
-    return v->is_rel_constant() && (v->get_rel() == d->sp_addr);
+    return v->is_sp_constant();
 }
 
 void        funcdata::place_multiequal(void)
@@ -452,7 +452,8 @@ void        funcdata::rename_recurse(blockbasic *bl, variable_stack &varstack, v
 
                 vector<varnode *> &stack(varstack[vnin->get_addr()]);
                 if (stack.empty()) {
-                    vnnew = new_varnode(vnin->size, vnin->get_addr());
+                    //vnnew = new_varnode(vnin->size, vnin->get_addr());
+                    vnnew = clone_varnode(vnin);
                     vnnew = set_input_varnode(vnnew);
                     vnnew->version = vermap[vnin->get_addr()];
                     stack.push_back(vnnew);
@@ -874,7 +875,7 @@ int         funcdata::ollvm_detect_frameworkinfo()
         char buf[128];
         p->dump(buf, PCODE_DUMP_SIMPLE & ~PCODE_HTML_COLOR);
         printf("%s\n", buf);
-        if (p->output->is_rel_constant())
+        if (p->output->is_sp_constant())
             set_safezone(p->output->get_val(), p->output->get_size());
     }
     printf("search maybe safezone alias end...\n");
@@ -1699,7 +1700,7 @@ cp_label1:
 
         if (!out) continue;
 
-        if (out->is_constant() || out->is_rel_constant()) {
+        if (out->is_constant() || out->is_sp_constant()) {
             for (iter1 = out->uses.begin(); iter1 != out->uses.end(); ++iter1) {
                 set.insert(*iter1);
             }

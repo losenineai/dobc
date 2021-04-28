@@ -1,4 +1,4 @@
-
+﻿
 #ifndef __mcore_h__
 #define __mcore_h__
 
@@ -12,7 +12,7 @@ extern "C" {
 #include <stdint.h>
 #include <stdbool.h>
 
-#if defined(_MSC_VER)
+#if 0 //defined(_MSC_VER)
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
@@ -25,21 +25,20 @@ extern "C" {
 #include "mcore/mbytes.h"
 #include "mcore/mtime_ex.h"
 #include "mcore/print_util.h"
-#include "mcore/mlock.h"
-#include "mcore/netx.h"
-#include "mcore/string_ex.h"
-#include "mcore/pgm.h"
-#include "mcore/rbtree.h"
+//#include "mcore/mlock.h"
+//#include "mcore/netx.h"
+//#include "mcore/string_ex.h"
+//#include "mcore/pgm.h"
+//#include "mcore/rbtree.h"
 #include "mcore/dynarray.h"
-//#include "mcore/bitset.h"
-#include "mcore/queue.h"
-#include "mcore/graph.h"
-#include "mcore/image.h"
-#include "mcore/minput.h"
+//#include "mcore/queue.h"
+//#include "mcore/graph.h"
+//#include "mcore/image.h"
+//#include "mcore/minput.h"
 #include "mcore/file.h"
-#include "mcore/mheap.h"
-#include "mcore/mthread.h"
-#include "mcore/mrand.h"
+//#include "mcore/mheap.h"
+//#include "mcore/mthread.h"
+//#include "mcore/mrand.h"
 #include "mcore/mdir.h"
 #include "mcore/mutil.h"
 #include "mcore/mcrc.h"

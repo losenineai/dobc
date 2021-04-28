@@ -1,4 +1,4 @@
-﻿/* ###
+/* ###
  * IP: GHIDRA
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -97,7 +97,7 @@ void ContextDatabase::restoreTracked(const Element *el,const AddrSpaceManager *m
 
   while(iter != list.end()) {
     const Element *subel = *iter;
-    vec.push_back(TrackedContext());
+    vec.emplace_back();
     vec.back().restoreXml(subel,manage);
     ++iter;
   }
