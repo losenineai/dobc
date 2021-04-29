@@ -1408,7 +1408,7 @@ varnode*        funcdata::concat_pieces(const vector<varnode *> &vnlist, pcodeop
         opaddress = insertop->get_addr();
     }
 
-    for (int i = 0; i < vnlist.size(); i++) {
+    for (int i = 1; i < vnlist.size(); i++) {
         varnode *vn = vnlist[i];
         pcodeop *op = newop(2, opaddress);
         op_set_opcode(op, CPUI_PIECE);
