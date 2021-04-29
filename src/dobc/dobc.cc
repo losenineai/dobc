@@ -1409,8 +1409,9 @@ int             pcodeop::compute(int inslot, flowblock **branch)
         if (in0->get_addr().getSpace() == d->ram_spc)
             loadram2out(Address(d->trans->getDefaultCodeSpace(), in0->get_addr().getOffset()));
         else if (in0->is_constant()) {
-            if ((in0->size == 16) && in0->get_val())
-                vm_error("pcode in size == 16, pcode(p%d)\n", start.getTime());
+            if ((in0->size == 16) && in0->get_val()) {
+                //vm_error("pcode in size == 16, pcode(p%d)\n", start.getTime());
+            }
 
             out->set_val(in0->get_val());
         }
@@ -1773,6 +1774,14 @@ int             pcodeop::compute(int inslot, flowblock **branch)
 
             if (e) out->set_val(0);
         }
+        break;
+
+    case CPUI_INT_2COMP:
+        if (in0->is_constant()) {
+            out->set_val(- in0->get_val() & ((((uint64_t)1) << (in0->get_size() * 8)) - 1));
+        }
+        else
+            out->set_top();
         break;
 
     case CPUI_INT_LEFT:
@@ -3462,11 +3471,16 @@ int         funcdata::ollvm_deshell()
     flags.disable_inrefs_to_const = 1;
     follow_flow();
 
-
     heritage();
-    dump_cfg(name, "orig", 1);
-    return 0;
 
+#if 0
+    while (!cbrlist.empty() || !emptylist.empty()) {
+        cond_constant_propagation();
+        dead_code_elimination(bblocks.blist, 0);
+    }
+#endif
+
+    dump_cfg(name, "orig", 1);
 
     ollvm_detect_frameworkinfo();
 
@@ -3556,6 +3570,15 @@ int        funcdata::vmp360_deshell()
 	printf("deshell spent %u ms\n", mtime_tick() - tick);
 
     return 0;
+}
+
+bool        flowblock::is_rel_cbranch()
+{
+    pcodeop *op = last_op();
+
+    if (op && (op->opcode == CPUI_CBRANCH) && (op->get_in(0)->is_hard_constant())) return true;
+
+    return false;
 }
 
 Address    flowblock::get_return_addr()

@@ -85,7 +85,13 @@ enum height {
 class valuetype {
 public:
     enum height height = a_top;
-    intb v = 0;
+
+    union {
+        char v1;
+        short v2;
+        int v4;
+        intb v = 0;
+    };
 
     int cmp(const valuetype &b) const;
     valuetype &operator=(const valuetype &op2);
@@ -640,6 +646,8 @@ struct flowblock {
     void        mark_unsplice() { flags.f_unsplice = 1;  }
     bool        is_unsplice() { return flags.f_unsplice; }
     bool        is_end() { return out.size() == 0;  }
+    /* 尾部的cbranch是否是指令内的相对跳转 */
+    bool        is_rel_cbranch();
     Address     get_return_addr();
     pcodeop*    get_pcode(int pid) {
         list<pcodeop *>::iterator it;

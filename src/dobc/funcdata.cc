@@ -809,8 +809,11 @@ int         funcdata::ollvm_detect_frameworkinfo()
     flowblock *b, *b1, *b2;
 
     for (i = 0; i < bblocks.blist.size(); i++) {
-        t = bblocks.blist[i]->get_back_edge_count();
-        if (t > 0) {
+        b = bblocks.blist[i];
+        t = b->get_back_edge_count();
+        /* 
+        */
+        if (t > 0 && !b->is_rel_cbranch()) {
             head = new ollvmhead(bblocks.get_block(i));
             if (!ollvm_detect_fsm(head)) {
                 ollvm.heads.push_back(head);
@@ -858,7 +861,7 @@ int         funcdata::ollvm_detect_frameworkinfo()
         for (j = 0; j < head->h->in.size(); j++) {
             varnode *v = p->get_in(j);
 
-            if (NULL == (p1 = v->def)) NULL;
+            if (NULL == (p1 = v->def)) continue;
 
             if ((p1->opcode == CPUI_LOAD)) 
                 poss.push_back(p1->get_in(1)->def);
@@ -1030,8 +1033,21 @@ int         funcdata::ollvm_detect_fsm(ollvmhead *oh)
             in0 = p->get_in(0);
             in1 = p->get_in(1);
 
-            if (!in0->is_constant() && !in1->is_constant())
+            if (!in0->is_constant() && !in1->is_constant()) {
+                vector<varnode *> defs;
+
+                if (in0->def && (in0->def->opcode == CPUI_MULTIEQUAL)) {
+                    collect_all_const_defs(in0->def, defs);
+
+                    if (defs.size() > 1) {
+                        oh->st1 = in0->get_addr();
+                        oh->st1_size = in0->get_size();
+                        return 0;
+                    }
+                }
+
                 throw LowlevelError("ollvm_detect_fsm not support two state");
+            }
 
             in = in0->is_constant() ? in1 : in0;
 
