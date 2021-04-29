@@ -111,7 +111,7 @@ public:
 class SeqNum {
   Address pc;		  ///< Program counter at start of instruction
   uintm uniq;		  ///< Number to guarantee uniqueness
-  uintm order;		  ///< Number for order comparisons within a block
+  uintm order = 0;		  ///< Number for order comparisons within a block
 public:
   SeqNum(void) {}	  ///< Create an invalid sequence number
   SeqNum(Address::mach_extreme ex); ///< Create an extremal sequence number

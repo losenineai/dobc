@@ -914,7 +914,7 @@ bool pcodeop_cmp_def::operator()(const pcodeop *a, const pcodeop *b) const
     //return a->output->get_addr() < b->output->get_addr();
 }
 
-inline bool pcodeop_cmp::operator()(const pcodeop *a, const pcodeop *b) const
+bool pcodeop_cmp::operator()(const pcodeop *a, const pcodeop *b) const
 {
     return a->start.getTime() < b->start.getTime();
     //return a->output->get_addr() < b->output->get_addr();
@@ -3461,10 +3461,12 @@ int         funcdata::ollvm_deshell()
     flags.disable_simd_to_const = 1;
     flags.disable_inrefs_to_const = 1;
     follow_flow();
+
+
     heritage();
     dump_cfg(name, "orig", 1);
-
     return 0;
+
 
     ollvm_detect_frameworkinfo();
 
@@ -5135,7 +5137,7 @@ void        funcdata::dump_block(FILE *fp, blockbasic *b, int flag)
             block_color(b),
             b->get_start().getOffset(),
             b->dfnum,
-            b->index, domdepth[b->index],
+            b->index, domdepth.size() ? domdepth[b->index]:0,
             b->vm_byteindex,
             b->vm_caseindex);
     }
@@ -5145,7 +5147,7 @@ void        funcdata::dump_block(FILE *fp, blockbasic *b, int flag)
             block_color(b),
             b->get_start().getOffset(),
             b->dfnum,
-            b->index, domdepth[b->index]);
+            b->index, domdepth.size() ?  domdepth[b->index]:0);
     }
 
     iter = b->ops.begin();
