@@ -46,17 +46,26 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
             p->set_trace();
             ret = p->compute(inslot, &br);
 
+#if 1
             //if (flags & _DUMP_PCODE) 
+            {
+                char buf[256];
+                p->dump(buf, PCODE_DUMP_SIMPLE & ~PCODE_HTML_COLOR);
+                printf("%s\n", buf);
+            }
+#endif
+
+#if 0
             if ((p->opcode == CPUI_INT_SUB) && d->is_temp(poa(p)))
             {
                 char buf[256];
                 int len = 0;
-                //p->dump(buf, PCODE_DUMP_SIMPLE & ~PCODE_HTML_COLOR);
                 len += print_vartype (d->trans, buf, p->get_in(0));
                 len += sprintf(buf + len, "  <>  ");
                 len += print_vartype(d->trans, buf + len, p->get_in(1));
                 printf("%s\n", buf);
             }
+#endif
 
             trace_push(p);
         }

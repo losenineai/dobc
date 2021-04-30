@@ -1387,7 +1387,7 @@ int             pcodeop::compute(int inslot, flowblock **branch)
     varnode *in0, *in1, *in2, *out, *_in0, *_in1, *vn;
     funcdata *fd = parent->fd;
     dobc *d = fd->d;
-    int ret = 0;
+    int ret = 0, i;
     pcodeop *store, *op;
     flowblock *b, *bb;
 
@@ -1618,8 +1618,46 @@ int             pcodeop::compute(int inslot, flowblock **branch)
         if (in0->is_constant() && in1->is_constant()) {
             output->set_val(in0->get_val() == in1->get_val());
         }
+        /*
+        
+        a = phi(c2, c3)
+        b = c1
+        d = a - b
+        假如c1 不等于 c2, c3
+        那么 d = INT_EQUAL x, 0
+        也是可以计算的。
+
+        NOTE:这样写的pattern会不会太死了？改成递归收集a的所有常数定义，但是这样会不会效率太低了。
+        */
+        else if (in1->is_constant()  && (in1->get_val() == 0)
+            && (op = in0->def) && (op->opcode == CPUI_INT_SUB)
+            && (op->get_in(0)->is_constant() || op->get_in(1)->is_constant())) {
+            _in0 = op->get_in(0);
+            _in1 = op->get_in(1);
+
+            varnode *check = _in0->is_constant() ? _in1 : _in0;
+            varnode *uncheck = _in0->is_constant() ? _in0 : _in1;
+            pcodeop *phi = check->def;
+            int equal = 0, notequal = 0;  // 2:top, 1:equal, 0:notequal
+
+            output->set_top();
+            if (phi && (phi->opcode == CPUI_MULTIEQUAL)) {
+                for (i = 0; i < phi->inrefs.size(); i++) {
+                    vn = phi->get_in(i);
+                    if (!vn->is_constant()) break;
+
+                    if (vn->get_val() != uncheck->get_val()) notequal++;
+                    else equal++;
+                }
+
+                if (notequal == phi->inrefs.size())     
+                    output->set_val(0);
+                else if (equal == phi->inrefs.size())   
+                    output->set_val(1);
+            }
+        }
         else
-            output->type.height = a_top;
+            output->set_top();
         break;
 
     case CPUI_INT_NOTEQUAL:
@@ -5189,9 +5227,13 @@ void        funcdata::dump_block(FILE *fp, blockbasic *b, int flag)
     for (p = NULL;  iter != b->ops.end() ; iter++) {
         p = *iter;
 
-        if (p->flags.startinst) {
+        const Address &disaddr = p->get_dis_addr();
+
+        //if (p->flags.startinst) 
+        if ((prev_addr != disaddr) && !disaddr.isInvalid())
+        {
             assem.set_sp(p->sp);
-            d->trans->printAssembly(assem, p->get_dis_addr());
+            d->trans->printAssembly(assem, disaddr);
             fprintf(fp, "%s", obuf);
         }
 
@@ -5200,7 +5242,7 @@ void        funcdata::dump_block(FILE *fp, blockbasic *b, int flag)
             fprintf(fp, "<tr><td></td><td></td><td colspan=\"2\" align=\"left\">%s</td></tr>", obuf);
         }
 
-        prev_addr = p->get_dis_addr();
+        prev_addr = disaddr;
     }
     fprintf(fp, "</table>>]\n");
 }
