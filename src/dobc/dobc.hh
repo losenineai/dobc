@@ -229,6 +229,7 @@ public:
     void            set_def(pcodeop *op);
     pcodeop*        get_def() { return def; }
     bool            is_constant(void) const { return type.height == a_constant; }
+    bool            is_top(void) const { return type.height == a_top;  }
     bool            is_hard_constant(void) const { return (type.height == a_constant) && get_addr().isConstant(); }
     bool            in_constant_space() { return get_addr().isConstant(); }
     bool            is_pc_constant() { return type.height == a_pc_constant;  }
@@ -258,6 +259,16 @@ public:
         }
     }
     void            set_top() { type.height = a_top;  }
+    void            set_sub_val(int insize, intb l, intb r) {
+        if (insize == 1)
+            set_val((int1)l - (int1)r);
+        else if (insize == 2)
+            set_val((int2)l - (int2)r);
+        else if (insize == 4)
+            set_val((int4)l - (int4)r);
+        else 
+            set_val(l - r);
+    }
     bool            is_sp_constant(void) { return type.height == a_sp_constant; }
     bool            is_input(void) { return flags.input; }
     void            set_sp_constant(int v) { type.height = a_sp_constant; type.v = v;  }
@@ -455,9 +466,9 @@ public:
     void            clear_trace() { flags.trace = 0;  }
     /* in的地址是否在sp alloc内存的位置 */
     bool            in_sp_alloc_range(varnode *in);
-    void            peephole(void);
 
     void            on_MULTIEQUAL();
+    bool            all_inrefs_is_constant(void);
     void            loadram2out(Address &addr);
 };
 
@@ -701,6 +712,11 @@ struct flowblock {
         flags.f_loopheader = 0;
     }
     bool noreturn(void);
+    /* 当一个block末尾是cbranch时， 一般它的比较条件是来自于cmp 
+    cmp指令会产生一个sub指令，返回这个sub指令，假如没有，就返回NULL
+    */
+    pcodeop*    get_cbranch_sub_from_cmp(void);
+    bool        is_eq_cbranch(void);
 };
 
 class blockgraph {

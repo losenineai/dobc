@@ -1303,6 +1303,16 @@ void            pcodeop::loadram2out(Address &addr)
         out->set_val(*(intb *)buf);
 }
 
+bool            pcodeop::all_inrefs_is_constant(void)
+{
+    int i;
+
+    for (i = 0; i < inrefs.size(); i++) {
+        if (!inrefs[i]->is_constant()) return false;
+    }
+    return true;
+}
+
 int				pcodeop::compute_add_sub()
 {
 	varnode *in0, *in1, *_in0, *_in1, *out;
@@ -1388,7 +1398,7 @@ int             pcodeop::compute(int inslot, flowblock **branch)
     funcdata *fd = parent->fd;
     dobc *d = fd->d;
     int ret = 0, i;
-    pcodeop *store, *op;
+    pcodeop *store, *op, *op1;
     flowblock *b, *bb;
 
     out = output;
@@ -1623,9 +1633,9 @@ int             pcodeop::compute(int inslot, flowblock **branch)
         a = phi(c2, c3)
         b = c1
         d = a - b
+        e = INT_EQUAL d, 0
         假如c1 不等于 c2, c3
-        那么 d = INT_EQUAL x, 0
-        也是可以计算的。
+        那么 e 也是可以计算的。
 
         NOTE:这样写的pattern会不会太死了？改成递归收集a的所有常数定义，但是这样会不会效率太低了。
         */
@@ -1774,6 +1784,34 @@ int             pcodeop::compute(int inslot, flowblock **branch)
         /* 0:(register,mult_addr,4) = INT_SUB (register,sp,4) (const,0x4,4) */
         else if (fd->is_sp_constant(in0) && in1->is_constant()) {
 			compute_add_sub();
+        }
+        /*
+        peephole:
+
+        a = c1;
+        if (x) a = c2;
+
+        if (a == c1) {
+        }
+        else {
+            if (a == c2) {
+                // block1
+            }
+            else {
+                // block 2
+            }
+        }
+        实际上block2是死的，因为a只有2个定值
+        */
+        else if (in0->is_top() && in1->is_constant() 
+            && (parent->in.size() == 1)
+            && (op = in0->def) && (op->opcode == CPUI_MULTIEQUAL) && (op->inrefs.size() == 2) && op->all_inrefs_is_constant() 
+            && (op1 = (b = parent->get_in(0))->get_cbranch_sub_from_cmp())
+            && op1->get_in(1)->is_constant()
+            && (op1->get_in(0) == in0)
+            && b->is_eq_cbranch()) {
+            intb imm = (op->get_in(0)->get_val() == op1->get_in(1)->get_val()) ? op->get_in(1)->get_val() : op->get_in(0)->get_val();
+            out->set_sub_val(in0->size, imm, in1->get_val());
         }
         else
             out->type.height = a_top;
@@ -2505,10 +2543,48 @@ int         flowblock::sub_id()
     return (*iter)->start.getTime();
 }
 
-
 bool        flowblock::noreturn(void) 
 { 
     return ops.size() && last_op()->callfd && last_op()->callfd->flags.exit;  
+}
+
+pcodeop*    flowblock::get_cbranch_sub_from_cmp(void)
+{
+    pcodeop *lastop = last_op(), *op;
+    if (NULL == lastop || (lastop->opcode != CPUI_CBRANCH)) return NULL;
+
+    op = lastop->get_in(1)->def;
+
+    while (op && op->parent == this) {
+        switch (op->opcode) {
+        case CPUI_COPY:
+        case CPUI_INT_NOTEQUAL:
+        case CPUI_INT_EQUAL:
+            op = op->get_in(0)->def;
+            break;
+
+        case CPUI_INT_SUB:
+            return op;
+
+        default:
+            return NULL;
+        }
+    }
+
+    return NULL;
+}
+
+bool        flowblock::is_eq_cbranch(void)
+{
+    pcodeop *lastop = last_op(), *def;
+    if (lastop && (lastop->opcode == CPUI_CBRANCH) && (def = lastop->get_in(1)->def)
+        && (def->opcode == CPUI_INT_NOTEQUAL)
+        && (def->get_in(0)->get_addr() == g_dobc->get_addr("ZR"))
+        && def->get_in(1)->is_constant()
+        && (def->get_in(1)->get_val() == 0))
+        return true;
+
+    return false;
 }
 
 blockgraph::blockgraph(funcdata *fd1) 
