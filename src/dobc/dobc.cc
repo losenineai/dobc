@@ -3595,7 +3595,6 @@ int         funcdata::ollvm_deshell()
     flags.disable_simd_to_const = 1;
     flags.disable_inrefs_to_const = 1;
     follow_flow();
-
     heritage();
 
 #if 1
