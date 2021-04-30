@@ -1023,6 +1023,7 @@ int         funcdata::ollvm_detect_fsm(ollvmhead *oh)
     flowblock *h = oh->h;
     list<pcodeop *>::reverse_iterator it;
     varnode *in0, *in1, *in;
+    pcodeop *store;
 
     for (it = h->ops.rbegin(); it != h->ops.rend(); it++) {
         pcodeop *p = *it;
@@ -1055,9 +1056,15 @@ int         funcdata::ollvm_detect_fsm(ollvmhead *oh)
 
             for (++it; it != h->ops.rend(); it++) {
                 p = *it;
+                /* FIXME:这一段是计算传播的，可以优化 */
                 if ((p->opcode == CPUI_COPY) && p->output->get_addr() == s) {
                     oh->st1 = p->get_in(0)->get_addr();
                     oh->st1_size = p->get_in(0)->get_size();
+                    return 0;
+                }
+                else if ((p->opcode == CPUI_LOAD) && (poa(p) == s) && p->get_virtualnode() && ((store = p->get_virtualnode()->def)->parent == h)) {
+                    oh->st1 = store->get_in(2)->get_addr();
+                    oh->st1_size = store->get_in(2)->get_size();
                     return 0;
                 }
             }
@@ -1269,7 +1276,7 @@ void        funcdata::redundbranch_apply()
         2. 输出节点都为1
         3. 不是被vm标记过的节点 
         */
-        if ((bb->out.size() == 1) && (bb->get_out(0) != bb) && bb->is_empty()) {
+        if (bb->is_empty_delete()) {
             if ((bb->vm_byteindex != -1) || (bb->vm_caseindex)) {
                 remove_empty_block(bb);
                 i -= 1;

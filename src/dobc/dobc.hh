@@ -619,7 +619,13 @@ struct flowblock {
     int         last_order() { return last_op()->start.getOrder();  }
 
     int         get_out_rev_index(int i) { return out[i].reverse_index;  }
-    bool        is_empty();
+    /* 判断这个block是否指令为空 */
+    bool        is_empty(void);
+    /* 判断这个block指令为空后，能否删除，有几种情况不删除 
+    1. 有多个out边
+    2. 有一条out边，但是指向自己
+    */
+    bool        is_empty_delete(void);
 
     void        set_initial_range(const Address &begin, const Address &end);
     void        add_op(pcodeop *);

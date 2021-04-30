@@ -392,7 +392,7 @@ void dobc::plugin_ollvm()
 #if 0
     //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
-    //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
+    funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
 #else
     funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
 #endif
@@ -2423,10 +2423,12 @@ void        flowblock::set_initial_range(const Address &b, const Address &e)
     cover.insertRange(b.getSpace(), b.getOffset(), e.getOffset());
 }
 
-bool        flowblock::is_empty()
+bool        flowblock::is_empty(void)
 {
     pcodeop *op;
     list<pcodeop *>::iterator it;
+
+    if (out.size() == 1 && get_out(0) == this) return false;
 
     if (ops.empty()) return true;
 
@@ -2440,6 +2442,13 @@ bool        flowblock::is_empty()
     return true;
 }
 
+bool        flowblock::is_empty_delete(void)
+{
+    if (out.size() != 1) return false;
+    if (get_out(0) == this) return false;
+
+    return is_empty();
+}
 
 void        flowblock::insert(list<pcodeop *>::iterator iter, pcodeop *inst)
 {
@@ -3475,7 +3484,7 @@ int         funcdata::ollvm_deshell()
 
     heritage();
 
-#if 0
+#if 1
     while (!cbrlist.empty() || !emptylist.empty()) {
         cond_constant_propagation();
         dead_code_elimination(bblocks.blist, 0);
@@ -5513,7 +5522,7 @@ void        funcdata::op_destroy_raw(pcodeop *op)
 void        funcdata::op_destroy(pcodeop *op)
 {
     int i;
-    flowblock *p;
+    flowblock *b;
 
 
 	if (op->output) {
@@ -5527,12 +5536,12 @@ void        funcdata::op_destroy(pcodeop *op)
             op_unset_input(op, i);
     }
 
-    if ((p = op->parent)) {
+    if ((b = op->parent)) {
         mark_dead(op);
         op->parent->remove_op(op);
 
-        if (p->ops.empty()) 
-            emptylist.push_back(op->parent);
+        if (b->is_empty_delete())
+            emptylist.push_back(b);
     }
 }
 
