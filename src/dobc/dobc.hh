@@ -247,12 +247,14 @@ public:
 
     后面要逐渐切换到set_val1上来
     */
-    void            set_val1(intb v) { type.height = a_constant;  
+    void            set_val1(intb v) { 
+        type.height = a_constant;  
+        type.v = 0;
         switch (size) {
-        case 1: type.v1 = (int8_t)v;
-        case 2: type.v2 = (int16_t)v;
-        case 4: type.v4 = (int32_t)v;
-        case 8: type.v = (int64_t)v;
+        case 1: type.v1 = (int8_t)v;    break;
+        case 2: type.v2 = (int16_t)v;   break;
+        case 4: type.v4 = (int32_t)v;   break;
+        case 8: type.v = (int64_t)v;    break;
         }
     }
     void            set_top() { type.height = a_top;  }

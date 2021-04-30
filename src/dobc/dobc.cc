@@ -3475,7 +3475,7 @@ int         funcdata::ollvm_deshell()
 
     heritage();
 
-#if 1
+#if 0
     while (!cbrlist.empty() || !emptylist.empty()) {
         cond_constant_propagation();
         dead_code_elimination(bblocks.blist, 0);
