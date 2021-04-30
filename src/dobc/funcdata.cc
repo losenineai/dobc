@@ -1265,14 +1265,11 @@ void        funcdata::redundbranch_apply()
     for (i = 0; i < bblocks.get_size(); i++) {
         bb = bblocks.get_block(i);
         /* 
-
         1. 假如一个块已经空了
         2. 输出节点都为1
         3. 不是被vm标记过的节点 
         */
         if ((bb->out.size() == 1) && (bb->get_out(0) != bb) && bb->is_empty()) {
-            /* 
-            */
             if ((bb->vm_byteindex != -1) || (bb->vm_caseindex)) {
                 remove_empty_block(bb);
                 i -= 1;

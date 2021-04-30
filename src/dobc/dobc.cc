@@ -390,9 +390,9 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 void dobc::plugin_ollvm()
 {
 #if 0
-    /funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
+    //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
-    funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
+    //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
 #else
     funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
 #endif
@@ -1778,7 +1778,7 @@ int             pcodeop::compute(int inslot, flowblock **branch)
 
     case CPUI_INT_2COMP:
         if (in0->is_constant()) {
-            out->set_val(- in0->get_val() & ((((uint64_t)1) << (in0->get_size() * 8)) - 1));
+            out->set_val1(-in0->get_val());
         }
         else
             out->set_top();
@@ -1787,7 +1787,7 @@ int             pcodeop::compute(int inslot, flowblock **branch)
     case CPUI_INT_LEFT:
         in1 = get_in(1);
         if (in0->is_constant() && in1->is_constant()) {
-            out->set_val((uintb)in0->get_val() << (uintb)in1->get_val());
+            out->set_val1((uintb)in0->get_val() << (uintb)in1->get_val());
         }
         else
             out->type.height = a_top;
@@ -1796,7 +1796,7 @@ int             pcodeop::compute(int inslot, flowblock **branch)
     case CPUI_INT_RIGHT:
         in1 = get_in(1);
         if (in0->is_constant() && in1->is_constant()) {
-            out->set_val((uintb)in0->get_val() >> (uintb)in1->get_val());
+            out->set_val1((uintb)in0->get_val() >> (uintb)in1->get_val());
         }
         else
             out->type.height = a_top;
@@ -1822,6 +1822,7 @@ int             pcodeop::compute(int inslot, flowblock **branch)
 
     case CPUI_INT_AND:
         in1 = get_in(1);
+        uintb l, r;
         if (in0->is_constant() && in1->is_constant()) {
             out->set_val(in0->get_val() & in1->get_val());
         }
@@ -1846,8 +1847,9 @@ int             pcodeop::compute(int inslot, flowblock **branch)
         /* (sp - even) & 0xfffffffe == sp - even
         因为sp一定是偶数，减一个偶数，也一定还是偶数，所以他和 0xfffffffe 相与值不变
         */
-        else if (in0->is_sp_constant() && in1->is_constant() && (in1->get_val() == 0xfffffffffffffffe)) {
-            out->set_sp_constant(in0->get_val());
+        else if (in0->is_sp_constant() && in1->is_constant() 
+            && ((l = (in0->get_val() & in1->get_val())) == (r = (in0->get_val() & (((uintb)1 << (in0->size * 8)) - 1))))) {
+            out->set_sp_constant(in0->get_val() & in1->get_val());
         }
         /* 相与时，任意一个数为0，则为0 */
         else if ((in0->is_constant() && (in0->get_val() == 0)) || (in1->is_constant() && (in1->get_val() == 0))) {
@@ -3473,7 +3475,7 @@ int         funcdata::ollvm_deshell()
 
     heritage();
 
-#if 0
+#if 1
     while (!cbrlist.empty() || !emptylist.empty()) {
         cond_constant_propagation();
         dead_code_elimination(bblocks.blist, 0);

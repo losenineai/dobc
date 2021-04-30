@@ -232,7 +232,29 @@ public:
     bool            is_hard_constant(void) const { return (type.height == a_constant) && get_addr().isConstant(); }
     bool            in_constant_space() { return get_addr().isConstant(); }
     bool            is_pc_constant() { return type.height == a_pc_constant;  }
+#define MASK_SIZE(m,s)          (m & (((uintb)1 << (s * 8)) - 1))
     void            set_val(intb v) { type.height = a_constant;  type.v = v; }
+    /* set_val1 会对传入的值，根据自身的size做裁剪，
+    这个从语义上比set_val更加标准，也更加的正确，但是由于工程实现的原因，暂时还有以下BUG:
+
+    c1:4 = -1;
+
+    c1.v = 0xffffffffffffffff;
+    虽然我们转成整数以后，变成8字节都是-1，但是裁剪以后
+    c1.v:4 = 0x00000000ffffffff;
+    变成了一个正数
+    这里我们在使用一个v同时兼容 int64,32,16,8的时候，没有处理后，后期要考虑如何处理
+
+    后面要逐渐切换到set_val1上来
+    */
+    void            set_val1(intb v) { type.height = a_constant;  
+        switch (size) {
+        case 1: type.v1 = (int8_t)v;
+        case 2: type.v2 = (int16_t)v;
+        case 4: type.v4 = (int32_t)v;
+        case 8: type.v = (int64_t)v;
+        }
+    }
     void            set_top() { type.height = a_top;  }
     bool            is_sp_constant(void) { return type.height == a_sp_constant; }
     bool            is_input(void) { return flags.input; }

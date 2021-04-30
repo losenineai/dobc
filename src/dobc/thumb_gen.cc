@@ -397,6 +397,7 @@ void _xor_reg(int rd, int rn, int rm)
 		vm_error ("_xor_reg invalid parameters");
 }
 
+/* A8.8.238 */
 void _teq_reg(int rn, int rm, int shift)
 {
     if (shift) UNPREDICITABLE();
@@ -1083,9 +1084,15 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
 
         case CPUI_INT_XOR:
             if (istemp(p->output)) {
-                if (p1 && p2 && d->is_tsreg(poa(p1)) && d->is_sreg(poa(p2))) {
-                    _teq_reg(reg2i(pi0a(p)), reg2i(pi1a(p)), 0);
-                    advance(it, 2);
+                if (p1) {
+                    if (d->is_sreg(poa(p1))) {
+                        _teq_reg(reg2i(pi0a(p)), reg2i(pi1a(p)), 0);
+                        advance(it, 1);
+                    }
+                    else if (p2 && d->is_tsreg(poa(p1)) && d->is_sreg(poa(p2))) {
+                        _teq_reg(reg2i(pi0a(p)), reg2i(pi1a(p)), 0);
+                        advance(it, 2);
+                    }
                 }
             }
             else 
