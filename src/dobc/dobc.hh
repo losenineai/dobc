@@ -35,8 +35,35 @@ class valuetype;
 #define pi2a(p)             p->get_in(2)->get_addr()
 #define poa(p)              p->output->get_addr()
 
-class blockgraph;
+#define BIT0(b)             ((b) & 0x1)
+#define BIT1(b)             ((b) & 0x2)
+#define BIT2(b)             ((b) & 0x4)
+#define BIT3(b)             ((b) & 0x8)
+#define BIT4(b)             ((b) & 0x10)
+#define BIT5(b)             ((b) & 0x20)
+#define BIT6(b)             ((b) & 0x40)
+#define BIT7(b)             ((b) & 0x80)
 
+#define BIT0_SET(b)         ((b) |= 0x1)
+#define BIT1_SET(b)         ((b) |= 0x2)
+#define BIT2_SET(b)         ((b) |= 0x4)
+#define BIT3_SET(b)         ((b) |= 0x8)
+#define BIT4_SET(b)         ((b) |= 0x10)
+#define BIT5_SET(b)         ((b) |= 0x20)
+#define BIT6_SET(b)         ((b) |= 0x40)
+#define BIT7_SET(b)         ((b) |= 0x80)
+
+#define BIT0_CLR(b)         (b &= ~0x1)
+#define BIT1_CLR(b)         (b &= ~0x2)
+#define BIT2_CLR(b)         (b &= ~0x4)
+#define BIT3_CLR(b)         (b &= ~0x8)
+#define BIT4_CLR(b)         (b &= ~0x10)
+#define BIT5_CLR(b)         (b &= ~0x20)
+#define BIT6_CLR(b)         (b &= ~0x40)
+#define BIT7_CLR(b)         (b &= ~0x80)
+
+
+class blockgraph;
 
 struct VisitStat {
     SeqNum seqnum;
@@ -178,7 +205,7 @@ public:
     struct {
         unsigned    mark : 1;
         unsigned    annotation : 1;
-        unsigned    input : 1;          // 没有祖先
+        unsigned    input : 1;          // 没有祖先， 丄
         unsigned    written : 1;       // 是def
         unsigned    insert : 1;         // 这个
         unsigned    implied : 1;        // 是一个临时变量
@@ -199,6 +226,38 @@ public:
         r1 = r2 + r1，以后r1.from_pc = 1
         */
         unsigned    from_pc : 1;
+        /* 这个是给unique space上的临时变量用的，一般来说，临时变量只在当前block内活跃，但是有一种情况例外，
+        某些单条指令内自带指向自己的branch, cbranch， 比如:
+                                     - ? -
+        0002574c 63 f9 0f 28     vld2.8     {d18,d19},[param_4]
+                                                        $U25e0:4 = COPY 1:4
+                                                        mult_addr = COPY r3
+                                                        $U25e0:4 = COPY 1:4
+                                                        $U3780:4 = COPY 0x390:4
+                                                        $U3790:4 = INT_MULT 1:4, 8:4
+                                                        $U37b0:4 = INT_ADD 0x390:4, $U3790:4
+                                                        mult_dat8 = COPY 8:8
+                                                      <1>
+                                                        $U37c0:1 = LOAD ram(mult_addr)
+                                                        STORE register($U3780:4), $U37c0:1
+                                                        mult_addr = INT_ADD mult_addr, 1:4
+                                                        $U37e0:1 = LOAD ram(mult_addr)
+                                                        STORE register($U37b0:4), $U37e0:1
+                                                        mult_addr = INT_ADD mult_addr, 1:4
+                                                        mult_dat8 = INT_SUB mult_dat8, 1:8
+                                                        $U3810:1 = INT_EQUAL mult_dat8, 0:8
+                                                        CBRANCH <0>, $U3810:1
+                                                        $U3780:4 = INT_ADD $U3780:4, 1:4
+                                                        $U37b0:4 = INT_ADD $U37b0:4, 1:4
+                                                        BRANCH <1>
+                                                      <0>
+                                                        $U25e0:4 = COPY 1:4
+                                                        $U39f0:4 = COPY 2:4
+
+        U3780和U37b0，在<1>处是入口活跃的，正常情况下要插入phi节点，但是因为我们的优化不对uniq var做，为了兼容
+        这种情况，我们要标注一下这种特殊节点，强制让它生成phi
+        */
+        unsigned    outlive : 1;
     } flags = { 0 };
 
     int size = 0;
@@ -689,6 +748,7 @@ struct flowblock {
     bool        is_end() { return out.size() == 0;  }
     /* 尾部的cbranch是否是指令内的相对跳转 */
     bool        is_rel_cbranch();
+    bool        is_rel_branch();
     Address     get_return_addr();
     pcodeop*    get_pcode(int pid) {
         list<pcodeop *>::iterator it;
@@ -1278,6 +1338,11 @@ public:
     void        calc_phi_placement(const vector<varnode *> &write);
     void        calc_phi_placement2(const vector<varnode *> &write);
     void        calc_phi_placement3(const vector<flowblock *> &write);
+
+    /*
+    计算特殊情况下unique space上的变量的phi插入位置，可以直接在本文件内搜outlive
+    */
+    void        calc_phi_placement4(const vector<varnode *> &write);
     void        visit_dj(flowblock *cur,  flowblock *v);
     void        visit_incr(flowblock *qnode, flowblock *vnode);
     void        place_multiequal(void);
@@ -1398,11 +1463,10 @@ public:
 
 #define F_OPEN_COPY             0x01
 #define F_OPEN_PHI              0x02
-    int         ollvm_detect_propchain(ollvmhead *oh, flowblock *&from, blockedge *&outedge, uint32_t flags);
     int         ollvm_detect_propchain2(ollvmhead *oh, flowblock *&from, blockedge *&outedge, uint32_t flags);
-    int         ollvm_detect_propchains(flowblock *&from, blockedge *&outedge);
     int         ollvm_detect_propchains2(flowblock *&from, blockedge *&outedge);
     int         ollvm_detect_fsm(ollvmhead *oh);
+    int         ollvm_check_fsm(varnode *vn);
 
     bool        use_outside(varnode *vn);
     void        use2undef(varnode *vn);

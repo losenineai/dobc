@@ -140,8 +140,11 @@ int print_varnode(Translate *trans, char *buf, varnode *data)
 
     name = g_dobc->get_abbrev(name);
 
-    if ((addr.getSpace()->getType() == IPTR_CONSTANT) && ((intb)addr.getOffset() == (intb)trans->getDefaultCodeSpace()))
+    /* 有可能常数会撞上? */
+    if ((addr.isConstant()) && ((intb)addr.getOffset() == (intb)trans->getDefaultCodeSpace()))
         return sprintf(buf, "ram");
+    else if ((addr.isConstant()) && ((intb)addr.getOffset() == (intb)g_dobc->reg_spc))
+        return sprintf(buf, "reg");
     else if (name == "") {
         if (addr.getSpace()->getIndex() == IPTR_CONSTANT)
             return sprintf(buf, "(%c%llx:%d)", addr.getSpace()->getShortcut(), addr.getOffset(), data->size);
@@ -175,8 +178,6 @@ void pcodeemit2::dump(const Address &addr, OpCode opc, VarnodeData *outvar, Varn
     op->flags.itblock = itblock;
 
     i = 0;
-    /* CPUI_CBRANCH的第一个节点，指明当条件为真时的跳转地址，不清楚为什么在IPTR_PROCESSOR内
-    而不是在 IPTR_CONSTANT 内 ，这里直接改掉 */
     if (op->is_coderef()) {
         Address addrcode(vars[0].space, vars[0].offset);
         fd->op_set_input(op, fd->new_coderef(addrcode), 0);
@@ -3597,6 +3598,7 @@ int         funcdata::ollvm_deshell()
     follow_flow();
     heritage();
 
+    //dump_cfg(name, "orig", 1);
 #if 1
     while (!cbrlist.empty() || !emptylist.empty()) {
         cond_constant_propagation();
@@ -3701,6 +3703,15 @@ bool        flowblock::is_rel_cbranch()
     pcodeop *op = last_op();
 
     if (op && (op->opcode == CPUI_CBRANCH) && (op->get_in(0)->is_hard_constant())) return true;
+
+    return false;
+}
+
+bool        flowblock::is_rel_branch()
+{
+    pcodeop *op = last_op();
+
+    if (op && (op->opcode == CPUI_BRANCH) && (op->get_in(0)->is_hard_constant())) return true;
 
     return false;
 }
@@ -5104,21 +5115,7 @@ void        funcdata::connect_basic()
         from = edge->from->parent;
         to = edge->to->parent;
 
-        /* 假如碰到一个裸的jmp 指令快，直接让from指向这个jmp的to，假如这个jmp->out没有赋值，加入到尾部中区 */
-#if 0
-        if ((to->ops.size() == 1) && (to->last_op()->opcode == CPUI_BRANCH)) {
-            if (0 == to->in.size())
-                bblocks.add_edge(from, to, edge->t ? a_true_edge : 0);
-            else if (to->out.size())
-                bblocks.add_edge(from, to->get_out(0), edge->t ? a_true_edge : 0);
-            else
-                block_edge.push_back(edge);
-        }
-        else
-            bblocks.add_edge(from, to, edge->t ? a_true_edge:0);
-#else
-            bblocks.add_edge(from, to, edge->t ? a_true_edge:0);
-#endif
+        bblocks.add_edge(from, to, edge->t ? a_true_edge:0);
 
         //printf("0x%x -> 0x%x\n", (int)edge->from->start.getAddr().getOffset(), (int)edge->to->start.getAddr().getOffset());
     }

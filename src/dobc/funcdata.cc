@@ -46,7 +46,7 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
             p->set_trace();
             ret = p->compute(inslot, &br);
 
-#if 1
+#if 0
             //if (flags & _DUMP_PCODE) 
             {
                 char buf[256];
@@ -331,7 +331,7 @@ void        funcdata::place_multiequal(void)
     pcodeop *multiop, *p;
     varnode *vnin;
     blockbasic *bl;
-    int max, i, j, equal;
+    int max, i, j, flags;
 
     for (iter = disjoint.begin(); iter != disjoint.end(); ++iter) {
         Address addr = (*iter).first;
@@ -340,9 +340,9 @@ void        funcdata::place_multiequal(void)
         readvars.clear();
         writevars.clear();
         inputvars.clear();
-        max = collect(addr, size, readvars, writevars, inputvars, equal);
+        max = collect(addr, size, readvars, writevars, inputvars, flags);
         /* FIXME:Ghidra这里的判断和我差别很大，后期必须得重新调试，深入分析下Ghidra逻辑 */
-        if (!equal) {
+        if (!BIT0(flags)) {
 #if 1
             if (refinement(addr, max, readvars, writevars, inputvars)) {
                 iter = disjoint.find(addr);
@@ -350,7 +350,7 @@ void        funcdata::place_multiequal(void)
                 readvars.clear();
                 writevars.clear();
                 inputvars.clear();
-                collect(addr, size, readvars, writevars, inputvars, equal);
+                collect(addr, size, readvars, writevars, inputvars, flags);
             }
 #endif
         }
@@ -362,10 +362,15 @@ void        funcdata::place_multiequal(void)
         if (readvars.empty() && writevars.empty())
             continue;
 
-        if (!d->is_cpu_reg(addr))
+        if (!d->is_cpu_reg(addr) && !BIT1(flags)) {
             continue;
+        }
 
-        calc_phi_placement2(writevars);
+        if (!BIT1(flags))
+            calc_phi_placement2(writevars);
+        else
+            calc_phi_placement4(writevars);
+
         for (i = 0; i < merge.size(); ++i) {
             bl = merge[i];
 
@@ -716,6 +721,20 @@ void        funcdata::calc_phi_placement3(const vector<flowblock *> &write)
         phiflags[i] = 0;
 }
 
+void        funcdata::calc_phi_placement4(const vector<varnode *> &writes)
+{
+    int i;
+    pcodeop *op;
+    merge.clear();
+
+    for (i = 0; i < writes.size(); i++) {
+        varnode *vn = writes[i];
+        op = vn->def;
+        if (op && op->parent->is_rel_branch())
+            merge.push_back(op->parent->get_out(0));
+    }
+}
+
 void        funcdata::visit_dj(flowblock *cur, flowblock *v)
 {
     int i;
@@ -1031,7 +1050,7 @@ int         funcdata::ollvm_detect_fsm(ollvmhead *oh)
 {
     flowblock *h = oh->h;
     list<pcodeop *>::reverse_iterator it;
-    varnode *in0, *in1, *in;
+    varnode *in0, *in1, *in, *vn;
     pcodeop *store;
 
     for (it = h->ops.rbegin(); it != h->ops.rend(); it++) {
@@ -1072,8 +1091,11 @@ int         funcdata::ollvm_detect_fsm(ollvmhead *oh)
                     return 0;
                 }
                 else if ((p->opcode == CPUI_LOAD) && (poa(p) == s) && p->get_virtualnode() && ((store = p->get_virtualnode()->def)->parent == h)) {
-                    oh->st1 = store->get_in(2)->get_addr();
-                    oh->st1_size = store->get_in(2)->get_size();
+                    vn = store->get_in(2);
+                    if (ollvm_check_fsm(vn)) return -1;
+
+                    oh->st1 = vn->get_addr();
+                    oh->st1_size = vn->get_size();
                     return 0;
                 }
             }
@@ -1085,6 +1107,29 @@ int         funcdata::ollvm_detect_fsm(ollvmhead *oh)
     }
 
     return -1;
+}
+
+int         funcdata::ollvm_check_fsm(varnode *vn)
+{
+    pcodeop *p = vn->def;
+
+    if (!p || (p->opcode != CPUI_MULTIEQUAL)) return -1;
+
+    vector<intb>    consts;
+
+    for (int i = 0; i < p->inrefs.size(); i++) {
+        varnode *vn1 = p->get_in(i);
+        if (vn1->is_constant())
+            consts.push_back(vn1->get_val());
+    }
+
+    /* 只包含一个常数 */
+    if (consts.size() == 1) {
+        /* 我们认为包含的数字过小，不是被ollvm混淆过的 */
+        if (consts[0] < 10) return -1;
+    }
+
+    return 0;
 }
 
 bool        funcdata::use_outside(varnode *vn)
@@ -1578,12 +1623,13 @@ void        funcdata::remove13refinement(vector<int> &refine)
 {
 }
 
-int funcdata::collect(Address addr, int size, vector<varnode *> &read, vector<varnode *> &write, vector<varnode *> &input, int &equal)
+int funcdata::collect(Address addr, int size, vector<varnode *> &read, vector<varnode *> &write, vector<varnode *> &input, int &flags)
 {
     varnode *vn;
     varnode_loc_set::const_iterator     viter = begin_loc(addr);
     varnode_loc_set::const_iterator     enditer;
     uintb start = addr.getOffset();
+    pcodeop *op;
     addr = addr + size;
 
     if (addr.getOffset() < start) {
@@ -1596,12 +1642,18 @@ int funcdata::collect(Address addr, int size, vector<varnode *> &read, vector<va
 
     int maxsize = 0, prev = 0;
 
-    equal = 1;
+    flags = 0;
+    BIT0_SET(flags);
     for (; viter != enditer; viter++) {
         vn = *viter;
 
         if (vn->flags.written) {
             if (vn->size > maxsize)     maxsize = vn->size;
+            op = vn->def;
+#if 1
+            if (op && op->parent->is_rel_branch()) 
+                BIT1_SET(flags);
+#endif
             write.push_back(vn);
         }
         else if (!vn->is_heritage_known() && vn->uses.size())
@@ -1609,7 +1661,7 @@ int funcdata::collect(Address addr, int size, vector<varnode *> &read, vector<va
         else if (vn->flags.input)
             input.push_back(vn);
 
-        if (prev && prev != vn->size) equal = 0;
+        if (prev && prev != vn->size) BIT0_CLR(flags);
         prev = vn->size;
     }
 
