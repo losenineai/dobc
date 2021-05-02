@@ -390,10 +390,10 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 
 void dobc::plugin_ollvm()
 {
-#if 0
+#if 1
     //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
-    //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
-    funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
+    funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
+    //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
 #else
     funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
 #endif
@@ -3889,6 +3889,7 @@ https://core.ac.uk/download/pdf/82032035.pdf */
 bool        blockgraph::find_irreducible(const vector<flowblock *> &preorder, int &irreduciblecount)
 {
     vector<flowblock *> reachunder;
+    vector<flowblock *> irreducibles;
     flowblock *y;
     bool needrebuild = false;
     int xi = preorder.size() - 1, i, loop, q;
@@ -3931,7 +3932,9 @@ bool        blockgraph::find_irreducible(const vector<flowblock *> &preorder, in
                 if ((x->dfnum > yprime->dfnum) || ((x->dfnum + x->numdesc) <= yprime->dfnum)) {
                     // FIXME:这行打印太多了，需要优化掉
                     //printf("warn: dfnum[%d] irreducible to dfnum[%d]\n", x->dfnum, yprime->dfnum);
-                    x->irreducibles.push_back(yprime);
+                    //irreducibles.push_back(yprime);
+                    //irreducibles.push_back(yprime);
+                    yprime->flags.f_irreducible = 1;
                 }
                 else if (!yprime->is_mark() && (yprime != x)) {
                     reachunder.push_back(yprime);
@@ -3950,6 +3953,7 @@ bool        blockgraph::find_irreducible(const vector<flowblock *> &preorder, in
         }
 
         reachunder.clear();
+        irreducibles.clear();
     }
 
     clear_marks();

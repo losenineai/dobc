@@ -111,10 +111,9 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
         cur = br;
         end = trace.size() - 1;
     /* 有2种情况会退出循环，
-    
     1. 走出循环以后
     2. 碰到无法识别的cbranch节点 */
-    } while (!cur->flags.f_exitpath);
+    } while (!cur->is_out_loop());
 
     if (end == trace.size() - 1)
         printf("found exit node[%lx]\n", cur->sub_id());
@@ -848,7 +847,7 @@ int         funcdata::ollvm_detect_frameworkinfo()
 {
     int i, t, j, k;
     ollvmhead *head;
-    flowblock *b, *b1, *b2;
+    flowblock *b;
 
     for (i = 0; i < bblocks.blist.size(); i++) {
         b = bblocks.blist[i];
@@ -869,28 +868,6 @@ int         funcdata::ollvm_detect_frameworkinfo()
             }
             else
                 delete head;
-        }
-    }
-
-    vector<flowblock *> q;
-
-    for (i = 0; i < bblocks.exitlist.size(); i++) {
-        b = bblocks.exitlist[i];
-
-        b->flags.f_exitpath = 1;
-        q.push_back(b);
-
-        while (!q.empty()) {
-            b1 = q.front();
-            q.erase(q.begin());
-
-            for (j = 0; j < b1->in.size(); j++) {
-                b2 = b1->get_in(j);
-                if (!b2->flags.f_exitpath && !b2->loopheader && b2->loopnodes.empty()) {
-                    b2->flags.f_exitpath = 1;
-                    q.push_back(b2);
-                }
-            }
         }
     }
 
@@ -980,11 +957,16 @@ int         funcdata::ollvm_detect_propchain2(ollvmhead *oh, flowblock *&from, b
     varnode *vn;
     blockedge *e;
     vector<blockedge *> invec;
-    if (!p)
-        return -1;
-
-    if (p->opcode != CPUI_MULTIEQUAL)
-        return -1;
+    if (!p) {
+        if ((p = h->get_cbranch_sub_from_cmp()) 
+            && (p1 = p->get_in(0)->def)
+            && (p1->opcode == CPUI_MULTIEQUAL)
+            && p1->all_inrefs_is_constant()
+            && (pre = p1->parent) && (h->get_inslot(pre) >= 0)) {
+        }
+        else
+            return -1;
+    }
 
     for (i = 0; i < h->in.size(); i++) {
         e = & h->in[i];

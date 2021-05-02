@@ -778,6 +778,10 @@ struct flowblock {
     /* FIXME:需要重调整个机制 */
     bool        is_iv_in_normal_loop(pcodeop *op);
     bool        is_eq_cbranch(void);
+    /* 不属于任何一个循环 */
+    bool        is_out_loop() {
+        return !loopheader && loopnodes.empty() && !flags.f_irreducible;
+    }
 };
 
 class blockgraph {
@@ -843,7 +847,6 @@ public:
         b->flags.f_loopheader = 1;
         loopheaders.push_back(b);  
         b->loopnodes.push_back(b);
-        b->loopheader;
     }
     bool        in_loop(flowblock *lheader, flowblock *node);
     void        clear_loopinfo() {
