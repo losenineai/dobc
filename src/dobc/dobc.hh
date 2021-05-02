@@ -625,7 +625,6 @@ struct flowblock {
         unsigned f_irreducible : 1;
         unsigned f_loopheader : 1;
 
-        unsigned g_swap_cond : 1;
     } flags = { 0 };
 
     RangeList cover;
@@ -776,6 +775,8 @@ struct flowblock {
     cmp指令会产生一个sub指令，返回这个sub指令，假如没有，就返回NULL
     */
     pcodeop*    get_cbranch_sub_from_cmp(void);
+    /* FIXME:需要重调整个机制 */
+    bool        is_iv_in_normal_loop(pcodeop *op);
     bool        is_eq_cbranch(void);
 };
 

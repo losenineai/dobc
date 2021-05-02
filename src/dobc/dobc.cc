@@ -1260,15 +1260,15 @@ void            pcodeop::on_MULTIEQUAL()
                     return;
                 }
             }
-            else if (!vn->def || vn->def->opcode != CPUI_MULTIEQUAL) {
+            else if (!vn1->def || vn1->def->opcode != CPUI_MULTIEQUAL) {
                 output->set_top();
                 return;
             }
             else {
-                it = visit.find(vn->def);
+                it = visit.find(vn1->def);
                 if (it == visit.end()) {
-                    visit.insert(vn->def);
-                    philist.push_back(vn);
+                    visit.insert(vn1->def);
+                    philist.push_back(vn1);
                 }
             }
         }
@@ -2561,6 +2561,8 @@ pcodeop*    flowblock::get_cbranch_sub_from_cmp(void)
         case CPUI_COPY:
         case CPUI_INT_NOTEQUAL:
         case CPUI_INT_EQUAL:
+        case CPUI_BOOL_NEGATE:
+        case CPUI_INT_SLESS:
             op = op->get_in(0)->def;
             break;
 
@@ -2573,6 +2575,16 @@ pcodeop*    flowblock::get_cbranch_sub_from_cmp(void)
     }
 
     return NULL;
+}
+
+bool        flowblock::is_iv_in_normal_loop(pcodeop *sub)
+{
+    varnode *in1 = sub->get_in(1);
+
+    if (in1->is_hard_constant() && in1->get_val() < 128)
+        return true;
+
+    return false;
 }
 
 bool        flowblock::is_eq_cbranch(void)

@@ -16,7 +16,7 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
     int i, inslot, ret, end, nend;
     flowblock *cur, *prev, *br,  *last, *h = ollvm_get_head(), *from;
     list<pcodeop *>::const_iterator it;
-    pcodeop *p, *op;
+    pcodeop *p, *op, *cmp_sub;
     varnode *iv = NULL;
     blockedge *chain = NULL;
 
@@ -55,7 +55,7 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
             }
 #endif
 
-#if 0
+#if 1
             if ((p->opcode == CPUI_INT_SUB) && d->is_temp(poa(p)))
             {
                 char buf[256];
@@ -70,10 +70,17 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
             trace_push(p);
         }
 
-        if ((cur->out.size() > 1) && (ret != ERR_MEET_CALC_BRANCH)) {
+        int iv_in_normal_loop = false;
+
+        if ((ret == ERR_MEET_CALC_BRANCH) && (cmp_sub = cur->get_cbranch_sub_from_cmp())) {
+            iv_in_normal_loop = cur->is_iv_in_normal_loop(cmp_sub);
+        }
+
+        if ((cur->out.size() > 1) && ((ret != ERR_MEET_CALC_BRANCH) || iv_in_normal_loop)) {
             printf("found undefined-bcond in block[%x]\n", cur->sub_id());
 
-            for (end = trace.size() - 1; trace[end]->parent == cur; end--);
+            for (end = trace.size() - 1; trace[end]->parent == cur; end--) {
+            }
 
             /* 假如trace的最后一个节点，直接等于from，那么证明，一个分支节点都没走过去，直接禁止掉这个edge */
             if (trace[end]->parent == from) {
@@ -81,7 +88,7 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
                 chain->set_flag(a_unpropchain);
 
                 for (i = 0; i < trace.size(); i++) {
-                    pcodeop *p = trace[i];
+                    p = trace[i];
                     p->clear_trace();
                     p->set_top();
                 }
@@ -175,6 +182,14 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
     int lab = bblocks.remove_edge(from, chain->point);
     bblocks.add_edge(from, cur, lab & a_true_edge);
     bblocks.add_edge(cur, last);
+
+#if 0
+    structure_reset();
+    heritage_clear();
+    heritage();
+
+    dump_cfg(name, "test", 1);
+#endif
 
     cond_constant_propagation();
 
