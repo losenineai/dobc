@@ -351,6 +351,7 @@ public:
 	void			add_def_point_simple();
 	void			add_ref_point_simple(pcodeop *p);
 	void			clear_cover_simple();
+    pcodeop*        search_copy_chain(OpCode until);
 	void			clear_cover() { cover.clear();  }
 	int				dump_cover(char *buf) { 
 		int n = simple_cover.dump(buf);

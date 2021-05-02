@@ -393,7 +393,7 @@ void dobc::plugin_ollvm()
 #if 0
     //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
-    //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
+    funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
 #else
     funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
 #endif
@@ -855,6 +855,30 @@ void			varnode::clear_cover_simple()
 	simple_cover.end = -1;
 }
 
+pcodeop*        varnode::search_copy_chain(OpCode until)
+{
+    pcodeop *p = def;
+    varnode *vn = NULL;
+
+    while (p && p->opcode != until) {
+        vn = NULL;
+        switch (p->opcode) {
+        case CPUI_STORE:
+        case CPUI_LOAD:
+            vn = p->get_virtualnode();
+            break;
+
+        case CPUI_COPY:
+            vn = p->get_in(0);
+            break;
+        }
+
+        p = (vn && vn->def) ? vn->def : NULL;
+    }
+
+    return (p && p->opcode == until) ? p : NULL;
+}
+
 intb            varnode::get_val(void) const
 {
     return type.v;
@@ -1202,24 +1226,36 @@ void            pcodeop::on_MULTIEQUAL()
     set<intb> c;
     pcodeop_set visit;
     pcodeop_set::iterator it;
+    pcodeop *p1, *p;
     int i;
 
     visit.insert(this);
 
     for (i = 0; i < inrefs.size(); i++) {
         vn = get_in(i);
+        p = vn->def;
         if (vn->is_constant()) {
             c.insert(vn->get_val());
             cn = vn;
+            continue;
         }
-        else if (!vn->def || (vn->def->opcode != CPUI_MULTIEQUAL)) {
+        else if (!p) {
             output->set_top();
             return;
         }
-        else {
-            it = visit.find(vn->def);
+        else if (p->opcode != CPUI_MULTIEQUAL) {
+            p = vn->search_copy_chain(CPUI_MULTIEQUAL);
+
+            if (!p) {
+                output->set_top();
+                return;
+            }
+        }
+
+        if (p->opcode == CPUI_MULTIEQUAL) {
+            it = visit.find(p);
             if (it == visit.end())
-                philist.push_back(vn);
+                philist.push_back(p->output);
         }
     }
 
@@ -1235,7 +1271,6 @@ void            pcodeop::on_MULTIEQUAL()
         return;
     }
 
-
     /* 
     1. 假如一个phi节点中，所有常量的值相等
     2. 另外的非常量节点都是Phi节点
@@ -1246,29 +1281,40 @@ void            pcodeop::on_MULTIEQUAL()
         vn = philist.front();
         philist.erase(philist.begin());
 
-        pcodeop *p = vn->def;
+        p = vn->def;
         it = visit.find(p);
         if (it != visit.end()) continue;
 
         for (i = 0; i < p->inrefs.size(); i++) {
             vn1 = p->get_in(i);
+            p1 = vn1->def;
 
             if (vn1->is_constant()) {
-                if (!cn) cn = vn;
+                if (!cn) cn = vn1;
                 else if (vn1->type != cn->type) {
                     output->set_top();
                     return;
                 }
+                continue;
             }
-            else if (!vn1->def || vn1->def->opcode != CPUI_MULTIEQUAL) {
+            else if (!p1) {
                 output->set_top();
                 return;
             }
-            else {
-                it = visit.find(vn1->def);
+            else if (p1->opcode != CPUI_MULTIEQUAL) {
+                p1 = vn1->search_copy_chain(CPUI_MULTIEQUAL);
+
+                if (!p1) {
+                    output->set_top();
+                    return;
+                }
+            }
+
+            if (p1->opcode == CPUI_MULTIEQUAL) {
+                it = visit.find(p1);
                 if (it == visit.end()) {
-                    visit.insert(vn1->def);
-                    philist.push_back(vn1);
+                    visit.insert(p1);
+                    philist.push_back(p1->output);
                 }
             }
         }
