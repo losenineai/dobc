@@ -191,10 +191,9 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
     dump_cfg(name, "test", 1);
 #endif
 
-    cond_constant_propagation();
-
-    if (!cbrlist.empty())
+    do {
         cond_constant_propagation();
+    } while (!cbrlist.empty());
 
     return 0;
 }
@@ -981,7 +980,10 @@ int         funcdata::ollvm_detect_propchain2(ollvmhead *oh, flowblock *&from, b
     varnode *vn;
     blockedge *e;
     vector<blockedge *> invec;
-    if (!p || (p->opcode != CPUI_MULTIEQUAL))
+    if (!p)
+        return -1;
+
+    if (p->opcode != CPUI_MULTIEQUAL)
         return -1;
 
     for (i = 0; i < h->in.size(); i++) {
@@ -1329,8 +1331,6 @@ void        funcdata::remove_empty_block(blockbasic *bl)
     block_remove_internal(bl, true);
 
     /* 处理掉cbranch的block true , false指向同一个节点的情况 */
-
-    structure_reset();
 }
 
 void        funcdata::redundbranch_apply()
