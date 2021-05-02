@@ -843,6 +843,11 @@ flowblock*  funcdata::ollvm_get_head(void)
     return NULL;
 }
 
+int vmhead_dfnum_cmp(ollvmhead *l, ollvmhead *r)
+{
+    return l->h->dfnum < r->h->dfnum;
+}
+
 int         funcdata::ollvm_detect_frameworkinfo()
 {
     int i, t, j, k;
@@ -859,7 +864,7 @@ int         funcdata::ollvm_detect_frameworkinfo()
             if (!ollvm_detect_fsm(head)) {
                 ollvm.heads.push_back(head);
                 head->h->mark_unsplice();
-                printf("ollvm head[%llx] ", head->h->get_start().getOffset());
+                printf("ollvm head[%llx, index:%d, dfnum:%d] ", head->h->get_start().getOffset(), head->h->index, head->h->dfnum);
                 if (!head->st1.isInvalid())
                     printf("fsm1[%s] ", d->trans->getRegisterName(head->st1.getSpace(), head->st1.getOffset(), head->st1_size).c_str());
                 if (!head->st2.isInvalid())
@@ -870,6 +875,8 @@ int         funcdata::ollvm_detect_frameworkinfo()
                 delete head;
         }
     }
+
+    std::sort(ollvm.heads.begin(), ollvm.heads.end(), vmhead_dfnum_cmp);
 
     printf("search maybe safezone alias start...\n");
     /* FIXME:后面要改成递归收集所有的load */
