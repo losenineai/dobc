@@ -12,12 +12,20 @@
 
 #define NOP             0xe1a00000
 
-#define GEN_SH          "#!/bin/bash\n"  \
-    "for filename in `find . -type f -name \"*.dot\" | xargs`\n"  \
-    "do\n" \
-    "   echo `date +\"%T.%3N\"` gen $filename png \n" \
-    "   dot -Tsvg -o ${filename%.*}.svg $filename\n" \
-    "done\n" 
+#define GEN_SH          \
+    "#!/bin/bash\n" \
+    "if [[ $#  -eq 1 ]]\n" \
+    "then\n" \
+    "  filename=$1\n" \
+    "  echo `date +\"%T.%3N\"` gen $filename svg\n" \
+    "  dot -Tsvg -o ${filename%.*}.svg $1\n" \
+    "else\n" \
+    "  for filename in `find . - type f - name \"*.dot\" | xargs`\n" \
+    "  do\n" \
+    "    echo `date + \"%T.%3N\"` gen $filename svg\n" \
+    "    dot -Tsvg -o ${filename%.*}.svg $filename\n" \
+    "  done\n" \
+    "fi\n"
 
 //#define ENABLE_DUMP_INST                1
 //#define ENABLE_DUMP_PCODE               1
@@ -393,7 +401,7 @@ void dobc::plugin_ollvm()
 #if 0
     //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
-    //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
+    funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
 #else
     funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
 #endif
@@ -877,6 +885,32 @@ pcodeop*        varnode::search_copy_chain(OpCode until)
     }
 
     return (p && (p->opcode == until)) ? p : NULL;
+}
+
+bool            varnode::maystore_from_this(pcodeop *p)
+{
+    varnode *in0;
+
+    while (p) {
+        in0 = NULL;
+        switch (p->opcode) {
+        case CPUI_STORE:
+            in0 = p->get_in(1);
+            break;
+
+        case CPUI_INT_ADD:
+            if (p->get_in(1)->is_constant() && p->get_in(1)->get_val() == 0) 
+                in0 = p->get_in(0);
+            break;
+        }
+
+        if (in0 && in0 == this)
+            return true;
+
+        p = (in0 && in0->def) ? in0->def : NULL;
+    }
+
+    return false;
 }
 
 intb            varnode::get_val(void) const
@@ -2127,11 +2161,6 @@ void            pcodeop::to_constant1(void)
 
     if (flags.simd && fd->flags.disable_simd_to_const) return;
 
-    //if (start.getTime() < 5000 && start.getTime() > 4700) return;
-    if (start.getTime() == 4735) {
-        printf("aa\n");
-    }
-
     /*
     非trace条件才能开启常量持久化
     */
@@ -2616,6 +2645,7 @@ pcodeop*    flowblock::get_cbranch_sub_from_cmp(void)
         case CPUI_INT_EQUAL:
         case CPUI_BOOL_NEGATE:
         case CPUI_INT_SLESS:
+        case CPUI_BOOL_OR:
             op = op->get_in(0)->def;
             break;
 
@@ -2634,7 +2664,7 @@ bool        flowblock::is_iv_in_normal_loop(pcodeop *sub)
 {
     varnode *in1 = sub->get_in(1);
 
-    if (in1->is_hard_constant() && in1->get_val() < 128)
+    if (in1->is_constant() && in1->get_val() <= 1024)
         return true;
 
     return false;
@@ -6303,6 +6333,13 @@ pcodeop*    funcdata::store_query(pcodeop *load, flowblock *b, varnode *pos, pco
         it = b->ops.rbegin();
     }
 
+    //if (load && load->start.getTime() == 4783) {
+#if 0
+    if (load && load->start.getTime() == 4450) {
+        printf("aaaa\n");
+    }
+#endif
+
     while (1) {
         for (; it != b->ops.rend(); it++) {
             p = *it;
@@ -6370,7 +6407,15 @@ pcodeop*    funcdata::store_query(pcodeop *load, flowblock *b, varnode *pos, pco
 
                         /* 在分支中找到了store节点，假如是第一个就保存起来，
                         假如不是第一个，则比较是否相等，不是的话返回NULL */
-                        if (a->is_top()) return NULL;
+                        if (a->is_top()) {
+#if 0
+                            if (load && load->output->maystore_from_this(p))
+                                continue;
+#endif
+
+                            *maystore = p;
+                            return NULL;
+                        }
 
                         if (a->type == pos->type) {
 #if 0

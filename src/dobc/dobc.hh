@@ -351,7 +351,32 @@ public:
 	void			add_def_point_simple();
 	void			add_ref_point_simple(pcodeop *p);
 	void			clear_cover_simple();
+
     pcodeop*        search_copy_chain(OpCode until);
+    /*
+
+    *ptr = 0;
+    label1:
+    %r0 = load ptr  ; r0 = T
+
+    store r0, xxx
+    goto label1;
+
+    本来要可以建立ptr的别名到r0，但是因为store，我们不确认%r0 是否等于 ptr，
+    所以也不确认%r0的值。
+
+    根据这个情况，我们假设:
+
+    1. 当ptr的值为sp+c时
+    
+    r0不等于ptr，因为ptr假设指向的是一个sp+c的值时，它大概率是可以被计算的
+
+    警告:这个属于pattern了，非常危险
+
+    libmakeurl: 171fc
+    */
+    bool            maystore_from_this(pcodeop *maystore);
+
 	void			clear_cover() { cover.clear();  }
 	int				dump_cover(char *buf) { 
 		int n = simple_cover.dump(buf);
@@ -981,6 +1006,7 @@ struct ollvmhead {
     Address st2;
     int st2_size;
     flowblock *h;
+    int times = 0;
 
     ollvmhead(flowblock *h1);
     ollvmhead(Address &a, flowblock *h1);

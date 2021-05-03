@@ -28,9 +28,6 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
     prev = from;
     cur = chain->point;
 
-    prev->dump();
-    cur->dump();
-
     trace_push(prev->last_op());
 
     do {
@@ -56,7 +53,7 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
 #endif
 
 #if 1
-            if ((p->opcode == CPUI_INT_SUB) && d->is_temp(poa(p)))
+            if ((p->opcode == CPUI_INT_SUB))
             {
                 char buf[256];
                 int len = 0;
@@ -921,6 +918,7 @@ int         funcdata::ollvm_detect_frameworkinfo()
 
 int         funcdata::ollvm_detect_propchains2(flowblock *&from, blockedge *&outedge)
 {
+    ollvmhead *oh;
     int i, ret;
 
     /* 寻找传递链的逻辑 
@@ -932,26 +930,37 @@ int         funcdata::ollvm_detect_propchains2(flowblock *&from, blockedge *&out
         继续往上搜，假如
     */
     for (i = 0; i < ollvm.heads.size(); i++) {
-        ollvmhead *oh = ollvm.heads[i];
+        oh = ollvm.heads[i];
 
         if (oh->h->flags.f_dead) continue;
 
-        if (!ollvm_detect_propchain2(oh, from, outedge, 0)) return 0;
+        if (!ollvm_detect_propchain2(oh, from, outedge, 0))
+            goto success_label;
     }
 
     /* 尝试传递拷贝复制 */
     for (i = 0; i < ollvm.heads.size(); i++) {
-        ollvmhead *oh = ollvm.heads[i];
+        oh = ollvm.heads[i];
 
         if (oh->h->flags.f_dead) continue;
 
         /* lcs 或者拷贝传递 */
         while ((ret = ollvm_detect_propchain2(oh, from, outedge, F_OPEN_COPY)) > 0);
 
-        if (ret == 0) return 0;
+        if (ret == 0)
+            goto success_label;
     }
 
     return -1;
+
+success_label:
+    oh->times++;
+
+    printf("vmhead progchain[%llx, times:%d] \n", oh->h->get_start().getOffset(), oh->times);
+    from->dump();
+    outedge->point->dump();
+
+    return 0;
 }
 
 int block_dfnum_cmp(blockedge *l, blockedge *r)
@@ -1000,6 +1009,7 @@ int         funcdata::ollvm_detect_propchain2(ollvmhead *oh, flowblock *&from, b
         p1 = vn->def;
         h1 = p1->parent;
 
+        /* 假如状态节点的某个phi节点输入就是常数，直接开始遍历 */
         if (vn->is_constant()) {
             from = pre;
             e = &pre->out[pre->get_out_index(cur)];
@@ -1009,6 +1019,7 @@ int         funcdata::ollvm_detect_propchain2(ollvmhead *oh, flowblock *&from, b
             return 0;
         }
 
+        /* 假如某个in节点是phi节点，但是刚好邻接vmhead，那么也搜索一边 */
         if ((p1->opcode == CPUI_MULTIEQUAL) && (h->get_inslot(h1) >= 0)) {
             for (j = 0; j < h1->in.size(); j++) {
                 vn = p1->get_in(j);
