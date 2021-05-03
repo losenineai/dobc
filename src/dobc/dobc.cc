@@ -2127,6 +2127,11 @@ void            pcodeop::to_constant1(void)
 
     if (flags.simd && fd->flags.disable_simd_to_const) return;
 
+    //if (start.getTime() < 5000 && start.getTime() > 4700) return;
+    if (start.getTime() == 4735) {
+        printf("aa\n");
+    }
+
     /*
     非trace条件才能开启常量持久化
     */
@@ -6346,8 +6351,8 @@ pcodeop*    funcdata::store_query(pcodeop *load, flowblock *b, varnode *pos, pco
             }
 
             while (!stack.empty()) {
-                b = stack.back();
-                stack.pop_back();
+                b = stack.front();
+                stack.erase(stack.begin());
 
                 if (visited[b->dfnum])
                     continue;
@@ -6365,6 +6370,8 @@ pcodeop*    funcdata::store_query(pcodeop *load, flowblock *b, varnode *pos, pco
 
                         /* 在分支中找到了store节点，假如是第一个就保存起来，
                         假如不是第一个，则比较是否相等，不是的话返回NULL */
+                        if (a->is_top()) return NULL;
+
                         if (a->type == pos->type) {
 #if 0
                             if (NULL == tmpstore)

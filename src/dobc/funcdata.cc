@@ -77,7 +77,7 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
         }
 
         if ((cur->out.size() > 1) && ((ret != ERR_MEET_CALC_BRANCH) || iv_in_normal_loop)) {
-            printf("found undefined-bcond in block[%x]\n", cur->sub_id());
+            printf("found undefined-bcond node[sub_%llx, index:%d, dfnum:%d]\n", cur->get_start().getOffset(), cur->index, cur->dfnum);
 
             for (end = trace.size() - 1; trace[end]->parent == cur; end--) {
             }
@@ -116,7 +116,7 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
     } while (!cur->is_out_loop());
 
     if (end == trace.size() - 1)
-        printf("found exit node[%lx]\n", cur->sub_id());
+        printf("found exit node[sub_%llx, index:%d, dfnum:%d]\n", cur->get_start().getOffset(), cur->index, cur->dfnum);
 
     /* back指向的节点
     1. 当走出循环时，back指向循环外节点
@@ -970,7 +970,7 @@ int         funcdata::ollvm_detect_propchain2(ollvmhead *oh, flowblock *&from, b
     blockedge *e;
     vector<blockedge *> invec;
     if (!p) {
-        if ((p = h->get_cbranch_sub_from_cmp()) 
+        if ((p = h->get_cbranch_sub_from_cmp())
             && (p1 = p->get_in(0)->def)
             && (p1->opcode == CPUI_MULTIEQUAL)
             && p1->all_inrefs_is_constant()
@@ -979,6 +979,8 @@ int         funcdata::ollvm_detect_propchain2(ollvmhead *oh, flowblock *&from, b
         else
             return -1;
     }
+    else if (p->opcode != CPUI_MULTIEQUAL)
+        return -1;
 
     for (i = 0; i < h->in.size(); i++) {
         e = & h->in[i];
