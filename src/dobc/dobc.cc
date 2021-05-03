@@ -393,7 +393,7 @@ void dobc::plugin_ollvm()
 #if 0
     //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
-    funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
+    //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
 #else
     funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
 #endif
@@ -860,7 +860,7 @@ pcodeop*        varnode::search_copy_chain(OpCode until)
     pcodeop *p = def;
     varnode *vn = NULL;
 
-    while (p && p->opcode != until) {
+    while (p && (p->opcode != until)) {
         vn = NULL;
         switch (p->opcode) {
         case CPUI_STORE:
@@ -876,7 +876,7 @@ pcodeop*        varnode::search_copy_chain(OpCode until)
         p = (vn && vn->def) ? vn->def : NULL;
     }
 
-    return (p && p->opcode == until) ? p : NULL;
+    return (p && (p->opcode == until)) ? p : NULL;
 }
 
 intb            varnode::get_val(void) const
@@ -2339,7 +2339,9 @@ void blockgraph::find_spanning_tree(vector<flowblock *> &preorder, vector<flowbl
 
         tmpbl->clear_loopinfo();
     }
-    assert(rootlist.size() == 1);
+    if (rootlist.size() != 1) {
+        throw LowlevelError("more root head");
+    }
 
     origrootpos = rootlist.size() - 1;
 
@@ -3665,6 +3667,7 @@ int         funcdata::ollvm_deshell()
 #endif
 
     dump_cfg(name, "orig", 1);
+    //dump_djgraph("1", 0);
 
     ollvm_detect_frameworkinfo();
 
@@ -3935,10 +3938,9 @@ https://core.ac.uk/download/pdf/82032035.pdf */
 bool        blockgraph::find_irreducible(const vector<flowblock *> &preorder, int &irreduciblecount)
 {
     vector<flowblock *> reachunder;
-    vector<flowblock *> irreducibles;
-    flowblock *y;
+    flowblock *y, *copymap, *b;
     bool needrebuild = false;
-    int xi = preorder.size() - 1, i, loop, q;
+    int xi = preorder.size() - 1, i, loop, q, j;
 
     while (xi >= 0) {
         flowblock *x = preorder[xi];
@@ -3954,9 +3956,19 @@ bool        blockgraph::find_irreducible(const vector<flowblock *> &preorder, in
             if (y == x)
                 continue;
 
-            reachunder.push_back(y->copymap);
-            y->copymap->set_mark();
+            reachunder.push_back((copymap = y->copymap));
+            copymap->set_mark();
+
+            /* 假设出现一种  */
+            for (j = 0; j < copymap->irreducibles.size(); j++) {
+                b = copymap->irreducibles[j];
+                if (!b->is_mark()) {
+                    reachunder.push_back(b);
+                    b->set_mark();
+                }
+            }
         }
+
         if (loop) {
             add_loopheader(x);
         }
@@ -3979,7 +3991,7 @@ bool        blockgraph::find_irreducible(const vector<flowblock *> &preorder, in
                     // FIXME:这行打印太多了，需要优化掉
                     //printf("warn: dfnum[%d] irreducible to dfnum[%d]\n", x->dfnum, yprime->dfnum);
                     //irreducibles.push_back(yprime);
-                    //irreducibles.push_back(yprime);
+                    x->irreducibles.push_back(yprime);
                     yprime->flags.f_irreducible = 1;
                 }
                 else if (!yprime->is_mark() && (yprime != x)) {
@@ -3999,7 +4011,6 @@ bool        blockgraph::find_irreducible(const vector<flowblock *> &preorder, in
         }
 
         reachunder.clear();
-        irreducibles.clear();
     }
 
     clear_marks();
@@ -5746,7 +5757,11 @@ void        funcdata::reset_out_use(pcodeop *p)
 
         slot = use->get_slot(out);
         assert(slot >= 0);
-        op_set_input(use, new_varnode(out->size, out->get_addr()), slot);
+
+        if ((p->opcode == CPUI_COPY) && poa(p) == pi0a(p))
+            op_set_input(use, pi0(p), slot);
+        else
+            op_set_input(use, new_varnode(out->size, out->get_addr()), slot);
     }
 }
 

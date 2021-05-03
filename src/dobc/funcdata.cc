@@ -182,12 +182,11 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
     bblocks.add_edge(from, cur, lab & a_true_edge);
     bblocks.add_edge(cur, last);
 
-#if 0
-    structure_reset();
+#if 1
+    if (!remove_unreachable_blocks(true, true))
+        structure_reset();
     heritage_clear();
     heritage();
-
-    dump_cfg(name, "test", 1);
 #endif
 
     do {
@@ -519,8 +518,10 @@ void        funcdata::rename_recurse(blockbasic *bl, variable_stack &varstack, v
         slot = bl->get_out_rev_index(i);
         for (suboiter = subbl->ops.begin(); suboiter != subbl->ops.end(); suboiter++) {
             multiop = *suboiter;
-            if (multiop->opcode != CPUI_MULTIEQUAL)
+            if (multiop->opcode != CPUI_MULTIEQUAL) {
+                if (multiop->flags.copy_from_phi) continue;
                 break;
+            }
 
             vnin = multiop->get_in(slot);
             //if (vnin->is_heritage_known()) continue;
@@ -864,12 +865,6 @@ int         funcdata::ollvm_detect_frameworkinfo()
             if (!ollvm_detect_fsm(head)) {
                 ollvm.heads.push_back(head);
                 head->h->mark_unsplice();
-                printf("ollvm head[%llx, index:%d, dfnum:%d] ", head->h->get_start().getOffset(), head->h->index, head->h->dfnum);
-                if (!head->st1.isInvalid())
-                    printf("fsm1[%s] ", d->trans->getRegisterName(head->st1.getSpace(), head->st1.getOffset(), head->st1_size).c_str());
-                if (!head->st2.isInvalid())
-                    printf("fsm2[%s] ", d->trans->getRegisterName(head->st1.getSpace(), head->st1.getOffset(), head->st1_size).c_str());
-                printf("\n");
             }
             else
                 delete head;
@@ -877,6 +872,16 @@ int         funcdata::ollvm_detect_frameworkinfo()
     }
 
     std::sort(ollvm.heads.begin(), ollvm.heads.end(), vmhead_dfnum_cmp);
+
+    for (i = 0; i < ollvm.heads.size(); i++) {
+        ollvmhead *head = ollvm.heads[i];
+        printf("ollvm head[%llx, index:%d, dfnum:%d] ", head->h->get_start().getOffset(), head->h->index, head->h->dfnum);
+        if (!head->st1.isInvalid())
+            printf("fsm1[%s] ", d->trans->getRegisterName(head->st1.getSpace(), head->st1.getOffset(), head->st1_size).c_str());
+        if (!head->st2.isInvalid())
+            printf("fsm2[%s] ", d->trans->getRegisterName(head->st1.getSpace(), head->st1.getOffset(), head->st1_size).c_str());
+        printf("\n");
+    }
 
     printf("search maybe safezone alias start...\n");
     /* FIXME:后面要改成递归收集所有的load */
