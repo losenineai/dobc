@@ -5381,7 +5381,7 @@ void        funcdata::dump_block(FILE *fp, blockbasic *b, int flag)
 
     assem.set_buf(obuf);
 
-    // 把指令都以html.table的方式打印，dot直接segment fault了，懒的调dot了
+    // 把指令都以html.table的方式打印，dot直接segment fault了，懒的调dot了，不再用png, jpg改用svg
     if (b->vm_byteindex >= 0) {
         fprintf(fp, "loc_%x [style=\"filled\" fillcolor=%s label=<<table bgcolor=\"white\" align=\"left\" border=\"0\">"
             "<tr><td><font color=\"green\">sub_%llx(%d,%d, h:%d, vbi:%d, vci:%d)</font></td></tr>",
@@ -5394,12 +5394,13 @@ void        funcdata::dump_block(FILE *fp, blockbasic *b, int flag)
             b->vm_caseindex);
     }
     else {
-        fprintf(fp, "loc_%x [style=\"filled\" fillcolor=%s label=<<table bgcolor=\"white\" align=\"left\" border=\"0\"><tr><td><font color=\"red\">sub_%llx(%d,%d, h:%d)</font></td></tr>",
+        fprintf(fp, "loc_%x [style=\"filled\" fillcolor=%s label=<<table bgcolor=\"white\" align=\"left\" border=\"0\">"
+                    "<tr><td><font color=\"red\">sub_%llx(df:%d, ind:%d, domh:%d, outl:%d, looph_df:%d)</font></td></tr>",
             b->sub_id(),
             block_color(b),
             b->get_start().getOffset(),
             b->dfnum,
-            b->index, domdepth.size() ?  domdepth[b->index]:0);
+            b->index, domdepth.size() ?  domdepth[b->index]:0, b->is_out_loop(), b->loopheader ? b->loopheader->dfnum:0);
     }
 
     iter = b->ops.begin();

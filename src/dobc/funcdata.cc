@@ -53,7 +53,7 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
 #endif
 
 #if 1
-            if ((p->opcode == CPUI_INT_SUB))
+            if ((cur->out.size() == 2) && (p->opcode == CPUI_INT_SUB))
             {
                 char buf[256];
                 int len = 0;
