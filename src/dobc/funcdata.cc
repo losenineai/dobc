@@ -1019,20 +1019,25 @@ int         funcdata::ollvm_detect_propchain2(ollvmhead *oh, flowblock *&from, b
             return 0;
         }
 
-        /* 假如某个in节点是phi节点，但是刚好邻接vmhead，那么也搜索一边 */
-        if ((p1->opcode == CPUI_MULTIEQUAL) && (h->get_inslot(h1) >= 0)) {
-            for (j = 0; j < h1->in.size(); j++) {
-                vn = p1->get_in(j);
-                pre = p1->parent->get_in(j);
-                cur = p1->parent;
+        if ((p1->opcode == CPUI_MULTIEQUAL)) {
+            /* 假如某个in节点是phi节点
+            1. 刚好邻接vmhead，那么尝试搜索它
+            2. 这个phi节点的out节点(只有一个)，邻接vmhead
+            */
+            if ((h->is_adjacent(h1)) || ((h1->out.size() == 1) && h->is_adjacent(h1->get_out(0)))) {
+                for (j = 0; j < h1->in.size(); j++) {
+                    vn = p1->get_in(j);
+                    pre = p1->parent->get_in(j);
+                    cur = p1->parent;
 
-                if (vn->is_constant()) {
-                    from = pre;
-                    e = &pre->out[pre->get_out_index(cur)];
-                    /* 假如已经被标记过，不可计算了 */
-                    if (e->is(a_unpropchain)) continue;
-                    outedge = e;
-                    return 0;
+                    if (vn->is_constant()) {
+                        from = pre;
+                        e = &pre->out[pre->get_out_index(cur)];
+                        /* 假如已经被标记过，不可计算了 */
+                        if (e->is(a_unpropchain)) continue;
+                        outedge = e;
+                        return 0;
+                    }
                 }
             }
         }

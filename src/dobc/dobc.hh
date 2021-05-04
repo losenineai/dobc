@@ -808,6 +808,9 @@ struct flowblock {
     bool        is_out_loop() {
         return !loopheader && loopnodes.empty() && !flags.f_irreducible;
     }
+    bool        is_adjacent(flowblock *adj) {
+        return get_inslot(adj) >= 0;
+    }
 };
 
 class blockgraph {
