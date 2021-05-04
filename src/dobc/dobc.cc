@@ -399,9 +399,9 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 void dobc::plugin_ollvm()
 {
 #if 0
-    //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
+    funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
-    funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
+    //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
 #else
     funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
 #endif
@@ -1319,6 +1319,8 @@ void            pcodeop::on_MULTIEQUAL()
         it = visit.find(p);
         if (it != visit.end()) continue;
 
+        visit.insert(p);
+
         for (i = 0; i < p->inrefs.size(); i++) {
             vn1 = p->get_in(i);
             p1 = vn1->def;
@@ -1347,7 +1349,6 @@ void            pcodeop::on_MULTIEQUAL()
             if (p1->opcode == CPUI_MULTIEQUAL) {
                 it = visit.find(p1);
                 if (it == visit.end()) {
-                    visit.insert(p1);
                     philist.push_back(p1->output);
                 }
             }

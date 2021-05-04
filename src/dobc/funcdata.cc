@@ -179,12 +179,12 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
     bblocks.add_edge(from, cur, lab & a_true_edge);
     bblocks.add_edge(cur, last);
 
-#if 1
     if (!remove_unreachable_blocks(true, true))
         structure_reset();
     heritage_clear();
     heritage();
-#endif
+
+    //dump_cfg("test", "1", 1);
 
     do {
         cond_constant_propagation();
