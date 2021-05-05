@@ -811,6 +811,10 @@ struct flowblock {
     bool        is_adjacent(flowblock *adj) {
         return get_inslot(adj) >= 0;
     }
+    bool        is_cbranch() {
+        pcodeop *p = last_op();
+        return p ? (p->opcode == CPUI_CBRANCH) : false;
+    }
 };
 
 class blockgraph {
@@ -915,6 +919,8 @@ public:
     void        dump_live_set(flowblock *b);
     void        dump_live_set(pcodeop *p);
     void        collect_cond_copy_sub(vector<pcodeop *> &subs);
+    void        collect_no_cmp_cbranch_block(vector<flowblock *> &blks);
+    flowblock*  get_it_end_block(flowblock *b);
 };
 
 typedef struct priority_queue   priority_queue;
@@ -1689,6 +1695,8 @@ public:
     我们会从defs里面删除不等于对应常量的常量
     */
     int         cut_const_defs_on_condition(pcodeop *start, vector<varnode *> &defs);
+    void        rewrite_no_sub_cbranch_blk(flowblock *b);
+    void        rewrite_no_sub_cbranch_blks(vector<flowblock *> &blks);
 
     /* 合并这些block中，最长公共尾串 
     action:

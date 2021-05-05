@@ -153,7 +153,7 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
         if (((p->opcode == CPUI_BRANCH) || (p->opcode == CPUI_CBRANCH) || (p->opcode == CPUI_INDIRECT) || (p->opcode == CPUI_MULTIEQUAL) || (p->opcode == CPUI_BRANCHIND)))
             continue;
 
-        Address addr2(d->get_code_space(), user_offset + p->get_addr().getOffset());
+        Address addr2(d->get_code_space(), p->get_addr().getOffset());
         const SeqNum sq(addr2, op_uniqid++);
         op = cloneop(p, sq);
         op_insert(op, cur, cur->ops.end());
@@ -851,6 +851,17 @@ int         funcdata::ollvm_detect_frameworkinfo()
     int i, t, j, k;
     ollvmhead *head;
     flowblock *b;
+    vector<flowblock *> blks;
+
+    bblocks.collect_no_cmp_cbranch_block(blks);
+
+    printf("found [%d] no sub cbranch block search... \n", blks.size());
+    for (i = 0; i < blks.size(); i++) {
+        blks[i]->dump();
+    }
+    printf("no sub cbranch block search end\n");
+
+    //rewrite_no_sub_cbranch_blks(blks);
 
     for (i = 0; i < bblocks.blist.size(); i++) {
         b = bblocks.blist[i];

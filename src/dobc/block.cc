@@ -23,6 +23,25 @@ void        blockgraph::collect_cond_copy_sub(vector<pcodeop *> &subs)
     }
 }
 
+void        blockgraph::collect_no_cmp_cbranch_block(vector<flowblock *> &blks)
+{
+    for (int i = 0; i < blist.size(); i++) {
+        flowblock *b = blist[i];
+        if (!b->is_cbranch()) continue;
+        if (b->in.size() < 3) continue;
+
+        pcodeop *sub = b->get_cbranch_sub_from_cmp();
+        if (sub) continue;
+
+        blks.push_back(b);
+    }
+}
+
+flowblock*  blockgraph::get_it_end_block(flowblock *b)
+{
+    return (b->get_out(0)->get_out(0) == b->get_out(1)) ? b->get_out(1):b->get_out(0);
+}
+
 void        blockgraph::compute_local_live_sets(void)
 {
     int i, j, r;

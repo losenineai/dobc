@@ -398,10 +398,10 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 
 void dobc::plugin_ollvm()
 {
-#if 0
-    funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
+#if 1
+    //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
-    //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
+    funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
 #else
     funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
 #endif
@@ -2642,12 +2642,21 @@ pcodeop*    flowblock::get_cbranch_sub_from_cmp(void)
     while (op && op->parent == this) {
         switch (op->opcode) {
         case CPUI_COPY:
+        case CPUI_BOOL_NEGATE:
+            op = op->get_in(0)->def;
+            break;
+
         case CPUI_INT_NOTEQUAL:
         case CPUI_INT_EQUAL:
-        case CPUI_BOOL_NEGATE:
         case CPUI_INT_SLESS:
         case CPUI_BOOL_OR:
-            op = op->get_in(0)->def;
+        case CPUI_BOOL_AND:
+            if (!op->get_in(0)->is_constant())
+                op = op->get_in(0)->def;
+            else if (!op->get_in(1)->is_constant())
+                op = op->get_in(1)->def;
+            else
+                return NULL;
             break;
 
         case CPUI_INT_SUB:
@@ -3482,6 +3491,42 @@ int         funcdata::cut_const_defs_on_condition(pcodeop *start, vector<varnode
     }
 
     return 0;
+}
+
+void        funcdata::rewrite_no_sub_cbranch_blk(flowblock *b)
+{
+    int i;
+    list<pcodeop *>::iterator it, it1;
+    flowblock *end, *newstart;
+    vector<flowblock *> cloneblks;
+
+    end = bblocks.get_it_end_block(b);
+
+    clear_block_phi(b);
+    clear_block_phi(end);
+
+    for (i = 0; i < b->in.size(); i++) {
+        flowblock *inb = b->get_in(i);
+
+        cloneblks.clear();
+        newstart = clone_web(b, end, cloneblks);
+
+        bblocks.remove_edge(inb, b);
+        bblocks.add_edge(inb, end);
+    }
+}
+
+void        funcdata::rewrite_no_sub_cbranch_blks(vector<flowblock *> &blks)
+{
+    int i;
+
+    for (i = 0; i < blks.size(); i++) {
+        rewrite_no_sub_cbranch_blk(blks[i]);
+    }
+
+    structure_reset();
+    heritage_clear();
+    heritage();
 }
 
 
@@ -6887,7 +6932,7 @@ flowblock*  funcdata::clone_block(flowblock *f, u4 flags)
         if (op->opcode == CPUI_MULTIEQUAL) continue;
         if ((flags & F_OMIT_RETURN) && (op->opcode == CPUI_RETURN)) break;
 
-        Address addr2(d->get_code_space(), user_offset + op->get_addr().getOffset());
+        Address addr2(d->get_code_space(), op->get_addr().getOffset());
         SeqNum seq(addr2, op_uniqid++);
         p = cloneop(op, seq);
 
@@ -7141,9 +7186,10 @@ flowblock*  funcdata::clone_web(flowblock *start, flowblock *end, vector<flowblo
 
     for (i = 0; i < webs.size(); i++) {
         for (j = 0; j < webs[i]->out.size(); j++) {
-            out = webs[i]->get_out(j);
+            blockedge *e = &webs[i]->out[j];
+            out = e->point;
 
-            bblocks.add_edge(webs[i]->copymap, out->copymap);
+            bblocks.add_edge(webs[i]->copymap, out->copymap, e->label & a_true_edge);
         }
     }
 

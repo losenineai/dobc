@@ -89,6 +89,12 @@ public:
     int run(void);
 };
 
+class pass_rewrite_no_sub_cbranch : public pass {
+public:
+    pass_rewrite_no_sub_cbranch(funcdata *f) :pass(f) { }
+    int run(void);
+};
+
 class pass_mgr {
 };
 
