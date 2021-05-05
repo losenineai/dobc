@@ -1,5 +1,32 @@
 ﻿#include "vm.h"
 #include "elfloadimage.hh"
+
+void ElfLoadImage::init()
+{
+    int count = elf32_sym_count((Elf32_Ehdr *)filedata), i;
+    LoadImageFunc *func;
+    Elf32_Shdr *dynsymsh, *link_sh;
+    Elf32_Ehdr *hdr = (Elf32_Ehdr *)filedata;
+    char *name;
+
+    dynsymsh = elf32_shdr_get(hdr, SHT_DYNSYM);
+
+    link_sh = (Elf32_Shdr *)(filedata + hdr->e_shoff) + dynsymsh->sh_link;
+
+    for (i = 0; i < count; i++) {
+        Elf32_Sym  *sym = elf32_sym_geti((Elf32_Ehdr *)filedata, i);
+        func = new LoadImageFunc();
+        name = (char *)filedata + (link_sh->sh_offset + sym->st_name);
+
+        func->address = Address(codespace, sym->st_value);
+        func->name = string(name);
+        func->size = sym->st_size;
+        func->bufptr = filedata + sym->st_value;
+
+        addrtab[func->address] = func;
+        nametab[func->name] = func;
+    }
+}
  
 ElfLoadImage::ElfLoadImage(const char *filename):LoadImageB(filename)
 {
@@ -73,18 +100,13 @@ bool ElfLoadImage::getNextSymbol(LoadImageFunc &record)
     return true;
 }
 
-int ElfLoadImage::getSymbol(const char *symname, LoadImageFunc &record)
+int ElfLoadImage::getSymbol(const string &name, LoadImageFunc &record)
 {
-    Elf32_Sym *sym = elf32_sym_find2((Elf32_Ehdr *)filedata, symname);
+    LoadImageFunc *func = nametab[name];
+    if (func)
+        record = *func;
 
-    if (!sym)
-        return -1;
-
-    record.address = Address(codespace, sym->st_value);
-    record.name = string(symname);
-    record.size = sym->st_size;
-    record.bufptr = filedata + sym->st_value;
-    return 0;
+    return func ? 0:-1;;
 }
 
 int ElfLoadImage::saveSymbol(const char *symname, int size)
@@ -96,6 +118,11 @@ int ElfLoadImage::saveSymbol(const char *symname, int size)
 
     sym->st_size = size;
 
+    return 0;
+}
+
+int ElfLoadImage::addSymbol(const Address &addr, int size)
+{
     return 0;
 }
 

@@ -1,14 +1,22 @@
 ﻿
 #include "loadimage.hh"
 
+typedef map<Address, LoadImageFunc *>   addrtab;
+typedef map<string, LoadImageFunc *>   nametab;
+
 class ElfLoadImage : public LoadImageB {
     long long baseaddr;
+
+    addrtab     addrtab;
+    nametab     nametab;
 
     int is64bit;
     FILE *fp;
     int cur_sym;
     AddrSpace *codespace;
-    //struct bitset *isdata;
+
+private:
+    void        init();
 
 public:
     unsigned char*  filedata;
@@ -28,7 +36,8 @@ public:
     virtual string getArchType(void) const { return is64bit?"Elf64":"Elf32"; }
     virtual bool getNextSymbol(LoadImageFunc &record); 
     virtual void adjustVma(long adjust) { }
-    int getSymbol(const char *symname, LoadImageFunc &record);
+    int getSymbol(const string &name, LoadImageFunc &record);
     int saveSymbol(const char *symname, int size);
+    int addSymbol(const Address &addr, int size);
     void saveFile(const char *filename);
 };
