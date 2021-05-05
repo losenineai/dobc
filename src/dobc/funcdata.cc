@@ -860,8 +860,7 @@ int         funcdata::ollvm_detect_frameworkinfo()
         blks[i]->dump();
     }
     printf("no sub cbranch block search end\n");
-
-    //rewrite_no_sub_cbranch_blks(blks);
+    rewrite_no_sub_cbranch_blks(blks);
 
     for (i = 0; i < bblocks.blist.size(); i++) {
         b = bblocks.blist[i];
