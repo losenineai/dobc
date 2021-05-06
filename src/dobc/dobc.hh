@@ -1795,8 +1795,8 @@ public:
     ContextDatabase *context = NULL;
     Translate *trans = NULL;
 
-    map<Address, funcdata *> functab;
-    map<string, funcdata *> functab_s;
+    map<Address, funcdata *> addrtab;
+    map<string, funcdata *> nametab;
 
 #define SHELL_OLLVM           0
 #define SHELL_360FREE         1
@@ -1855,7 +1855,6 @@ public:
 
     int         func_is_thumb(int offset);
     void        run();
-    void        dump_function(char *name);
     void        set_func_alias(const string &func, const string &alias);
     void        set_test_cond_inline_fn(test_cond_inline_fn fn1) { test_cond_inline = fn1;  }
     funcdata*   find_func(const string &s);

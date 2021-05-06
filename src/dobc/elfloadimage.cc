@@ -1,8 +1,11 @@
 ﻿#include "vm.h"
 #include "elfloadimage.hh"
+#include <assert.h>
 
 void ElfLoadImage::init()
 {
+    assert(codespace);
+
     int count = elf32_sym_count((Elf32_Ehdr *)filedata), i;
     LoadImageFunc *func;
     Elf32_Shdr *dynsymsh, *link_sh;
@@ -31,12 +34,10 @@ void ElfLoadImage::init()
 ElfLoadImage::ElfLoadImage(const char *filename):LoadImageB(filename)
 {
     filedata = (unsigned char *)file_load(filename, (int *)&filelen);
-    if (!filedata) {
-        printf("ElfLoadImage() failed open [%s]", filename);
-        exit(0);
-    }
 
-    //isdata = bitset_new(filelen);
+    if (!filedata) 
+        vm_error("ElfLoadImage() failed open [%s]", filename);
+
     cur_sym = -1;
 }
 

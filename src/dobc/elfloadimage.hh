@@ -9,14 +9,12 @@ class ElfLoadImage : public LoadImageB {
 
     addrtab     addrtab;
     nametab     nametab;
+    addrtab::iterator curit;
 
     int is64bit;
     FILE *fp;
     int cur_sym;
     AddrSpace *codespace;
-
-private:
-    void        init();
 
 public:
     unsigned char*  filedata;
@@ -24,6 +22,7 @@ public:
 
     ElfLoadImage(const char *filename);
     virtual ~ElfLoadImage();
+    void        init();
 
     void setCodeSpace(AddrSpace *a) { codespace = a; }
     /* 再扫描elf的符号表时，会出现数据紧跟在代码区域后面，这部分的数据不应该在解析了，
@@ -40,4 +39,6 @@ public:
     int saveSymbol(const char *symname, int size);
     int addSymbol(const Address &addr, int size);
     void saveFile(const char *filename);
+    addrtab::iterator   beginSymbol() { return addrtab.begin();  }
+    addrtab::iterator   endSymbol() { return addrtab.end();  }
 };

@@ -352,14 +352,15 @@ void dobc::init_plt()
             fd->funcp.set_side_effect(entry->side_effect);
             fd->funcp.inputs = entry->input;
             fd->funcp.output = 1;
-            functab.insert({ addr, fd });
+            addrtab[addr] = fd;
         }
     }
     else {
         Address addr(trans->getDefaultCodeSpace(), stack_check_fail_addr);
         fd = new funcdata("__stack_check_fail", addr, 0, this);
         fd->set_exit(1);
-        functab.insert({ addr, fd });
+        addrtab[addr] = fd;
+        nametab[fd->name] = fd;
     }
 }
 
@@ -398,10 +399,10 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 
 void dobc::plugin_ollvm()
 {
-#if 1
-    funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
+#if 0
+    //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
-    //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
+    funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
 #else
     funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
 #endif
@@ -454,17 +455,17 @@ funcdata* dobc::find_func(const Address &addr)
 {
     map<Address, funcdata *>::iterator it;
 
-    it = functab.find(addr);
-    return (it != functab.end()) ? it->second : NULL;
+    it = addrtab.find(addr);
+    return (it != addrtab.end()) ? it->second : NULL;
 }
 
 funcdata* dobc::find_func(const string &s)
 {
     map<string, funcdata *>::iterator it;
 
-    it = functab_s.find(s);
+    it = nametab.find(s);
 
-    return (it != functab_s.end()) ? it->second:NULL;
+    return (it != nametab.end()) ? it->second:NULL;
 }
 
 void dobc::init_spcs()
@@ -499,31 +500,26 @@ void dobc::build_instructions()
 
 void dobc::init()
 {
-    LoadImageFunc sym;
-
     init_spcs();
     init_regs();
     init_abbrev();
     init_plt();
     build_instructions();
 
-    while (loader->getNextSymbol(sym)) {
-        Address addr(sym.address);
-        Address lastaddr(trans->getDefaultCodeSpace(), sym.address.getOffset() + sym.size);
+    addrtab::iterator it;
+    LoadImageFunc *sym;
+    funcdata *fd;
 
-        funcdata *fd;
+    for (it = loader->beginSymbol(); it != loader->endSymbol(); it++) {
+        sym = it->second;
 
-        if (NULL == (fd  = find_func(addr)))
-            fd = new funcdata(sym.name.c_str(), addr, sym.size, this);
+        if (NULL == (fd  = find_func(sym->address)))
+            fd = new funcdata(sym->name.c_str(), sym->address, sym->size, this);
 
-        Address baddr(get_code_space(), 0);
-        Address eaddr(get_code_space(), ~((uintb)0));
+        fd->bufptr = sym->bufptr;
 
-        fd->set_range(baddr, eaddr);
-        fd->bufptr = sym.bufptr;
-
-        functab.insert({ addr, fd });
-        functab_s.insert({ sym.name, fd });
+        addrtab[sym->address] = fd;
+        nametab[sym->name] = fd;
     }
 }
 
@@ -556,6 +552,7 @@ dobc::dobc(const char *sla, const char *bin)
     //trans->setContextDefault("LRset", 0);
 
     loader->setCodeSpace(trans->getDefaultCodeSpace());
+    loader->init();
 
     mdir_make(filename.c_str());
     gen_sh();
@@ -589,25 +586,6 @@ dobc::dobc(const char *sla, const char *bin)
 
 dobc::~dobc()
 {
-}
-
-void dobc::dump_function(char *symname)
-{
-    funcdata *func;
-
-    func = find_func(std::string(symname));
-    if (!func) {
-        printf("not found function %s", symname);
-        exit(-1);
-    }
-
-    printf("function:%s\n", symname);
-
-    func->follow_flow();
-
-    func->dump_cfg(func->name, "1", 0);
-
-    printf("\n");
 }
 
 void        dobc::set_func_alias(const string &sym, const string &alias)
@@ -6280,6 +6258,10 @@ void        funcdata::follow_flow(void)
     char buf[128];
     sprintf(buf, "%s/%s", d->filename.c_str(), name.c_str());
     mdir_make(buf);
+
+    Address baddr(d->get_code_space(), 0);
+    Address eaddr(d->get_code_space(), ~((uintb)0));
+    set_range(baddr, eaddr);
 
     generate_ops_start();
     generate_blocks();
