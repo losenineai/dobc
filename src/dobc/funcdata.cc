@@ -179,13 +179,6 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
     bblocks.add_edge(from, cur, lab & a_true_edge);
     bblocks.add_edge(cur, last);
 
-    if (!remove_unreachable_blocks(true, true))
-        structure_reset();
-    heritage_clear();
-    heritage();
-
-    //dump_cfg("test", "1", 1);
-
     do {
         cond_constant_propagation();
     } while (!cbrlist.empty());
@@ -234,7 +227,7 @@ int         funcdata::collect_blocks_to_node(vector<flowblock *> &blks, flowbloc
     return 0;
 }
 
-void        funcdata::dead_code_elimination(vector<flowblock *> blks, uint32_t flags)
+void        funcdata::dead_code_elimination(vector<flowblock *> &blks, uint32_t flags)
 {
     flowblock *b;
     list<pcodeop *>::iterator it;
@@ -1714,7 +1707,7 @@ void        funcdata::heritage(void)
     if (maxdepth == -1)
         build_adt();
 
-    print_info("%sheritage scan node.... \n", print_indent());
+    long start = clock();
     for (i = 0; i < d->trans->numSpaces(); i++) {
         AddrSpace *spc = d->trans->getSpace(i);
 
@@ -1752,11 +1745,11 @@ void        funcdata::heritage(void)
     rename();
 	//build_liverange();
 
-    long start = clock();
+    long start1 = clock();
 
     constant_propagation3();
 
-    print_info("%sheritage scan node end. CP spent [%lu]ms. \n", print_indent(), clock() - start);
+    print_info("%sheritage scan node end.  heriage spent [%lu]ms, CP spent [%lu]ms. \n", print_indent(), start1 - start, clock() - start);
 }
 
 void    funcdata::heritage_clear()

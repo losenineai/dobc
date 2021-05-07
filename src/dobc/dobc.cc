@@ -400,9 +400,9 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 void dobc::plugin_ollvm()
 {
 #if 0
-    //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
+    funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
-    funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
+    //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
 #else
     funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
 #endif
@@ -2071,6 +2071,7 @@ int             pcodeop::compute(int inslot, flowblock **branch)
                 && in1->def
                 && (in1->def->parent->in.size() == 1) 
                 && (b = in1->def->parent->get_in(0))
+                && b->ops.size()
                 && (b->last_op()->opcode == CPUI_CBRANCH)
                 && (_in1->def->parent->in.size() == 1)
                 && (bb = _in1->def->parent->get_in(0))

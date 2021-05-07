@@ -1489,7 +1489,7 @@ public:
 #define RDS_0           1
 #define RDS_UNROLL0     2
 
-    void        dead_code_elimination(vector<flowblock *> blks, uint32_t flags);
+    void        dead_code_elimination(vector<flowblock *> &blks, uint32_t flags);
     flowblock*  get_vmhead(void);
     flowblock*  get_vmhead_unroll(void);
     pcodeop*    get_vmcall(flowblock *b);
