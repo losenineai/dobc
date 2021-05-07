@@ -42,6 +42,23 @@ flowblock*  blockgraph::get_it_end_block(flowblock *b)
     return (b->get_out(0)->get_out(0) == b->get_out(1)) ? b->get_out(1):b->get_out(0);
 }
 
+void        blockgraph::collect_sideeffect_ops()
+{
+    list<pcodeop *>::iterator it;
+
+    for (int i = 0; i < blist.size(); i++) {
+        flowblock *b = blist[i];
+
+        b->sideeffect_ops.clear();
+        for (it = b->ops.begin(); it != b->ops.end(); it++) {
+            pcodeop *p = *it;
+
+            if ((p->opcode == CPUI_STORE) || (p->opcode == CPUI_CALL) || (p->opcode == CPUI_CALLIND))
+                b->sideeffect_ops.push_back(p);
+        }
+    }
+}
+
 void        blockgraph::compute_local_live_sets(void)
 {
     int i, j, r;

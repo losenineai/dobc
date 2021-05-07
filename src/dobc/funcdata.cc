@@ -1749,7 +1749,7 @@ void        funcdata::heritage(void)
 
     constant_propagation3();
 
-    print_info("%sheritage scan node end.  heriage spent [%lu]ms, CP spent [%lu]ms. \n", print_indent(), start1 - start, clock() - start);
+    print_info("%sheritage scan node end.  heriage spent [%lu]ms, CP spent [%lu]ms.", print_indent(), start1 - start, clock() - start);
 }
 
 void    funcdata::heritage_clear()
@@ -1780,6 +1780,8 @@ int         funcdata::constant_propagation3()
 	int ret = 0, r, changed = 0;
     flowblock *b;
     varnode *out;
+
+    bblocks.collect_sideeffect_ops();
 
     for (iter = deadlist.begin(); iter != deadlist.end(); iter++) {
         op = *iter;

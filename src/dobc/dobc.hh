@@ -660,6 +660,7 @@ struct flowblock {
     bitset<32>      live_out;
 
     list<pcodeop*>      ops;
+    list<pcodeop *>     sideeffect_ops;
 
     blockgraph *parent = NULL;
     flowblock *immed_dom = NULL;
@@ -921,6 +922,7 @@ public:
     void        collect_cond_copy_sub(vector<pcodeop *> &subs);
     void        collect_no_cmp_cbranch_block(vector<flowblock *> &blks);
     flowblock*  get_it_end_block(flowblock *b);
+    void        collect_sideeffect_ops();
 };
 
 typedef struct priority_queue   priority_queue;
