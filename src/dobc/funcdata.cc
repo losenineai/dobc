@@ -9,7 +9,7 @@
 #define func_format_s					"%s"
 #define func_format()					""
 #undef print_level
-#define print_level		3
+#define print_level		4
 
 int  funcdata::loop_dfa_connect(uint32_t flags)
 {
@@ -52,7 +52,7 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
             }
 #endif
 
-#if 1
+#if 0
             if ((cur->out.size() == 2) && (p->opcode == CPUI_INT_SUB))
             {
                 char buf[256];

@@ -400,7 +400,7 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 void dobc::plugin_ollvm()
 {
 #if 0
-    funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
+    //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
 #else
@@ -3748,7 +3748,7 @@ int         funcdata::ollvm_deshell()
     h = ollvm_get_head();
     for (i = 0; loop_dfa_connect(0) >= 0; i++)
     {
-        printf("loop_unrolling sub_%llx %d times*********************** \n\n", h->get_start().getOffset(), i);
+        printf("[%s] loop_unrolling sub_%llx %d times*********************** \n\n", mtime2s(NULL),  h->get_start().getOffset(), i);
         dead_code_elimination(bblocks.blist, RDS_UNROLL0);
 #if defined(DCFG_CASE)
         dump_cfg(name, _itoa(i, buf, 10), 1);
@@ -6364,28 +6364,23 @@ pcodeop*    funcdata::trace_store_query(pcodeop *load)
 
 pcodeop*    funcdata::store_query(pcodeop *load, flowblock *b, varnode *pos, pcodeop **maystore)
 {
-    list<pcodeop *>::reverse_iterator it;
+    list<pcodeop *>::reverse_iterator it1;
+    list<pcodeop *>::iterator it;
+
     flowblock *bb;
     pcodeop *p, *tmpstore;
 
     if (load) {
-        it = load->parent->get_rev_iterator(load);
+        it = load->basiciter;
         b = load->parent;
-
     }
     else {
-        it = b->ops.rbegin();
+        it = b->ops.end();
     }
-
-    //if (load && load->start.getTime() == 4783) {
-#if 0
-    if (load && load->start.getTime() == 4450) {
-        printf("aaaa\n");
-    }
-#endif
 
     while (1) {
-        for (; it != b->ops.rend(); it++) {
+       while (it != b->ops.begin()) {
+            it--;
             p = *it;
 
             if (!p->flags.inlined && b->fd->have_side_effect(p, pos)) {
@@ -6409,10 +6404,9 @@ pcodeop*    funcdata::store_query(pcodeop *load, flowblock *b, varnode *pos, pco
         if (b->is_entry_point()) {
             if (b->fd->caller) {
                 pcodeop *p1 = b->fd->callop;
-                b =  b->fd->callop->parent;
-                it = b->get_rev_iterator(p1);
+                b =  p1->parent;
+                it = p1->basiciter;
                 // skip , FIXME:没有处理当这个op已经为第一个的情况
-                ++it;
             }
             else
                 break;
@@ -6440,8 +6434,8 @@ pcodeop*    funcdata::store_query(pcodeop *load, flowblock *b, varnode *pos, pco
 
                 visited[b->dfnum] = 1;
 
-                for (it = b->ops.rbegin(); it != b->ops.rend(); it++) {
-                    p = *it;
+                for (it1 = b->ops.rbegin(); it1 != b->ops.rend(); it1++) {
+                    p = *it1;
 
                     if (have_side_effect(p, pos))
                         return NULL;
@@ -6487,11 +6481,11 @@ pcodeop*    funcdata::store_query(pcodeop *load, flowblock *b, varnode *pos, pco
                 return tmpstore;
 
             b = dom;
-            it = b->ops.rbegin();
+            it = b->ops.end();
        }
         else {
             b = b->get_in(0);
-            it = b->ops.rbegin();
+            it = b->ops.end();
         }
     }
 
