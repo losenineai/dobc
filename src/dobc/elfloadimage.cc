@@ -24,7 +24,6 @@ void ElfLoadImage::init()
         func->address = Address(codespace, sym->st_value);
         func->name = string(name);
         func->size = sym->st_size;
-        func->bufptr = filedata + sym->st_value;
 
         addrtab[func->address] = func;
         nametab[func->name] = func;
@@ -96,7 +95,6 @@ bool ElfLoadImage::getNextSymbol(LoadImageFunc &record)
     record.address = Address(codespace, sym->st_value);
     record.name = string(name);
     record.size = sym->st_size;
-    record.bufptr = filedata + sym->st_value;
 
     return true;
 }
@@ -124,6 +122,20 @@ int ElfLoadImage::saveSymbol(const char *symname, int size)
 
 int ElfLoadImage::addSymbol(const Address &addr, int size)
 {
+    LoadImageFunc *func;
+    char buf[128];
+
+    sprintf(buf, "sub_%llx", addr.getOffset());
+
+    func = new LoadImageFunc();
+
+    func->address = addr;
+    func->name = string(buf);
+    func->size = size;
+
+    addrtab[func->address] = func;
+    nametab[func->name] = func;
+
     return 0;
 }
 

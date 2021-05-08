@@ -112,15 +112,14 @@ thumb_gen::thumb_gen(funcdata *f)
     g_cg = this;
 
     data = d->loader->filedata;
-    /* FIXME: thumb的指令是地址对齐的 */
-    ind = fd->bufptr - d->loader->filedata;
-    ind -= fd->flags.thumb;
+    ind = fd->get_addr().getOffset();
 
     int size = fd->get_size();
 
     maxend = size + ind;
     end = size + ind;
-    memset(fd->bufptr, 0, size);
+
+    memset(data + ind, 0, size);
 }
 
 thumb_gen::~thumb_gen()

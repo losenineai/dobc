@@ -516,8 +516,6 @@ void dobc::init()
         if (NULL == (fd  = find_func(sym->address)))
             fd = new funcdata(sym->name.c_str(), sym->address, sym->size, this);
 
-        fd->bufptr = sym->bufptr;
-
         addrtab[sym->address] = fd;
         nametab[sym->name] = fd;
     }
@@ -4114,6 +4112,9 @@ funcdata::funcdata(const char *nm, const Address &a, int siz, dobc *d1)
     flags.thumb = a.getOffset() & 1;
     if (flags.thumb)
         startaddr = startaddr - 1; 
+
+    minaddr = startaddr;
+    maxaddr = startaddr;
 
     symsize = siz;
 

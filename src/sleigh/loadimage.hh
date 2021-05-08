@@ -37,7 +37,6 @@ struct LoadImageFunc {
   Address address;	///< Start of function
   string name;		///< Name of function
   int size;
-  unsigned char *bufptr;
 };
 
 /// \brief A record describing a section bytes in the executable

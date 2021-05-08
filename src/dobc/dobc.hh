@@ -1196,8 +1196,6 @@ public:
     /* 做条件inline时用到 */
     funcdata *caller = NULL;
     pcodeop *callop = NULL;
-    /* bufptr指向elf的加载位置 */
-    unsigned char *bufptr = NULL;
 
     /* elf的symbol指示的大小 */
     int symsize;
