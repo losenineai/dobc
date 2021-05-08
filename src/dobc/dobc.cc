@@ -400,9 +400,9 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 void dobc::plugin_ollvm()
 {
 #if 1
-    funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
+    //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
-    //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
+    funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
 #else
     funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
 #endif
@@ -4112,8 +4112,10 @@ funcdata::funcdata(const char *nm, const Address &a, int siz, dobc *d1)
     emitter.fd = this;
 
     flags.thumb = a.getOffset() & 1;
+    if (flags.thumb)
+        startaddr = startaddr - 1; 
 
-    size = siz;
+    symsize = siz;
 
     memstack.size = 256 * 1024;
     memstack.bottom = (u1 *)malloc(sizeof (u1) * memstack.size);
@@ -5021,7 +5023,7 @@ void        funcdata::analysis_jmptable(pcodeop *op)
 
 void        funcdata::generate_ops_start()
 {
-    addrlist.push_back(startaddr - flags.thumb);
+    addrlist.push_back(startaddr );
 
     generate_ops();
 }
@@ -5948,7 +5950,7 @@ void        funcdata::inline_ezclone(funcdata *fd, const Address &calladdr)
 
 void        funcdata::inline_flow(funcdata *fd1, pcodeop *callop)
 {
-    funcdata fd(fd1->name.c_str(), fd1->get_addr(), fd1->size, fd1->d);
+    funcdata fd(fd1->name.c_str(), fd1->get_addr(), fd1->symsize, fd1->d);
     pcodeop *firstop;
 
     if (callop->flags.inlined)

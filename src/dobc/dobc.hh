@@ -1152,7 +1152,7 @@ public:
 
     LocationMap     disjoint;
     LocationMap     globaldisjoint;
-    /* FIXME:我不是很理解这个字段的意思，所以我没用他，一直恒为0 */
+    /* 这个以前是Ghidra里面用来多次做heritage的，因为普通的ssa和mem-ssa必须要分开做 */
     int pass = 0;
 
     /* heritage end  ============================================= */
@@ -1164,7 +1164,6 @@ public:
 
     Address baddr;
     Address eaddr;
-    string fullpath;
     string name;
     string alias;
 
@@ -1186,7 +1185,6 @@ public:
         vector<ollvmhead *>   heads;
     } ollvm;
 
-
     pcodefunc pf;
 
     vector<Address>     addrlist;
@@ -1200,9 +1198,9 @@ public:
     pcodeop *callop = NULL;
     /* bufptr指向elf的加载位置 */
     unsigned char *bufptr = NULL;
-    /* elf的symbol指示的大小 */
-    int size;
 
+    /* elf的symbol指示的大小 */
+    int symsize;
 
     struct {
         int     size;
@@ -1210,7 +1208,7 @@ public:
         u1      *top;
     } memstack;
 
-    funcdata(const char *name, const Address &a, int size, dobc *d);
+    funcdata(const char *name, const Address &a, int symsiz, dobc *d);
     ~funcdata(void);
 
     const Address&  get_addr(void) { return startaddr;  }
@@ -1224,6 +1222,8 @@ public:
     int         get_user_offset() { return user_offset; }
     void        set_virtualbase(int v) { virtualbase = v;  }
     int         get_virtualbase(void) { return virtualbase; }
+    void        set_thumb(int thumb) { flags.thumb = thumb;  }
+    int         get_thumb(void) { return flags.thumb;  }
 
     pcodeop*    newop(int inputs, const SeqNum &sq);
     pcodeop*    newop(int inputs, const Address &pc);
@@ -1299,6 +1299,7 @@ public:
     void        recover_jmptable(pcodeop *op, int indexsize);
     void        analysis_jmptable(pcodeop *op);
     jmptable*   find_jmptable(pcodeop *op);
+    int         get_size() { return (int)(maxaddr.getOffset() - minaddr.getOffset());  }
 
     void        collect_edges();
     void        generate_blocks();

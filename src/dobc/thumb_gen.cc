@@ -116,9 +116,11 @@ thumb_gen::thumb_gen(funcdata *f)
     ind = fd->bufptr - d->loader->filedata;
     ind -= fd->flags.thumb;
 
-    maxend = f->size + ind;
-    end = f->size + ind;
-    memset(fd->bufptr, 0, fd->size);
+    int size = fd->get_size();
+
+    maxend = size + ind;
+    end = size + ind;
+    memset(fd->bufptr, 0, size);
 }
 
 thumb_gen::~thumb_gen()
@@ -1287,6 +1289,7 @@ void thumb_gen::dump()
     funcdata *fd1 = new funcdata(fd->name.c_str(), fd->get_addr(), 0, d);
 
     fd1->flags.dump_inst = 1;
+    fd1->flags.thumb = fd->get_thumb();
     fd1->follow_flow();
     fd1->heritage();
     fd1->dump_cfg(fd1->name, "after_codegen", 1);
