@@ -457,7 +457,26 @@ void _add_reg(int rd, int rn, int rm, enum SRType sh_type, int shift)
         o(0xeb000000 | (rn << 16) | (rd << 8) | rm | (sh_type << 4) | ((shift & 3) << 6) | (shift >> 2 << 12));
 }
 
-int thumb_gen::_add(int rd, int rn, uint32_t imm)
+/* A8.8.4 */
+void _add_imm(int rd, int rn, int imm)
+{
+    int a = abs(imm), add = imm >= 0;
+
+    if (add && imm < 8 && rd < 8 && rn < 8)
+        o(0x1600 | (imm << 6) | (rn << 3) | rd); // t1
+    else if (add && imm < 256 && rd < 8 && (rd == rn))
+        o(0x3000 | (rd << 8) | imm); // t2
+    else if (add && imm < 4096)
+        o(0xf2000000 | (rn << 16) | (rd << 8) | imm_map(imm, 11, 1, 26) | imm_map(imm, 8, 3, 12) | imm_map(imm, 0, 8, 0));
+    else {
+        uint32_t x = thumb_gen::stuff_const(0, imm);
+        if (x) {
+            o(0xf1000000 | x | (rn << 16) | (rd << 8));
+        }
+    }
+}
+
+int thumb_gen::_add_sp_imm(int rd, int rn, uint32_t imm)
 {
     /* A8.8.9 */
     if (rn == SP) {
@@ -865,7 +884,11 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                             break;
 
                         case CPUI_INT_ADD:
-                            _add(reg2i(poa(p1)), reg2i(pi0a(p1)), pi0(p)->get_val());
+                            rn = reg2i(pi0a(p1));
+                            if (rn == SP)
+                                _add_sp_imm(reg2i(poa(p1)), rn, pi0(p)->get_val());
+                            else
+                                _add_imm(reg2i(poa(p1)), rn, pi0(p)->get_val());
                             break;
 
                         case CPUI_INT_SUB:
@@ -1043,7 +1066,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 switch (p1->opcode) {
                 case CPUI_COPY:
                     if ((pi0a(p) == asp) && pi1(p)->is_constant() && a(pi0(p1)) == poa(p) && isreg(p1->output))
-                        _add(reg2i(poa(p1)), SP, pi1(p)->get_val());
+                        _add_sp_imm(reg2i(poa(p1)), SP, pi1(p)->get_val());
                     else if (istemp(p1->output)) {
                         if (p2 && (p2->opcode == CPUI_STORE)) {
                             if (pi2(p2)->size == 1) {
@@ -1119,7 +1142,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 if (p1 && p1->opcode == CPUI_LOAD)
                     it = g_pop(b, it);
                 else
-                    _add(reg2i(poa(p)), SP, pi1(p)->get_val());
+                    _add_sp_imm(reg2i(poa(p)), SP, pi1(p)->get_val());
             }
             else if (isreg(p->output)) {
                 rd = reg2i(poa(p));
