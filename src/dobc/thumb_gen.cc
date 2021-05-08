@@ -88,7 +88,7 @@ int nlz(uint32_t x)
     return n;
 }
 
-int ntz(uint32_t x)
+int ntz(unsigned x) 
 {
     int n;
     if (x == 0) return(32);
@@ -99,6 +99,28 @@ int ntz(uint32_t x)
     if ((x & 0x00000003) == 0) { n = n + 2; x = x >> 2; }
     return n - (x & 1);
 }
+
+int continuous_zero_bits(uint32_t x, int *lsb, int *width)
+{
+    /* 检查x是否只有一段0的格式 */
+
+    /* 去掉低部的连续1，兼容以0开始 */
+    uint32_t t = ~((x + 1) & x);
+    if ((t + 1) & t)
+        return -1;
+
+    if (x == (uint32_t)-1) return -1;
+
+    int i = 0;
+
+    while (x & (1 << i)) i++;
+
+    *lsb = i;
+    *width = ntz((x >> i));
+
+    return 0;
+}
+
 
 /* 测试x里是否有连续的1 */
 #define bitcont(x)          (!(((~x + 1) & x + x) & x))
@@ -450,6 +472,14 @@ int thumb_gen::_add(int rd, int rn, uint32_t imm)
     }
 
     return 0;
+}
+
+/* A8.8.19 */
+void _bfc(int rd, int lsb, int width)
+{
+    int msb = lsb + width - 1;
+
+    o(0xf36f0000 | (rd << 8) | imm_map(lsb, 3, 2, 12) | imm_map(lsb, 0, 2, 6) | msb);
 }
 
 /* A8.8.221 */
@@ -840,6 +870,17 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
 
                         case CPUI_INT_SUB:
                             _sub_imm(reg2i(poa(p1)), reg2i(pi0a(p1)), pi0(p)->get_val());
+                            break;
+
+                        case CPUI_INT_AND:
+                            if (pi0(p)->is_constant()) {
+                                int lsb, width;
+                                if (continuous_zero_bits(pi0(p)->get_val(), &lsb, &width)) {
+                                }
+                                else {
+                                    _bfc(reg2i(poa(p1)), lsb, width);
+                                }
+                            }
                             break;
 
                         case CPUI_LOAD:
