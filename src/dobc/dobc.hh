@@ -1467,8 +1467,6 @@ public:
     */
     pcodeop*    store_query(pcodeop *load, flowblock *b, varnode *pos, pcodeop **maystore);
 
-    /* 基于安全区域的store搜索 */
-    pcodeop*    store_query2(pcodeop *load, flowblock *b, varnode *pos, pcodeop **maystore);
 #define _DUMP_PCODE             0x01
 #define _DUMP_ORIG_CASE         0x02
     /* 循环展开的假如是 while switch case 里的分支则需要clone，假如不是的话则不需要复制后面的流 */

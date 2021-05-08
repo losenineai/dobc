@@ -554,6 +554,19 @@ void _ldr_reg(int rt, int rn, int rm, int lsl)
         o(0xf8500000 | (rn << 16) | (rt << 12) | (lsl << 4) | rm);
 }
 
+/* A8.8.67 */
+void _ldrb_imm(int rt, int rn, int imm, int wback)
+{
+    int x = abs(imm), add = imm >= 0, p = 1;
+
+    if (add && imm < 32 && rn < 8 && rt < 8)
+        o(0x7800 | (imm << 6) | (rn << 3) | rt);
+    else if (add && (imm < 4096))
+        o(0xf8900000 | (rn << 16) | (rt << 12) | imm);
+    else if (x < 256)
+        o(0xf8100800 | (rn << 16) | (rt << 12) | x | (p << 10) | (add << 9) | (wback << 8));
+}
+
 void _str(int rt, int rn, int rm, int imm)
 {
     if (rm != -1) {
@@ -912,6 +925,13 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 rn = d->reg2i(pi0a(p));
 
                 switch (p1->opcode) {
+                case CPUI_LOAD:
+                    if ((p1->output->size == 1) && istemp(p1->output)) {
+                        _ldrb_imm(reg2i(poa(p2)), reg2i(pi0a(p)), - pi1(p)->get_val(), 0);
+                        advance(it, 2);
+                    }
+                    break;
+
                 case CPUI_INT_EQUAL:
                     /* A8.8.37 */
                     if (pi1(p)->is_constant()) 
