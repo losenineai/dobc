@@ -788,14 +788,18 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
             p3 = *it1++;
 
         oind = ind;
-
         setflags = 0;
+
+        if (p->flags.simd) {
+            it = retrieve_orig_inst(b, it, 1);
+            goto inst_label;
+        }
+
         switch (p->opcode) {
         case CPUI_COPY:
             /* push */
             if (poa(p) == ama) {
                 if ((pi0a(p) == asp) && p1) {
-                    /* FIXME:把所有simd指令优先处理了，不走状态机 */
                     if ((p1->opcode == CPUI_INT_MULT) && p1->flags.simd)
                         it = g_vpop(b, it);
                     else if (p1->opcode == CPUI_LOAD)
