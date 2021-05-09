@@ -980,6 +980,10 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                         write_cbranch(b, ((p->opcode == CPUI_INT_NOTEQUAL)?COND_NE:COND_EQ));
                         advance(it, 1);
                     }
+                    else if (!imm && p1->opcode == CPUI_CBRANCH) {
+                        write_cbranch(b, ((p->opcode == CPUI_INT_NOTEQUAL)?COND_EQ:COND_NE));
+                        advance(it, 1);
+                    }
                 }
                 else if (pi0a(p) == ang && pi1a(p) == aov && p1->opcode == CPUI_BOOL_NEGATE && p2->opcode == CPUI_CBRANCH) {
                     write_cbranch(b, COND_GE);
@@ -1141,7 +1145,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
             else if ((pi0a(p) == asp) && pi1(p)->is_constant()) {
                 if (p1 && p1->opcode == CPUI_LOAD)
                     it = g_pop(b, it);
-                else
+                else if (isreg(p->output))
                     _add_sp_imm(reg2i(poa(p)), SP, pi1(p)->get_val());
             }
             else if (isreg(p->output)) {

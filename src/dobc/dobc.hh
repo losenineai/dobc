@@ -1866,7 +1866,7 @@ public:
     bool        is_cpu_reg(const Address &addr) { return cpu_regs.find(addr) != cpu_regs.end();  }
     /* vector variable */
     bool        is_vreg(const Address &addr) { 
-        return  trans->getRegister("s0").getAddr() <= addr && addr <= trans->getRegister("s31").getAddr();  
+        return  trans->getRegister("d0").getAddr() <= addr && addr <= trans->getRegister("d31").getAddr();  
     }
     Address     get_addr(const string &name) { return trans->getRegister(name).getAddr();  }
     bool        is_temp(const Address &addr) { return addr.getSpace() == trans->getUniqueSpace();  }
