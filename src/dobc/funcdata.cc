@@ -227,6 +227,69 @@ int         funcdata::collect_blocks_to_node(vector<flowblock *> &blks, flowbloc
     return 0;
 }
 
+int     funcdata::dead_phi_detect(pcodeop *p, vector<pcodeop *> &deadlist)
+{
+    pcodeop_set visit;
+    pcodeop_set::iterator it;
+    pcodeop *op, *p1;
+    list<pcodeop *>::iterator useit;
+    vector<pcodeop *> philist;
+
+    deadlist.clear();
+
+    visit.insert(p);
+    philist.push_back(p);
+    deadlist.push_back(p);
+    while (!philist.empty()) {
+        op = philist.front();
+        philist.erase(philist.begin());
+
+        /* 任意一个use不是phi，则这个phi是有意义的 */
+        for (useit = op->output->uses.begin(); useit != op->output->uses.end(); useit++) {
+            p1 = *useit;
+            if (p1->opcode != CPUI_MULTIEQUAL)
+                return 0;
+
+            if (is_out_live(p1))
+                return 0;
+
+            it = visit.find(p1);
+            if (it == visit.end()) {
+                visit.insert(p1);
+                philist.push_back(p1);
+                deadlist.push_back(p1);
+            }
+        }
+    }
+
+    return 1;
+}
+
+void        funcdata::dead_phi_elimination()
+{
+    int i;
+    list<pcodeop *>::iterator it, nextit;
+
+    for (i = 0; i < bblocks.blist.size(); i++) {
+        flowblock *b = bblocks.blist[i];
+
+        for (it = b->ops.begin(); it != b->ops.end(); it = nextit) {
+            pcodeop *p = *it;
+            nextit = ++it;
+
+            if (p->flags.copy_from_phi) continue;
+            if ((p->opcode != CPUI_MULTIEQUAL)) break;
+
+            vector<pcodeop *> deadphi;
+            if (dead_phi_detect(p, deadphi)) {
+                for (i = 0; i < deadphi.size(); i++) {
+                    op_destroy(deadphi[i], 1);
+                }
+            }
+        }
+    }
+}
+
 void        funcdata::dead_code_elimination(vector<flowblock *> &blks, uint32_t flags)
 {
     flowblock *b;
@@ -238,6 +301,11 @@ void        funcdata::dead_code_elimination(vector<flowblock *> &blks, uint32_t 
 
     marks.clear();
     marks.resize(bblocks.get_size());
+
+#if 1
+    if ((flags & F_REMOVE_DEAD_PHI))
+        dead_phi_elimination();
+#endif
 
     for (i = blks.size() - 1; i >= 0; i--) {
         b = blks[i];
@@ -261,6 +329,7 @@ void        funcdata::dead_code_elimination(vector<flowblock *> &blks, uint32_t 
         //printf("delete pcode = %d\n", op->start.getTime());
 
         if (!op->output->has_no_use()) continue;
+
         /*
         FIXME:暂时不允许删除store命令
 
@@ -278,9 +347,14 @@ void        funcdata::dead_code_elimination(vector<flowblock *> &blks, uint32_t 
         /* 有些函数是有副作用的，它的def即使没有use也是不能删除的 */
         if (op->is_call()) continue;
 
+
+#if 0
         pcodeop_def_set::iterator it1 = topname.find(op);
         if ((it1 != topname.end()) && (*it1 == op))
             continue;
+#else
+        if (is_out_live(op)) continue;
+#endif
 
         for (int i = 0; i < op->num_input(); i++) {
             varnode *in = op->get_in(i);

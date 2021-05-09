@@ -399,7 +399,7 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 
 void dobc::plugin_ollvm()
 {
-#if 0
+#if 1
     //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
     funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
@@ -705,6 +705,15 @@ void        funcdata::dump_phi_placement(int bid, int pid)
         printf("%d ", merge[i]->index);
     }
     printf("\n");
+}
+
+bool        funcdata::is_out_live(pcodeop *op)
+{
+    pcodeop_def_set::iterator it = topname.find(op);
+    if ((it != topname.end()))
+        return true;
+
+    return false;
 }
 
 varnode*    funcdata::detect_induct_variable(flowblock *h, flowblock * &exit)
@@ -3764,6 +3773,8 @@ int         funcdata::ollvm_deshell()
         cond_constant_propagation();
         dead_code_elimination(bblocks.blist, 0);
     }
+
+    dead_code_elimination(bblocks.blist, F_REMOVE_DEAD_PHI);
 
     dump_cfg(name, "final", 1);
     dump_pcode("1");

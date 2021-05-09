@@ -62,6 +62,9 @@ class valuetype;
 #define BIT6_CLR(b)         (b &= ~0x40)
 #define BIT7_CLR(b)         (b &= ~0x80)
 
+#define BITN(b,n)           ((b) & (1 << n)) 
+#define BIT_TEST(b,n)       ((b) & n)
+
 
 class blockgraph;
 
@@ -1102,7 +1105,7 @@ public:
     /* 安全的别名信息，可以传播用 */
     list<pcodeop *>     safe_aliaslist;
 
-    /* 我们不能清除顶层名字空间的变量，因为他可能会被外部使用 */
+    /* 函数出口活跃的变量 */
     pcodeop_def_set topname;
     intb user_step = 0x10000;
     intb user_offset = 0x10000;
@@ -1485,10 +1488,17 @@ public:
     flowblock*  loop_unrolling(flowblock *h, flowblock *end, uint32_t flags, int &meet_exit);
     int         loop_dfa_connect(uint32_t flags);
     /* 这里的dce加了一个数组参数，用来表示只有当删除的pcode在这个数组里才允许删除 这个是为了方便调试以及还原 */
-#define RDS_0           1
-#define RDS_UNROLL0     2
+#define RDS_0               1
+#define RDS_UNROLL0         2
+#define F_REMOVE_DEAD_PHI   4
 
     void        dead_code_elimination(vector<flowblock *> &blks, uint32_t flags);
+    void        dead_phi_elimination();
+    /*
+    return  0           phi not dead
+            1           phi dead
+    */
+    int         dead_phi_detect(pcodeop *phi, vector<pcodeop *> &deadlist);
     flowblock*  get_vmhead(void);
     flowblock*  get_vmhead_unroll(void);
     pcodeop*    get_vmcall(flowblock *b);
@@ -1585,6 +1595,7 @@ public:
     void        remove_dead_stores();
     /* 打印某个节点的插入为止*/
     void        dump_phi_placement(int bid, int pid);
+    bool        is_out_live(pcodeop *op);
     /* 搜索归纳变量 */
     varnode*    detect_induct_variable(flowblock *h, flowblock *&exit);
     bool        can_analysis(flowblock *b);
