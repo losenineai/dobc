@@ -165,7 +165,7 @@ int print_varnode(Translate *trans, char *buf, varnode *data)
 
 void pcodeemit2::dump(const Address &addr, OpCode opc, VarnodeData *outvar, VarnodeData *vars, int4 isize)
 {
-    int i, simd = 0;
+    int i;
     pcodeop *op;
     varnode *vn;
     dobc *d = fd->d;
@@ -174,9 +174,6 @@ void pcodeemit2::dump(const Address &addr, OpCode opc, VarnodeData *outvar, Varn
         Address oaddr(outvar->space, outvar->offset);
         op = fd->newop(isize, addr);
         fd->new_varnode_out(outvar->size, oaddr, op);
-
-        if (d->is_vreg(poa(op)))
-            simd = 1;
     }
     else
         op = fd->newop(isize, addr);
@@ -197,27 +194,11 @@ void pcodeemit2::dump(const Address &addr, OpCode opc, VarnodeData *outvar, Varn
         vn = fd->new_varnode(vars[i].size, vars[i].space, vars[i].offset);
         fd->op_set_input(op, vn, i);
 
-        if (!simd && d->is_vreg(vn->get_addr()))
-            simd = 1;
         if (vn->is_constant() && vn->get_offset() == addr.getOffset()) {
             vn->set_pc_constant(vn->get_offset());
             vn->flags.from_pc = 1;
         }
     }
-
-    if (prevp && (prevp->get_addr() == addr)) {
-        if (!simd && prevp->flags.simd)
-            simd = 1;
-        if (simd && !prevp->flags.simd) {
-            list<pcodeop *>::iterator it = op->insertiter;
-
-            /* 发现了一条simd指令，回溯前面所有地址相等的指令，因为函数头条指令一定不是simd，所以这里不用判断头部 */
-            for (it--; ((*it)->get_addr() == op->get_addr()); it--)
-                (*it)->flags.simd = 1;
-        }
-    }
-
-    op->flags.simd = simd;
 
     prevp = op;
 
@@ -399,10 +380,10 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 
 void dobc::plugin_ollvm()
 {
-#if 1
-    //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
+#if 0
+    funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
-    funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
+    //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
 #else
     funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
 #endif
@@ -532,6 +513,8 @@ void dobc::gen_sh(void)
 dobc::dobc(const char *sla, const char *bin) 
     : fullpath(bin)
 {
+    g_dobc = this;
+
     slafilename.assign(sla);
     filename.assign(basename(bin));
 
@@ -580,6 +563,11 @@ dobc::dobc(const char *sla, const char *bin)
     argument_regs.push_back(&r2_addr);
     argument_regs.push_back(&r3_addr);
 
+}
+
+dobc*    dobc::singleton()
+{
+    return g_dobc;
 }
 
 dobc::~dobc()
@@ -635,7 +623,6 @@ int main(int argc, char **argv)
     d.set_shelltype(st);
     d.stack_check_fail_addr = stack_check_fail_addr;
 
-    g_dobc = &d;
 
     d.init();
     d.run();
@@ -1416,9 +1403,9 @@ int				pcodeop::compute_add_sub()
 
 		当前r0, r1位置的寄存器相等时，需要判断ma的范围
 		*/
-		while (
-			_in0->is_sp_constant()
-            && !op->flags.simd  // simd的指令不要参与这些peephole的变形，会导致代码生成时，生成错误代码
+        while (
+            _in0->is_sp_constant()
+            && !dobc::singleton()->is_simd(op->get_addr())
 			&& (in0->uses.size() == 1) && _in1->is_constant() 
 			&& ((op->output->get_addr() == _in0->get_addr()) || _in0->in_liverange_simple(this))) {
 			intb v = in1->get_val();
@@ -2146,7 +2133,7 @@ void            pcodeop::to_constant1(void)
     varnode *vn, *out = output;
     pcodeop *op;
 
-    if (flags.simd && fd->flags.disable_simd_to_const) return;
+    if (dobc::singleton()->is_simd(get_addr()) && fd->flags.disable_simd_to_const) return;
 
     /*
     非trace条件才能开启常量持久化
@@ -3758,7 +3745,7 @@ int         funcdata::ollvm_deshell()
         printf("[%s] loop_unrolling sub_%llx %d times*********************** \n\n", mtime2s(NULL),  h->get_start().getOffset(), i);
         dead_code_elimination(bblocks.blist, RDS_UNROLL0);
 #if defined(DCFG_CASE)
-        //dump_cfg(name, _itoa(i, buf, 10), 1);
+        dump_cfg(name, _itoa(i, buf, 10), 1);
 #endif
     }
 
@@ -5473,7 +5460,7 @@ void        funcdata::dump_block(FILE *fp, blockbasic *b, int flag)
 
         if (flag) {
             p->dump(obuf, PCODE_DUMP_SIMPLE | PCODE_HTML_COLOR);
-            fprintf(fp, "<tr><td></td><td></td><td colspan=\"2\" align=\"left\">%s</td></tr>", obuf);
+            fprintf(fp, "<tr><td></td><td></td><td colspan=\"2\" align=\"left\">%s</td><td></td></tr>", obuf);
         }
 
         prev_addr = disaddr;
@@ -5765,7 +5752,6 @@ pcodeop*    funcdata::cloneop(pcodeop *op, const SeqNum &seq)
     newop1->flags.startinst = op->flags.startinst;
     newop1->flags.startblock = op->flags.startblock;
 	newop1->flags.uncalculated_store = op->flags.uncalculated_store;
-    newop1->flags.simd = op->flags.simd;
     /* 我们有时候会给store分配一个虚拟的varnode节点，不要拷贝它 */
     if (op->output && (op->opcode != CPUI_STORE))
         op_set_output(newop1, clone_varnode(op->output));

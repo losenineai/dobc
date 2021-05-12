@@ -23,20 +23,20 @@ attach variables [ thv_Rm ] [ r0 r1 r2 r3 r4 r5 r6 r7 r8 r9 r10 r11 r12 sp lr pc
 attach variables [ Qn0 Qd0 Qm0 thv_Qn0 thv_Qd0 thv_Qm0 ] [ q0 _ q1 _ q2 _ q3 _ q4 _ q5 _ q6 _ q7 _ ];
 attach variables [ Qn1 Qd1 Qm1 thv_Qn1 thv_Qd1 thv_Qm1 ] [ q8 _ q9 _ q10 _ q11 _ q12 _ q13 _ q14 _ q15 _ ];
 
-Qd: Qd0		is TMode=0 & Qd0 & D22=0	{ export Qd0; }
-Qd: Qd1		is TMode=0 & Qd1 & D22=1	{ export Qd1; }
-Qd: thv_Qd0	is TMode=1 & thv_Qd0 & thv_D22=0	{ export thv_Qd0; }
-Qd: thv_Qd1	is TMode=1 & thv_Qd1 & thv_D22=1	{ export thv_Qd1; }
+Qd: Qd0		is TMode=0 & Qd0 & D22=0 [simd=1; globalset(inst_start,simd);]	{ export Qd0; }
+Qd: Qd1		is TMode=0 & Qd1 & D22=1 [simd=1; globalset(inst_start,simd);]	{ export Qd1; }
+Qd: thv_Qd0	is TMode=1 & thv_Qd0 & thv_D22=0 [simd=1; globalset(inst_start,simd);]	{ export thv_Qd0; }
+Qd: thv_Qd1	is TMode=1 & thv_Qd1 & thv_D22=1 [simd=1; globalset(inst_start,simd);]	{ export thv_Qd1; }
 
-Qn: Qn0		is TMode=0 & Qn0 & N7=0	{ export Qn0; }
-Qn: Qn1		is TMode=0 & Qn1 & N7=1	{ export Qn1; }
-Qn: thv_Qn0		is TMode=1 & thv_Qn0 & thv_N7=0	{ export thv_Qn0; }
-Qn: thv_Qn1		is TMode=1 & thv_Qn1 & thv_N7=1	{ export thv_Qn1; }
+Qn: Qn0		is TMode=0 & Qn0 & N7=0	[simd=1; globalset(inst_start,simd);] { export Qn0; }
+Qn: Qn1		is TMode=0 & Qn1 & N7=1	[simd=1; globalset(inst_start,simd);] { export Qn1; }
+Qn: thv_Qn0		is TMode=1 & thv_Qn0 & thv_N7=0	[simd=1; globalset(inst_start,simd);] { export thv_Qn0; }
+Qn: thv_Qn1		is TMode=1 & thv_Qn1 & thv_N7=1	[simd=1; globalset(inst_start,simd);] { export thv_Qn1; }
 
-Qm: Qm0		is TMode=0 & Qm0 & M5=0	{ export Qm0; }
-Qm: Qm1		is TMode=0 & Qm1 & M5=1	{ export Qm1; }
-Qm: thv_Qm0		is TMode=1 & thv_Qm0 & thv_M5=0	{ export thv_Qm0; }
-Qm: thv_Qm1		is TMode=1 & thv_Qm1 & thv_M5=1	{ export thv_Qm1; }
+Qm: Qm0		is TMode=0 & Qm0 & M5=0	[simd=1; globalset(inst_start,simd);] { export Qm0; }
+Qm: Qm1		is TMode=0 & Qm1 & M5=1	[simd=1; globalset(inst_start,simd);] { export Qm1; }
+Qm: thv_Qm0		is TMode=1 & thv_Qm0 & thv_M5=0	[simd=1; globalset(inst_start,simd);] { export thv_Qm0; }
+Qm: thv_Qm1		is TMode=1 & thv_Qm1 & thv_M5=1	[simd=1; globalset(inst_start,simd);] { export thv_Qm1; }
 
 @endif # SIMD
 
@@ -62,14 +62,14 @@ attach variables [ thv_Dd_14 ] [ d13 d14 d15 _ _ _ _ _ _ _ _ _ _ _ _ _ ];
 attach variables [ thv_Dd_15 ] [ d14 d15 _ _ _ _ _ _ _ _ _ _ _ _ _ _ ];
 attach variables [ thv_Dd_16 ] [ d15 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ ];
   
-Dd: Dd0		is TMode=0 & Dd0 & D22=0	{ export Dd0; }
-Dn: Dn0		is TMode=0 & Dn0 & N7=0	{ export Dn0; }
-Dm: Dm0		is TMode=0 & Dm0 & M5=0	{ export Dm0; }
-Dd: thv_Dd0	is TMode=1 & thv_Dd0 & thv_D22=0	{ export thv_Dd0; }
-Dn: thv_Dn0	is TMode=1 & thv_Dn0 & thv_N7=0	{ export thv_Dn0; }
-Dm: thv_Dm0	is TMode=1 & thv_Dm0 & thv_M5=0	{ export thv_Dm0; }
+Dd: Dd0		is TMode=0 & Dd0 & D22=0 [simd=1; globalset(inst_start,simd);] { export Dd0; }
+Dn: Dn0		is TMode=0 & Dn0 & N7=0	 [simd=1; globalset(inst_start,simd);] { export Dn0; }
+Dm: Dm0		is TMode=0 & Dm0 & M5=0	 [simd=1; globalset(inst_start,simd);] { export Dm0; }
+Dd: thv_Dd0	is TMode=1 & thv_Dd0 & thv_D22=0 [simd=1; globalset(inst_start,simd);] { export thv_Dd0; }
+Dn: thv_Dn0	is TMode=1 & thv_Dn0 & thv_N7=0	 [simd=1; globalset(inst_start,simd);] { export thv_Dn0; }
+Dm: thv_Dm0	is TMode=1 & thv_Dm0 & thv_M5=0	 [simd=1; globalset(inst_start,simd);] { export thv_Dm0; }
 
-Dd2: Dd		is Dd			{ export Dd; }
+Dd2: Dd		is Dd			[simd=1; globalset(inst_start,simd);] { export Dd; }
 
 @endif # SIMD || VFPv3 || VFPv2
 
@@ -77,12 +77,12 @@ Dd2: Dd		is Dd			{ export Dd; }
 
 attach variables [ Dn1 Dd1 Dm1 thv_Dn1 thv_Dd1 thv_Dm1 ] [ d16 d17 d18 d19 d20 d21 d22 d23 d24 d25 d26 d27 d28 d29 d30 d31 ];
   
-Dd: Dd1		is TMode=0 & Dd1 & D22=1 { export Dd1; }
-Dn: Dn1		is TMode=0 & Dn1 & N7=1	{ export Dn1; }
-Dm: Dm1		is TMode=0 & Dm1 & M5=1	{ export Dm1; }
-Dd: thv_Dd1	is TMode=1 & thv_Dd1 & thv_D22=1 { export thv_Dd1; }
-Dn: thv_Dn1	is TMode=1 & thv_Dn1 & thv_N7=1	{ export thv_Dn1; }
-Dm: thv_Dm1	is TMode=1 & thv_Dm1 & thv_M5=1	{ export thv_Dm1; }
+Dd: Dd1		is TMode=0 & Dd1 & D22=1 [simd=1; globalset(inst_start,simd);] { export Dd1; }
+Dn: Dn1		is TMode=0 & Dn1 & N7=1	 [simd=1; globalset(inst_start,simd);] { export Dn1; }
+Dm: Dm1		is TMode=0 & Dm1 & M5=1	 [simd=1; globalset(inst_start,simd);] { export Dm1; }
+Dd: thv_Dd1	is TMode=1 & thv_Dd1 & thv_D22=1 [simd=1; globalset(inst_start,simd);] { export thv_Dd1; }
+Dn: thv_Dn1	is TMode=1 & thv_Dn1 & thv_N7=1	 [simd=1; globalset(inst_start,simd);] { export thv_Dn1; }
+Dm: thv_Dm1	is TMode=1 & thv_Dm1 & thv_M5=1	 [simd=1; globalset(inst_start,simd);] { export thv_Dm1; }
 
 @endif # SIMD || VFPv3
 
@@ -97,137 +97,137 @@ attach variables [ Sm1next thv_Sm1next ] [ s2 s4 s6 s8 s10 s12 s14 s16 s18 s20 s
 # We need to create separate constructors for each register rather than attaching
 # directly to a context variable
 @if defined (VFPv2) || defined(SIMD)
-Sreg: s0 is s0 & regNum=0 { export s0; }
-Sreg: s1 is s1 & regNum=1 { export s1; }
-Sreg: s2 is s2 & regNum=2 { export s2; }
-Sreg: s3 is s3 & regNum=3 { export s3; }
-Sreg: s4 is s4 & regNum=4 { export s4; }
-Sreg: s5 is s5 & regNum=5 { export s5; }
-Sreg: s6 is s6 & regNum=6 { export s6; }
-Sreg: s7 is s7 & regNum=7 { export s7; }
-Sreg: s8 is s8 & regNum=8 { export s8; }
-Sreg: s9 is s9 & regNum=9 { export s9; }
-Sreg: s10 is s10 & regNum=10 { export s10; }
-Sreg: s11 is s11 & regNum=11 { export s11; }
-Sreg: s12 is s12 & regNum=12 { export s12; }
-Sreg: s13 is s13 & regNum=13 { export s13; }
-Sreg: s14 is s14 & regNum=14 { export s14; }
-Sreg: s15 is s15 & regNum=15 { export s15; }
-Sreg: s16 is s16 & regNum=16 { export s16; }
-Sreg: s17 is s17 & regNum=17 { export s17; }
-Sreg: s18 is s18 & regNum=18 { export s18; }
-Sreg: s19 is s19 & regNum=19 { export s19; }
-Sreg: s20 is s20 & regNum=20 { export s20; }
-Sreg: s21 is s21 & regNum=21 { export s21; }
-Sreg: s22 is s22 & regNum=22 { export s22; }
-Sreg: s23 is s23 & regNum=23 { export s23; }
-Sreg: s24 is s24 & regNum=24 { export s24; }
-Sreg: s25 is s25 & regNum=25 { export s25; }
-Sreg: s26 is s26 & regNum=26 { export s26; }
-Sreg: s27 is s27 & regNum=27 { export s27; }
-Sreg: s28 is s28 & regNum=28 { export s28; }
-Sreg: s29 is s29 & regNum=29 { export s29; }
-Sreg: s30 is s30 & regNum=30 { export s30; }
-Sreg: s31 is s31 & regNum=31 { export s31; }
+Sreg: s0 is s0 & regNum=0 [simd=1; globalset(inst_start,simd);] { export s0; }
+Sreg: s1 is s1 & regNum=1 [simd=1; globalset(inst_start,simd);] { export s1; }
+Sreg: s2 is s2 & regNum=2 [simd=1; globalset(inst_start,simd);] { export s2; }
+Sreg: s3 is s3 & regNum=3 [simd=1; globalset(inst_start,simd);] { export s3; }
+Sreg: s4 is s4 & regNum=4 [simd=1; globalset(inst_start,simd);] { export s4; }
+Sreg: s5 is s5 & regNum=5 [simd=1; globalset(inst_start,simd);] { export s5; }
+Sreg: s6 is s6 & regNum=6 [simd=1; globalset(inst_start,simd);] { export s6; }
+Sreg: s7 is s7 & regNum=7 [simd=1; globalset(inst_start,simd);] { export s7; }
+Sreg: s8 is s8 & regNum=8 [simd=1; globalset(inst_start,simd);] { export s8; }
+Sreg: s9 is s9 & regNum=9 [simd=1; globalset(inst_start,simd);] { export s9; }
+Sreg: s10 is s10 & regNum=10 [simd=1; globalset(inst_start,simd);] { export s10; }
+Sreg: s11 is s11 & regNum=11 [simd=1; globalset(inst_start,simd);] { export s11; }
+Sreg: s12 is s12 & regNum=12 [simd=1; globalset(inst_start,simd);] { export s12; }
+Sreg: s13 is s13 & regNum=13 [simd=1; globalset(inst_start,simd);] { export s13; }
+Sreg: s14 is s14 & regNum=14 [simd=1; globalset(inst_start,simd);] { export s14; }
+Sreg: s15 is s15 & regNum=15 [simd=1; globalset(inst_start,simd);] { export s15; }
+Sreg: s16 is s16 & regNum=16 [simd=1; globalset(inst_start,simd);] { export s16; }
+Sreg: s17 is s17 & regNum=17 [simd=1; globalset(inst_start,simd);] { export s17; }
+Sreg: s18 is s18 & regNum=18 [simd=1; globalset(inst_start,simd);] { export s18; }
+Sreg: s19 is s19 & regNum=19 [simd=1; globalset(inst_start,simd);] { export s19; }
+Sreg: s20 is s20 & regNum=20 [simd=1; globalset(inst_start,simd);] { export s20; }
+Sreg: s21 is s21 & regNum=21 [simd=1; globalset(inst_start,simd);] { export s21; }
+Sreg: s22 is s22 & regNum=22 [simd=1; globalset(inst_start,simd);] { export s22; }
+Sreg: s23 is s23 & regNum=23 [simd=1; globalset(inst_start,simd);] { export s23; }
+Sreg: s24 is s24 & regNum=24 [simd=1; globalset(inst_start,simd);] { export s24; }
+Sreg: s25 is s25 & regNum=25 [simd=1; globalset(inst_start,simd);] { export s25; }
+Sreg: s26 is s26 & regNum=26 [simd=1; globalset(inst_start,simd);] { export s26; }
+Sreg: s27 is s27 & regNum=27 [simd=1; globalset(inst_start,simd);] { export s27; }
+Sreg: s28 is s28 & regNum=28 [simd=1; globalset(inst_start,simd);] { export s28; }
+Sreg: s29 is s29 & regNum=29 [simd=1; globalset(inst_start,simd);] { export s29; }
+Sreg: s30 is s30 & regNum=30 [simd=1; globalset(inst_start,simd);] { export s30; }
+Sreg: s31 is s31 & regNum=31 [simd=1; globalset(inst_start,simd);] { export s31; }
 
-Sreg2: s0 is s0 & reg2Num=0 { export s0; }
-Sreg2: s1 is s1 & reg2Num=1 { export s1; }
-Sreg2: s2 is s2 & reg2Num=2 { export s2; }
-Sreg2: s3 is s3 & reg2Num=3 { export s3; }
-Sreg2: s4 is s4 & reg2Num=4 { export s4; }
-Sreg2: s5 is s5 & reg2Num=5 { export s5; }
-Sreg2: s6 is s6 & reg2Num=6 { export s6; }
-Sreg2: s7 is s7 & reg2Num=7 { export s7; }
-Sreg2: s8 is s8 & reg2Num=8 { export s8; }
-Sreg2: s9 is s9 & reg2Num=9 { export s9; }
-Sreg2: s10 is s10 & reg2Num=10 { export s10; }
-Sreg2: s11 is s11 & reg2Num=11 { export s11; }
-Sreg2: s12 is s12 & reg2Num=12 { export s12; }
-Sreg2: s13 is s13 & reg2Num=13 { export s13; }
-Sreg2: s14 is s14 & reg2Num=14 { export s14; }
-Sreg2: s15 is s15 & reg2Num=15 { export s15; }
-Sreg2: s16 is s16 & reg2Num=16 { export s16; }
-Sreg2: s17 is s17 & reg2Num=17 { export s17; }
-Sreg2: s18 is s18 & reg2Num=18 { export s18; }
-Sreg2: s19 is s19 & reg2Num=19 { export s19; }
-Sreg2: s20 is s20 & reg2Num=20 { export s20; }
-Sreg2: s21 is s21 & reg2Num=21 { export s21; }
-Sreg2: s22 is s22 & reg2Num=22 { export s22; }
-Sreg2: s23 is s23 & reg2Num=23 { export s23; }
-Sreg2: s24 is s24 & reg2Num=24 { export s24; }
-Sreg2: s25 is s25 & reg2Num=25 { export s25; }
-Sreg2: s26 is s26 & reg2Num=26 { export s26; }
-Sreg2: s27 is s27 & reg2Num=27 { export s27; }
-Sreg2: s28 is s28 & reg2Num=28 { export s28; }
-Sreg2: s29 is s29 & reg2Num=29 { export s29; }
-Sreg2: s30 is s30 & reg2Num=30 { export s30; }
-Sreg2: s31 is s31 & reg2Num=31 { export s31; }
+Sreg2: s0 is s0 & reg2Num=0 [simd=1; globalset(inst_start,simd);] { export s0; }
+Sreg2: s1 is s1 & reg2Num=1 [simd=1; globalset(inst_start,simd);] { export s1; }
+Sreg2: s2 is s2 & reg2Num=2 [simd=1; globalset(inst_start,simd);] { export s2; }
+Sreg2: s3 is s3 & reg2Num=3 [simd=1; globalset(inst_start,simd);] { export s3; }
+Sreg2: s4 is s4 & reg2Num=4 [simd=1; globalset(inst_start,simd);] { export s4; }
+Sreg2: s5 is s5 & reg2Num=5 [simd=1; globalset(inst_start,simd);] { export s5; }
+Sreg2: s6 is s6 & reg2Num=6 [simd=1; globalset(inst_start,simd);] { export s6; }
+Sreg2: s7 is s7 & reg2Num=7 [simd=1; globalset(inst_start,simd);] { export s7; }
+Sreg2: s8 is s8 & reg2Num=8 [simd=1; globalset(inst_start,simd);] { export s8; }
+Sreg2: s9 is s9 & reg2Num=9 [simd=1; globalset(inst_start,simd);] { export s9; }
+Sreg2: s10 is s10 & reg2Num=10 [simd=1; globalset(inst_start,simd);] { export s10; }
+Sreg2: s11 is s11 & reg2Num=11 [simd=1; globalset(inst_start,simd);] { export s11; }
+Sreg2: s12 is s12 & reg2Num=12 [simd=1; globalset(inst_start,simd);] { export s12; }
+Sreg2: s13 is s13 & reg2Num=13 [simd=1; globalset(inst_start,simd);] { export s13; }
+Sreg2: s14 is s14 & reg2Num=14 [simd=1; globalset(inst_start,simd);] { export s14; }
+Sreg2: s15 is s15 & reg2Num=15 [simd=1; globalset(inst_start,simd);] { export s15; }
+Sreg2: s16 is s16 & reg2Num=16 [simd=1; globalset(inst_start,simd);] { export s16; }
+Sreg2: s17 is s17 & reg2Num=17 [simd=1; globalset(inst_start,simd);] { export s17; }
+Sreg2: s18 is s18 & reg2Num=18 [simd=1; globalset(inst_start,simd);] { export s18; }
+Sreg2: s19 is s19 & reg2Num=19 [simd=1; globalset(inst_start,simd);] { export s19; }
+Sreg2: s20 is s20 & reg2Num=20 [simd=1; globalset(inst_start,simd);] { export s20; }
+Sreg2: s21 is s21 & reg2Num=21 [simd=1; globalset(inst_start,simd);] { export s21; }
+Sreg2: s22 is s22 & reg2Num=22 [simd=1; globalset(inst_start,simd);] { export s22; }
+Sreg2: s23 is s23 & reg2Num=23 [simd=1; globalset(inst_start,simd);] { export s23; }
+Sreg2: s24 is s24 & reg2Num=24 [simd=1; globalset(inst_start,simd);] { export s24; }
+Sreg2: s25 is s25 & reg2Num=25 [simd=1; globalset(inst_start,simd);] { export s25; }
+Sreg2: s26 is s26 & reg2Num=26 [simd=1; globalset(inst_start,simd);] { export s26; }
+Sreg2: s27 is s27 & reg2Num=27 [simd=1; globalset(inst_start,simd);] { export s27; }
+Sreg2: s28 is s28 & reg2Num=28 [simd=1; globalset(inst_start,simd);] { export s28; }
+Sreg2: s29 is s29 & reg2Num=29 [simd=1; globalset(inst_start,simd);] { export s29; }
+Sreg2: s30 is s30 & reg2Num=30 [simd=1; globalset(inst_start,simd);] { export s30; }
+Sreg2: s31 is s31 & reg2Num=31 [simd=1; globalset(inst_start,simd);] { export s31; }
 
-Dreg: d0 is d0 & regNum=0 { export d0; }
-Dreg: d1 is d1 & regNum=1 { export d1; }
-Dreg: d2 is d2 & regNum=2 { export d2; }
-Dreg: d3 is d3 & regNum=3 { export d3; }
-Dreg: d4 is d4 & regNum=4 { export d4; }
-Dreg: d5 is d5 & regNum=5 { export d5; }
-Dreg: d6 is d6 & regNum=6 { export d6; }
-Dreg: d7 is d7 & regNum=7 { export d7; }
-Dreg: d8 is d8 & regNum=8 { export d8; }
-Dreg: d9 is d9 & regNum=9 { export d9; }
-Dreg: d10 is d10 & regNum=10 { export d10; }
-Dreg: d11 is d11 & regNum=11 { export d11; }
-Dreg: d12 is d12 & regNum=12 { export d12; }
-Dreg: d13 is d13 & regNum=13 { export d13; }
-Dreg: d14 is d14 & regNum=14 { export d14; }
-Dreg: d15 is d15 & regNum=15 { export d15; }
-Dreg2: d0 is d0 & reg2Num=0 { export d0; }
-Dreg2: d1 is d1 & reg2Num=1 { export d1; }
-Dreg2: d2 is d2 & reg2Num=2 { export d2; }
-Dreg2: d3 is d3 & reg2Num=3 { export d3; }
-Dreg2: d4 is d4 & reg2Num=4 { export d4; }
-Dreg2: d5 is d5 & reg2Num=5 { export d5; }
-Dreg2: d6 is d6 & reg2Num=6 { export d6; }
-Dreg2: d7 is d7 & reg2Num=7 { export d7; }
-Dreg2: d8 is d8 & reg2Num=8 { export d8; }
-Dreg2: d9 is d9 & reg2Num=9 { export d9; }
-Dreg2: d10 is d10 & reg2Num=10 { export d10; }
-Dreg2: d11 is d11 & reg2Num=11 { export d11; }
-Dreg2: d12 is d12 & reg2Num=12 { export d12; }
-Dreg2: d13 is d13 & reg2Num=13 { export d13; }
-Dreg2: d14 is d14 & reg2Num=14 { export d14; }
-Dreg2: d15 is d15 & reg2Num=15 { export d15; }
+Dreg: d0 is d0 & regNum=0 [simd=1; globalset(inst_start,simd);] { export d0; }
+Dreg: d1 is d1 & regNum=1 [simd=1; globalset(inst_start,simd);] { export d1; }
+Dreg: d2 is d2 & regNum=2 [simd=1; globalset(inst_start,simd);] { export d2; }
+Dreg: d3 is d3 & regNum=3 [simd=1; globalset(inst_start,simd);] { export d3; }
+Dreg: d4 is d4 & regNum=4 [simd=1; globalset(inst_start,simd);] { export d4; }
+Dreg: d5 is d5 & regNum=5 [simd=1; globalset(inst_start,simd);] { export d5; }
+Dreg: d6 is d6 & regNum=6 [simd=1; globalset(inst_start,simd);] { export d6; }
+Dreg: d7 is d7 & regNum=7 [simd=1; globalset(inst_start,simd);] { export d7; }
+Dreg: d8 is d8 & regNum=8 [simd=1; globalset(inst_start,simd);] { export d8; }
+Dreg: d9 is d9 & regNum=9 [simd=1; globalset(inst_start,simd);] { export d9; }
+Dreg: d10 is d10 & regNum=10 [simd=1; globalset(inst_start,simd);] { export d10; }
+Dreg: d11 is d11 & regNum=11 [simd=1; globalset(inst_start,simd);] { export d11; }
+Dreg: d12 is d12 & regNum=12 [simd=1; globalset(inst_start,simd);] { export d12; }
+Dreg: d13 is d13 & regNum=13 [simd=1; globalset(inst_start,simd);] { export d13; }
+Dreg: d14 is d14 & regNum=14 [simd=1; globalset(inst_start,simd);] { export d14; }
+Dreg: d15 is d15 & regNum=15 [simd=1; globalset(inst_start,simd);] { export d15; }
+Dreg2: d0 is d0 & reg2Num=0 [simd=1; globalset(inst_start,simd);] { export d0; }
+Dreg2: d1 is d1 & reg2Num=1 [simd=1; globalset(inst_start,simd);] { export d1; }
+Dreg2: d2 is d2 & reg2Num=2 [simd=1; globalset(inst_start,simd);] { export d2; }
+Dreg2: d3 is d3 & reg2Num=3 [simd=1; globalset(inst_start,simd);] { export d3; }
+Dreg2: d4 is d4 & reg2Num=4 [simd=1; globalset(inst_start,simd);] { export d4; }
+Dreg2: d5 is d5 & reg2Num=5 [simd=1; globalset(inst_start,simd);] { export d5; }
+Dreg2: d6 is d6 & reg2Num=6 [simd=1; globalset(inst_start,simd);] { export d6; }
+Dreg2: d7 is d7 & reg2Num=7 [simd=1; globalset(inst_start,simd);] { export d7; }
+Dreg2: d8 is d8 & reg2Num=8 [simd=1; globalset(inst_start,simd);] { export d8; }
+Dreg2: d9 is d9 & reg2Num=9 [simd=1; globalset(inst_start,simd);] { export d9; }
+Dreg2: d10 is d10 & reg2Num=10 [simd=1; globalset(inst_start,simd);] { export d10; }
+Dreg2: d11 is d11 & reg2Num=11 [simd=1; globalset(inst_start,simd);] { export d11; }
+Dreg2: d12 is d12 & reg2Num=12 [simd=1; globalset(inst_start,simd);] { export d12; }
+Dreg2: d13 is d13 & reg2Num=13 [simd=1; globalset(inst_start,simd);] { export d13; }
+Dreg2: d14 is d14 & reg2Num=14 [simd=1; globalset(inst_start,simd);] { export d14; }
+Dreg2: d15 is d15 & reg2Num=15 [simd=1; globalset(inst_start,simd);] { export d15; }
 @if defined(SIMD) || defined(VFPv3)
-Dreg: d16 is d16 & regNum=16 { export d16; }
-Dreg: d17 is d17 & regNum=17 { export d17; }
-Dreg: d18 is d18 & regNum=18 { export d18; }
-Dreg: d19 is d19 & regNum=19 { export d19; }
-Dreg: d20 is d20 & regNum=20 { export d20; }
-Dreg: d21 is d21 & regNum=21 { export d21; }
-Dreg: d22 is d22 & regNum=22 { export d22; }
-Dreg: d23 is d23 & regNum=23 { export d23; }
-Dreg: d24 is d24 & regNum=24 { export d24; }
-Dreg: d25 is d25 & regNum=25 { export d25; }
-Dreg: d26 is d26 & regNum=26 { export d26; }
-Dreg: d27 is d27 & regNum=27 { export d27; }
-Dreg: d28 is d28 & regNum=28 { export d28; }
-Dreg: d29 is d29 & regNum=29 { export d29; }
-Dreg: d30 is d30 & regNum=30 { export d30; }
-Dreg: d31 is d31 & regNum=31 { export d31; }
-Dreg2: d16 is d16 & reg2Num=16 { export d16; }
-Dreg2: d17 is d17 & reg2Num=17 { export d17; }
-Dreg2: d18 is d18 & reg2Num=18 { export d18; }
-Dreg2: d19 is d19 & reg2Num=19 { export d19; }
-Dreg2: d20 is d20 & reg2Num=20 { export d20; }
-Dreg2: d21 is d21 & reg2Num=21 { export d21; }
-Dreg2: d22 is d22 & reg2Num=22 { export d22; }
-Dreg2: d23 is d23 & reg2Num=23 { export d23; }
-Dreg2: d24 is d24 & reg2Num=24 { export d24; }
-Dreg2: d25 is d25 & reg2Num=25 { export d25; }
-Dreg2: d26 is d26 & reg2Num=26 { export d26; }
-Dreg2: d27 is d27 & reg2Num=27 { export d27; }
-Dreg2: d28 is d28 & reg2Num=28 { export d28; }
-Dreg2: d29 is d29 & reg2Num=29 { export d29; }
-Dreg2: d30 is d30 & reg2Num=30 { export d30; }
-Dreg2: d31 is d31 & reg2Num=31 { export d31; }
+Dreg: d16 is d16 & regNum=16 [simd=1; globalset(inst_start,simd);] { export d16; }
+Dreg: d17 is d17 & regNum=17 [simd=1; globalset(inst_start,simd);] { export d17; }
+Dreg: d18 is d18 & regNum=18 [simd=1; globalset(inst_start,simd);] { export d18; }
+Dreg: d19 is d19 & regNum=19 [simd=1; globalset(inst_start,simd);] { export d19; }
+Dreg: d20 is d20 & regNum=20 [simd=1; globalset(inst_start,simd);] { export d20; }
+Dreg: d21 is d21 & regNum=21 [simd=1; globalset(inst_start,simd);] { export d21; }
+Dreg: d22 is d22 & regNum=22 [simd=1; globalset(inst_start,simd);] { export d22; }
+Dreg: d23 is d23 & regNum=23 [simd=1; globalset(inst_start,simd);] { export d23; }
+Dreg: d24 is d24 & regNum=24 [simd=1; globalset(inst_start,simd);] { export d24; }
+Dreg: d25 is d25 & regNum=25 [simd=1; globalset(inst_start,simd);] { export d25; }
+Dreg: d26 is d26 & regNum=26 [simd=1; globalset(inst_start,simd);] { export d26; }
+Dreg: d27 is d27 & regNum=27 [simd=1; globalset(inst_start,simd);] { export d27; }
+Dreg: d28 is d28 & regNum=28 [simd=1; globalset(inst_start,simd);] { export d28; }
+Dreg: d29 is d29 & regNum=29 [simd=1; globalset(inst_start,simd);] { export d29; }
+Dreg: d30 is d30 & regNum=30 [simd=1; globalset(inst_start,simd);] { export d30; }
+Dreg: d31 is d31 & regNum=31 [simd=1; globalset(inst_start,simd);] { export d31; }
+Dreg2: d16 is d16 & reg2Num=16 [simd=1; globalset(inst_start,simd);] { export d16; }
+Dreg2: d17 is d17 & reg2Num=17 [simd=1; globalset(inst_start,simd);] { export d17; }
+Dreg2: d18 is d18 & reg2Num=18 [simd=1; globalset(inst_start,simd);] { export d18; }
+Dreg2: d19 is d19 & reg2Num=19 [simd=1; globalset(inst_start,simd);] { export d19; }
+Dreg2: d20 is d20 & reg2Num=20 [simd=1; globalset(inst_start,simd);] { export d20; }
+Dreg2: d21 is d21 & reg2Num=21 [simd=1; globalset(inst_start,simd);] { export d21; }
+Dreg2: d22 is d22 & reg2Num=22 [simd=1; globalset(inst_start,simd);] { export d22; }
+Dreg2: d23 is d23 & reg2Num=23 [simd=1; globalset(inst_start,simd);] { export d23; }
+Dreg2: d24 is d24 & reg2Num=24 [simd=1; globalset(inst_start,simd);] { export d24; }
+Dreg2: d25 is d25 & reg2Num=25 [simd=1; globalset(inst_start,simd);] { export d25; }
+Dreg2: d26 is d26 & reg2Num=26 [simd=1; globalset(inst_start,simd);] { export d26; }
+Dreg2: d27 is d27 & reg2Num=27 [simd=1; globalset(inst_start,simd);] { export d27; }
+Dreg2: d28 is d28 & reg2Num=28 [simd=1; globalset(inst_start,simd);] { export d28; }
+Dreg2: d29 is d29 & reg2Num=29 [simd=1; globalset(inst_start,simd);] { export d29; }
+Dreg2: d30 is d30 & reg2Num=30 [simd=1; globalset(inst_start,simd);] { export d30; }
+Dreg2: d31 is d31 & reg2Num=31 [simd=1; globalset(inst_start,simd);] { export d31; }
 @else
 # this is just a placeholder so the parse patterns will match correctly.
 # regNum is 31 when the base pattern matches, and incremented when

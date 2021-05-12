@@ -11,6 +11,30 @@
 #undef print_level
 #define print_level		4
 
+void AssemblyRaw::dump(const Address &addr, const string &mnem, const string &body) {
+    if (buf) {
+        if (enable_html) {
+            int simd = dobc::singleton()->is_simd(addr);
+            sprintf(buf, "<tr>"
+                "<td><font color=\"" COLOR_ASM_STACK_DEPTH "\">%03x:</font></td>"
+                "<td><font color=\"" COLOR_ASM_ADDR "\">0x%04x:</font></td>"
+                "<td align=\"left\"><font color=\"" COLOR_ASM_INST_MNEM "\">%s </font></td>"
+                "<td align=\"left\"><font color=\"" COLOR_ASM_INST_BODY "\">%s</font></td>"
+                "<td align=\"left\"><font color=\"" COLOR_ASM_INST_BODY "\">%s</font></td></tr>",
+                sp, (int)addr.getOffset(), mnem.c_str(), body.c_str(), simd?"simd":" ");
+        }
+        else
+            sprintf(buf, "0x%04x: %s %s", (int)addr.getOffset(), mnem.c_str(), body.c_str());
+        //sprintf(buf, "0x%08x:%10s %s", (int)addr.getOffset(), mnem.c_str(), body.c_str());
+    }
+    else {
+        if (fp)
+            fprintf(fp, "0x%04x: %s %s\n", (int)addr.getOffset(), mnem.c_str(), body.c_str());
+        else
+            fprintf(stdout, "0x%04x: %s %s\n", (int)addr.getOffset(), mnem.c_str(), body.c_str());
+    }
+}
+
 int  funcdata::loop_dfa_connect(uint32_t flags)
 {
     int i, inslot, ret, end, nend;

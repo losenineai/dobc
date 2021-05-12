@@ -115,6 +115,7 @@ define context contextreg
 	regInc		= (32,33)	# Pair register increment
 	ARMcond		= (34,34)	# ARM conditional instruction
 	ARMcondCk	= (35,35)   # Finished ARM condition check phase
+	simd 		= (36,36) noflow	# indicate instruction is simd or not
 ;
 
 define pcodeop count_leading_zeroes;

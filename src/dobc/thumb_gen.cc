@@ -839,7 +839,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
         oind = ind;
         setflags = 0;
 
-        if (p->flags.simd) {
+        if (dobc::singleton()->is_simd(p->get_addr())) {
             it = retrieve_orig_inst(b, it, 1);
             goto inst_label;
         }
@@ -849,9 +849,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
             /* push */
             if (poa(p) == ama) {
                 if ((pi0a(p) == asp) && p1) {
-                    if ((p1->opcode == CPUI_INT_MULT) && p1->flags.simd)
-                        it = g_vpop(b, it);
-                    else if (p1->opcode == CPUI_LOAD)
+                    if (p1->opcode == CPUI_LOAD)
                         it = g_pop(b, it);
                     else
                         it = g_push(b, it);

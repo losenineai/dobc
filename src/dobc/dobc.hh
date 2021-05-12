@@ -445,9 +445,6 @@ public:
 		unsigned uncalculated_store : 1;	// 这个store节点是不可计算的
         unsigned itblock : 1;
         unsigned mark_cond_copy_prop: 1;    
-
-        /* 属于simd指令 */
-        unsigned simd : 1;
     } flags = { 0 };
 
     OpCode opcode;
@@ -1852,6 +1849,7 @@ public:
 
     dobc(const char *slafilename, const char *filename);
     ~dobc();
+    static dobc*    singleton();
 
     void init_regs();
     void init();
@@ -1863,6 +1861,7 @@ public:
     funcdata*   add_func(const Address &addr);
     void        set_shelltype(char *shelltype);
 
+    bool        is_simd(const Address &addr) { return context->getVariable("simd", addr);  }
     int         func_is_thumb(int offset);
     void        run();
     void        set_func_alias(const string &func, const string &alias);
