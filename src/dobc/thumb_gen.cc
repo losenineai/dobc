@@ -920,10 +920,17 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                             }
                             break;
                         }
+                        advance(it, 1);
                     }
-                    else if (d->is_vreg(poa(p1)))
+                    else if (istemp(p1->output)) {
+                        if (p2 && p2->opcode == CPUI_INT_2COMP) {
+                            it = retrieve_orig_inst(b, it, 1);
+                        }
+                    }
+                    else if (d->is_vreg(poa(p1))) {
                         vmov_imm(p1->output->get_size(), d->vreg2i(poa(p1)), pi0(p)->get_val());
-                    advance(it, 1);
+                        advance(it, 1);
+                    }
                 }
                 else if (d->is_vreg(poa(p))) {
                     int size = p->output->get_size();

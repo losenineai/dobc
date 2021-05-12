@@ -2139,6 +2139,7 @@ void            pcodeop::to_constant1(void)
     */
     if (is_trace()) return;
 
+    /* simd别转了 */
     if (dobc::singleton()->is_simd(get_addr()) && fd->flags.disable_simd_to_const) return;
 
     /* 
