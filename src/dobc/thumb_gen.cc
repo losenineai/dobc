@@ -868,8 +868,9 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                         o(0xf000d000 | encbranch2(ind, imm, !target_thumb));
                     advance(it, 1);
                 }
-                /* 有时候会对lr，生成phi节点，忽略掉就可以了 */
-                else if (p->flags.copy_from_phi) continue;
+                else if (pi0(p)->is_constant()) {
+                    _mov_imm(LR, pi0(p)->get_val());
+                }
             }
             else if (pi0(p)->is_constant()) {
                 if (isreg(p->output))

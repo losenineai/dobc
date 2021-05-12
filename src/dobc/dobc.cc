@@ -3745,7 +3745,7 @@ int         funcdata::ollvm_deshell()
         printf("[%s] loop_unrolling sub_%llx %d times*********************** \n\n", mtime2s(NULL),  h->get_start().getOffset(), i);
         dead_code_elimination(bblocks.blist, RDS_UNROLL0);
 #if defined(DCFG_CASE)
-        dump_cfg(name, _itoa(i, buf, 10), 1);
+        //dump_cfg(name, _itoa(i, buf, 10), 1);
 #endif
     }
 
