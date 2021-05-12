@@ -381,9 +381,9 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 void dobc::plugin_ollvm()
 {
 #if 0
-    funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
+    //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
-    //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
+    funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
 #else
     funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
 #endif
@@ -2133,58 +2133,62 @@ void            pcodeop::to_constant1(void)
     varnode *vn, *out = output;
     pcodeop *op;
 
-    if (dobc::singleton()->is_simd(get_addr()) && fd->flags.disable_simd_to_const) return;
 
     /*
     非trace条件才能开启常量持久化
     */
-    if (!is_trace()) {
-        /* 
-        1. 当有output节点，且output节点为常量时，运行进行常量持久化 
-        2. opcode不能为copy，因为常量持久化就是把常量节点，改成copy操作 
-        3. opcode可以为copy，除非是操作ramspace的节点，这个时候它实际上上有一个load的行为在里面
-        4. opcode不能为store，因为store有副作用，它的use也不是特别好计算 
-        */
-        if (output && output->is_constant() && (opcode != CPUI_COPY || get_in(0)->get_addr().getSpace() == fd->d->ram_spc) && (opcode != CPUI_STORE)) {
-            /* phi节点转成 copy指令时，需要记录下这个copy节点来自于phi节点，在删除phi节点时，假如有需要可以删除这个copy  */
-            if (opcode == CPUI_MULTIEQUAL) flags.copy_from_phi = 1;
-            while (num_input() > 0) 
-                fd->op_remove_input(this, 0);
+    if (is_trace()) return;
 
-            fd->op_set_opcode(this, CPUI_COPY);
-            fd->op_set_input(this, fd->create_constant_vn(out->get_val(), out->size), 0);
-        }
-        /* 
-        1. phi节点的in节点不能这么处理
-        2. call节点不能常量持久化in， 
-        3. store节点的in节点不能转换为常量，这个是因为thumb不支持 store 一个 imm 到一个地址上，假如我们常量化会导致不好做代码生成
+    if (dobc::singleton()->is_simd(get_addr()) && fd->flags.disable_simd_to_const) return;
 
-        */
-        else if (!fd->flags.disable_inrefs_to_const && (opcode != CPUI_MULTIEQUAL) && (opcode != CPUI_STORE) && !is_call()) {
-            for (i = 0; i < inrefs.size(); i++) {
-                vn = get_in(i);
+    /* 
+    1. 当有output节点，且output节点为常量时，运行进行常量持久化 
+    2. opcode不能为copy，因为常量持久化就是把常量节点，改成copy操作 
+    3. output节点为temp的不允许进行常量化，这个会破坏原始的inst结构，导致无法识别出原先的inst，在codegen时加大了难度
+    4. opcode可以为copy，除非是操作ramspace的节点，这个时候它实际上上有一个load的行为在里面
+    5. opcode不能为store，因为store有副作用，它的use也不是特别好计算 
+    */
+    if (output && output->is_constant() 
+        && !dobc::singleton()->is_temp(output->get_addr()) 
+        && (opcode != CPUI_COPY || get_in(0)->get_addr().getSpace() == fd->d->ram_spc) && (opcode != CPUI_STORE)) {
+        /* phi节点转成 copy指令时，需要记录下这个copy节点来自于phi节点，在删除phi节点时，假如有需要可以删除这个copy  */
+        if (opcode == CPUI_MULTIEQUAL) flags.copy_from_phi = 1;
+        while (num_input() > 0) 
+            fd->op_remove_input(this, 0);
 
-				/* 后面那个判断条件是防止冲入的*/
-                if (vn->is_constant()) {
-					if (!vn->in_constant_space()) {
-						fd->op_unset_input(this, i);
-						fd->op_set_input(this, fd->create_constant_vn(vn->get_val(), vn->size), i);
-					}
+        fd->op_set_opcode(this, CPUI_COPY);
+        fd->op_set_input(this, fd->create_constant_vn(out->get_val(), out->size), 0);
+    }
+    /* 
+    1. phi节点的in节点不能这么处理
+    2. call节点不能常量持久化in， 
+    3. store节点的in节点不能转换为常量，这个是因为thumb不支持 store 一个 imm 到一个地址上，假如我们常量化会导致不好做代码生成
+
+    */
+    else if (!fd->flags.disable_inrefs_to_const && (opcode != CPUI_MULTIEQUAL) && (opcode != CPUI_STORE) && !is_call()) {
+        for (i = 0; i < inrefs.size(); i++) {
+            vn = get_in(i);
+
+            /* 后面那个判断条件是防止冲入的*/
+            if (vn->is_constant()) {
+                if (!vn->in_constant_space()) {
+                    fd->op_unset_input(this, i);
+                    fd->op_set_input(this, fd->create_constant_vn(vn->get_val(), vn->size), i);
                 }
-                /* 这里重点说下in的非constant转换规则 
+            }
+            /* 这里重点说下in的非constant转换规则 
 
-                output = op(in0, in1, ..., inN) 
-                上面的指令中，
-                1. 假如某个inN的def是一个copy的操作
-                2. 拷贝来自于另外一个cpu寄存器(rN)
-                3. 当前的pcode在那个rN的活跃范围内
-                我们直接修改上面的指令为 
-                output = op(in0, in1, ..., rN)
-                */
-                else if ((op = vn->def) && (op->opcode == CPUI_COPY) && op->get_in(0)->in_liverange_simple(this)) {
-					fd->op_unset_input(this, i);
-					fd->op_set_input(this, op->get_in(0), i);
-                }
+            output = op(in0, in1, ..., inN) 
+            上面的指令中，
+            1. 假如某个inN的def是一个copy的操作
+            2. 拷贝来自于另外一个cpu寄存器(rN)
+            3. 当前的pcode在那个rN的活跃范围内
+            我们直接修改上面的指令为 
+            output = op(in0, in1, ..., rN)
+            */
+            else if ((op = vn->def) && (op->opcode == CPUI_COPY) && op->get_in(0)->in_liverange_simple(this)) {
+                fd->op_unset_input(this, i);
+                fd->op_set_input(this, op->get_in(0), i);
             }
         }
     }
@@ -3745,7 +3749,7 @@ int         funcdata::ollvm_deshell()
         printf("[%s] loop_unrolling sub_%llx %d times*********************** \n\n", mtime2s(NULL),  h->get_start().getOffset(), i);
         dead_code_elimination(bblocks.blist, RDS_UNROLL0);
 #if defined(DCFG_CASE)
-        //dump_cfg(name, _itoa(i, buf, 10), 1);
+        dump_cfg(name, _itoa(i, buf, 10), 1);
 #endif
     }
 
