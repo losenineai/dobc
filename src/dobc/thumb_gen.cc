@@ -352,6 +352,7 @@ void thumb_gen::stuff_const_harder(uint32_t op, uint32_t v)
 
         o(stuff_const(op, v & 0xff));
         if (!(v & 0x8000) || !(v & 0x800000) || !(v & 0x80000000)) vm_error("stuff_const cant fit instruction");
+
         o(stuff_const(o2, v & 0xff00));
         if (!(v & 0x8000)) 
             o(stuff_const(no, v & 0x8000));
@@ -623,6 +624,36 @@ void _ldrb_reg(int rt, int rn, int rm, int lsl)
         o(0x5c00 | (rm << 6) | (rn << 3) | rt);
     else
         o(0xf811 | (rt << 12) | (rn << 16) | rm | (lsl << 4));
+}
+
+/* A8.8.100 */
+void _mla(int rd, int rn, int rm, int ra)
+{
+    o(0xfb000000 | (rn << 16) | (ra << 12) | (rd << 8) | rm);
+}
+
+/* A8.8.114 */
+void _mul(int rd, int rn, int rm)
+{
+    if (rd < 8 && rn < 8 && (rd == rm))
+        o(0x4600 | (rn << 3) | (rd << 3));
+    else
+        o(0xfb00f000 | (rn << 3) | (rd << 8) | rm);
+}
+
+void _rsb_imm(int rd, int imm, int rn)
+{
+    uint32_t x;
+
+    if (rd < 8 && rn < 8 && !imm)
+        o(0x4240 | (rn << 3) | rd);
+    else if (x = thumb_gen::stuff_const(0, imm))
+        o(0xf1c00000 | x | (rn << 16) | (rd << 8));
+}
+
+void _rsb_reg(int rd, int rn, int rm, SRType shtype, int shift)
+{
+    o(0xebc00000 | (rn << 16) | (rd << 8) | rm | (shtype << 4) | imm_map(shift, 2, 3, 12) | imm_map(shift, 0, 2, 6));
 }
 
 void _str(int rt, int rn, int rm, int imm)
@@ -1057,7 +1088,10 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 }
             }
             else if (isreg(p->output)) {
-                if (isreg(pi0(p)) || (pi0a(p) == ama)) {
+                if (pi0(p)->is_constant()) {
+                    _rsb_imm(reg2i(poa(p)), pi0(p)->get_val(), reg2i(pi1a(p)));
+                }
+                else if (isreg(pi0(p)) || (pi0a(p) == ama)) {
                     rd = reg2i(poa(p));
                     rn = reg2i(pi0a(p));
                     if (isreg(pi1(p))) {
@@ -1294,6 +1328,34 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                             advance(it, 2);
                         }
                     }
+                }
+            }
+            break;
+
+        case CPUI_INT_SRIGHT:
+            if (istemp(p->output)) {
+                if ((p1->opcode == CPUI_INT_SUB) && (p->output == pi0(p1))) {
+                    it = retrieve_orig_inst(b, it, 1);
+                }
+            }
+            break;
+
+        case CPUI_INT_MULT:
+            if (istemp(p->output)) {
+                if (p1->opcode == CPUI_INT_ADD) {
+                    _mla(reg2i(poa(p1)), reg2i(pi0a(p)), reg2i(pi1a(p)), reg2i(pi1a(p1)));
+                    advance(it, 1);
+                }
+            }
+            else if (isreg(p->output)) {
+                _mul(reg2i(poa(p)), reg2i(pi0a(p)), reg2i(pi1a(p)));
+            }
+            break;
+
+        case CPUI_SUBPIECE:
+            if (p1->opcode == CPUI_SUBPIECE) {
+                if (p2->opcode == CPUI_INT_SEXT) {
+                    it = retrieve_orig_inst(b, it, 1);
                 }
             }
             break;
