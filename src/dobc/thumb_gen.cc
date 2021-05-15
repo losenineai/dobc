@@ -933,7 +933,10 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                             break;
 
                         case CPUI_INT_SUB:
-                            _sub_imm(reg2i(poa(p1)), reg2i(pi0a(p1)), pi0(p)->get_val());
+                            if (pi0(p)->is_hard_constant())
+                                _sub_imm(reg2i(poa(p1)), reg2i(pi0a(p1)), pi0(p)->get_val());
+                            else 
+                                _sub_reg(reg2i(poa(p1)), reg2i(pi0a(p1)), reg2i(pi0a(p)), SRType_LSL, 0);
                             break;
 
                         case CPUI_INT_AND:
@@ -1334,9 +1337,11 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
 
         case CPUI_INT_SRIGHT:
             if (istemp(p->output)) {
-                if ((p1->opcode == CPUI_INT_SUB) && (p->output == pi0(p1))) {
-                    it = retrieve_orig_inst(b, it, 1);
-                }
+                /* NOTE：
+                2021年5月15日，我从这个点开始，尝试把部分指令完全不处理，直接从原文中拷贝，但是因为我还没有考虑具体
+                哪些指令可以拷贝，哪些不可以，现在只能把一些我觉的影响比较小的，先处理了
+                */
+                it = retrieve_orig_inst(b, it, 1);
             }
             break;
 
