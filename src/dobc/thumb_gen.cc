@@ -1177,7 +1177,11 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                             advance(it, 3);
                         }
                         else if (istemp(p1->output) && isreg(p2->output) && p2->opcode == CPUI_INT_ZEXT) {
-                            _ldrb_reg(reg2i(poa(p2)), reg2i(pi0a(p)), reg2i(pi1a(p)), 0);
+                            if (pi1(p)->is_hard_constant()) {
+                                _ldrb_imm(reg2i(poa(p2)), reg2i(pi0a(p)), pi1(p)->get_val(), 0);
+                            }
+                            else
+                                _ldrb_reg(reg2i(poa(p2)), reg2i(pi0a(p)), reg2i(pi1a(p)), 0);
                             advance(it, 2);
                         }
                         else {
