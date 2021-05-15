@@ -1041,7 +1041,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     }
                 }
                 else if (pi0a(p) == ang && pi1a(p) == aov && p1->opcode == CPUI_BOOL_NEGATE && p2->opcode == CPUI_CBRANCH) {
-                    write_cbranch(b, COND_GE);
+                    write_cbranch(b, (p->opcode == CPUI_INT_EQUAL) ? COND_LT:COND_GE);
                     advance(it, 2);
                 }
                 else if ((p1->opcode == CPUI_BOOL_OR) && (p2->opcode == CPUI_BOOL_NEGATE) && (p3->opcode == CPUI_CBRANCH)) {
@@ -1354,6 +1354,21 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
             }
             else if (isreg(p->output)) {
                 _mul(reg2i(poa(p)), reg2i(pi0a(p)), reg2i(pi1a(p)));
+            }
+            break;
+
+        case CPUI_BOOL_NEGATE:
+            p4 = *it1;
+            if (p4->opcode == CPUI_CBRANCH) {
+                if (p1->opcode == CPUI_INT_EQUAL
+                    && p2->opcode == CPUI_BOOL_AND
+                    && p3->opcode == CPUI_BOOL_NEGATE
+                    && pi0a(p) == azr
+                    && pi0a(p1) == ang
+                    && pi1a(p1) == aov) {
+                    write_cbranch(b, COND_LE);
+                    advance(it, 4);
+                }
             }
             break;
 
