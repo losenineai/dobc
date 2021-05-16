@@ -234,7 +234,7 @@ uint32_t thumb_gen::stuff_const(uint32_t op, uint32_t c)
     do {
         /* A6.3.2 */
         uint32_t m;
-        int i, c1, c2;
+        int i, c1, c2, h;
         if (c < 256)
             return op | c;
         c1 = c & 0xff;
@@ -246,8 +246,9 @@ uint32_t thumb_gen::stuff_const(uint32_t op, uint32_t c)
             return op | c | 0x0300;
         for (i = 8; i < 32; i ++) {
             m = 0xff << (32 - i);
-            if (!(c & ~m) && (c && (1 << (39 - i))))
-                return op | ((i & 0x10) << 22) | ((i & 0xe) << 11) | ((i & 1) << 7) | ((c) >> (32 - i));
+            h = 1 << (39 - i);
+            if ((c & m) == c && (c & h) == h)
+                return op | imm_map(i, 4, 1, 26) | imm_map(i, 1, 3, 12) | imm_map(i, 0, 1, 7) | (((c) >> (32 - i)) & 0x7f);
         }
         op = negop;
         c = nc;
@@ -626,6 +627,17 @@ void _ldrb_reg(int rt, int rn, int rm, int lsl)
         o(0xf811 | (rt << 12) | (rn << 16) | rm | (lsl << 4));
 }
 
+/* A8.8.94 */
+void _lsr_imm(int rd, int rm, int imm)
+{
+    if (imm >= 32) return;
+
+    if (rm < 8 && rd < 8)
+        o(0x0800 | (imm << 6) | (rm << 3) | rd);
+    else
+        o(0xea4f0010 | (rd << 8) | rm | imm_map(imm, 2, 3, 12) | imm_map(imm, 0, 2, 6));
+}
+
 /* A8.8.100 */
 void _mla(int rd, int rn, int rm, int ra)
 {
@@ -636,7 +648,7 @@ void _mla(int rd, int rn, int rm, int ra)
 void _mul(int rd, int rn, int rm)
 {
     if (rd < 8 && rn < 8 && (rd == rm))
-        o(0x4600 | (rn << 3) | (rd << 3));
+        o(0x4340 | (rn << 3) | (rd << 3));
     else
         o(0xfb00f000 | (rn << 3) | (rd << 8) | rm);
 }
@@ -1251,6 +1263,22 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
             }
             break;
 
+        case CPUI_INT_SBORROW:
+            if (d->is_tsreg(poa(p))) {
+                if (p1->opcode == CPUI_INT_SUB && istemp(p1->output)) {
+                    if (pi1(p)->is_hard_constant())
+                        _cmp_imm(reg2i(pi0a(p)), pi1(p)->get_val());
+                    else if (isreg(pi1(p)))
+                        _cmp_reg(reg2i(pi0a(p)), reg2i(pi1a(p)));
+
+                    advance(it, 2);
+                    while ((tp = *it)->output && (d->is_sreg(poa(tp)) || d->is_tsreg(poa(tp)))) it++;
+                    it--;
+                }
+            }
+            break;
+
+
         case CPUI_INT_XOR:
             if (istemp(p->output)) {
                 if (p1) {
@@ -1290,20 +1318,6 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
             }
             break;
 
-        case CPUI_INT_SBORROW:
-            if (d->is_tsreg(poa(p))) {
-                if (p1->opcode == CPUI_INT_SUB && istemp(p1->output)) {
-                    if (pi1(p)->is_hard_constant())
-                        _cmp_imm(reg2i(pi0a(p)), pi1(p)->get_val());
-                    else if (isreg(pi1(p)))
-                        _cmp_reg(reg2i(pi0a(p)), reg2i(pi1a(p)));
-
-                    advance(it, 2);
-                    while ((tp = *it)->output && (d->is_sreg(poa(tp)) || d->is_tsreg(poa(tp)))) it++;
-                    it--;
-                }
-            }
-            break;
 
         case CPUI_INT_OR:
             if (isreg(p->output)) {
@@ -1336,6 +1350,12 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                         }
                     }
                 }
+            }
+            break;
+
+        case CPUI_INT_RIGHT:
+            if (isreg(p->output)) {
+                _lsr_imm(reg2i(poa(p)), reg2i(pi0a(p)), pi1(p)->get_val());
             }
             break;
 
