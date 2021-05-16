@@ -246,25 +246,25 @@ VRn: thv_Rn is TMode=1 & thv_Rn { export thv_Rn; }
 VRd: Rd       is TMode=0 & Rd  { export Rd; }
 VRd: thv_Rd   is TMode=1 & thv_Rd { export thv_Rd; }
 
-Sd: Sd0		is TMode=0 & Sd0 & D22=0	{ export Sd0; }
-Sd: Sd1		is TMode=0 & Sd1 & D22=1	{ export Sd1; }
-Sd: thv_Sd0	is TMode=1 & thv_Sd0 & thv_D22=0	{ export thv_Sd0; }
-Sd: thv_Sd1	is TMode=1 & thv_Sd1 & thv_D22=1	{ export thv_Sd1; }
+Sd: Sd0		is TMode=0 & Sd0 & D22=0	[simd=1; globalset(inst_start,simd);] { export Sd0; }
+Sd: Sd1		is TMode=0 & Sd1 & D22=1	[simd=1; globalset(inst_start,simd);] { export Sd1; }
+Sd: thv_Sd0	is TMode=1 & thv_Sd0 & thv_D22=0	[simd=1; globalset(inst_start,simd);] { export thv_Sd0; }
+Sd: thv_Sd1	is TMode=1 & thv_Sd1 & thv_D22=1	[simd=1; globalset(inst_start,simd);] { export thv_Sd1; }
 
-Sn: Sn0		is TMode=0 & Sn0 & N7=0	{ export Sn0; }
-Sn: Sn1		is TMode=0 & Sn1 & N7=1	{ export Sn1; }
-Sn: thv_Sn0	is TMode=1 & thv_Sn0 & thv_N7=0	{ export thv_Sn0; }
-Sn: thv_Sn1	is TMode=1 & thv_Sn1 & thv_N7=1	{ export thv_Sn1; }
+Sn: Sn0		is TMode=0 & Sn0 & N7=0	[simd=1; globalset(inst_start,simd);] { export Sn0; }
+Sn: Sn1		is TMode=0 & Sn1 & N7=1	[simd=1; globalset(inst_start,simd);] { export Sn1; }
+Sn: thv_Sn0	is TMode=1 & thv_Sn0 & thv_N7=0	[simd=1; globalset(inst_start,simd);] { export thv_Sn0; }
+Sn: thv_Sn1	is TMode=1 & thv_Sn1 & thv_N7=1	[simd=1; globalset(inst_start,simd);] { export thv_Sn1; }
 
-Sm: Sm0		is TMode=0 & Sm0 & M5=0	{ export Sm0; }
-Sm: Sm1		is TMode=0 & Sm1 & M5=1	{ export Sm1; }
-Sm: thv_Sm0	is TMode=1 & thv_Sm0 & thv_M5=0	{ export thv_Sm0; }
-Sm: thv_Sm1	is TMode=1 & thv_Sm1 & thv_M5=1	{ export thv_Sm1; }
+Sm: Sm0		is TMode=0 & Sm0 & M5=0	[simd=1; globalset(inst_start,simd);] { export Sm0; }
+Sm: Sm1		is TMode=0 & Sm1 & M5=1	[simd=1; globalset(inst_start,simd);] { export Sm1; }
+Sm: thv_Sm0	is TMode=1 & thv_Sm0 & thv_M5=0	[simd=1; globalset(inst_start,simd);] { export thv_Sm0; }
+Sm: thv_Sm1	is TMode=1 & thv_Sm1 & thv_M5=1	[simd=1; globalset(inst_start,simd);] { export thv_Sm1; }
 
-SmNext: Sm0next		is TMode=0 & Sm0next & M5=0	{ export Sm0next; }
-SmNext: Sm1next		is TMode=0 & Sm1next & M5=1	{ export Sm1next; }
-SmNext: thv_Sm0next	is TMode=1 & thv_Sm0next & thv_M5=0	{ export thv_Sm0next; }
-SmNext: thv_Sm1next	is TMode=1 & thv_Sm1next & thv_M5=1	{ export thv_Sm1next; }
+SmNext: Sm0next		is TMode=0 & Sm0next & M5=0	[simd=1; globalset(inst_start,simd);] { export Sm0next; }
+SmNext: Sm1next		is TMode=0 & Sm1next & M5=1	[simd=1; globalset(inst_start,simd);] { export Sm1next; }
+SmNext: thv_Sm0next	is TMode=1 & thv_Sm0next & thv_M5=0	[simd=1; globalset(inst_start,simd);] { export thv_Sm0next; }
+SmNext: thv_Sm1next	is TMode=1 & thv_Sm1next & thv_M5=1	[simd=1; globalset(inst_start,simd);] { export thv_Sm1next; }
 
 Sd2: Sd		is  Sd			{ export Sd; }
 
