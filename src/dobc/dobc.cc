@@ -1981,6 +1981,9 @@ int             pcodeop::compute(int inslot, flowblock **branch)
             && ((l = (in0->get_val() & in1->get_val())) == (r = (in0->get_val() & (((uintb)1 << (in0->size * 8)) - 1))))) {
             out->set_sp_constant(in0->get_val() & in1->get_val());
         }
+        else if (in0->is_pc_constant() && in1->is_constant()) {
+            out->set_pc_constant(in0->get_val() & in1->get_val());
+        }
         /* 相与时，任意一个数为0，则为0 */
         else if ((in0->is_constant() && (in0->get_val() == 0)) || (in1->is_constant() && (in1->get_val() == 0))) {
             out->set_val(0);
