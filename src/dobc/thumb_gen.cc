@@ -14,7 +14,7 @@
 #define azr                 d->zr_addr
 #define ang                 as("NG")
 #define aov                 as("OV")
-#define acv                 as("CV")
+#define acy                 as("CY")
 #define istemp(vn)          ((vn)->get_addr().getSpace()->getType() == IPTR_INTERNAL)
 #define isreg(vn)           d->is_greg(vn->get_addr())
 #define as(st)              d->trans->getRegister(st).getAddr()
@@ -1052,6 +1052,15 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                         advance(it, 1);
                     }
                 }
+                else if ((pi0a(p) == acy) && pi1(p)->is_constant()) {
+                    imm = pi1(p)->get_val();
+                    if (p->opcode == CPUI_INT_NOTEQUAL) imm = !imm;
+                    if (p1->opcode == CPUI_BOOL_NEGATE) imm = !imm;
+
+                    write_cbranch(b, imm?COND_CS:COND_CC);
+
+                    it = advance_to_inst_end(it);
+                }
                 else if (pi0a(p) == ang && pi1a(p) == aov && p1->opcode == CPUI_BOOL_NEGATE && p2->opcode == CPUI_CBRANCH) {
                     write_cbranch(b, (p->opcode == CPUI_INT_EQUAL) ? COND_LT:COND_GE);
                     advance(it, 2);
@@ -1136,6 +1145,12 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                             _sub_imm(rd, rn, pi1(p)->get_val());
                     }
                 }
+            }
+            break;
+
+        case CPUI_INT_LESSEQUAL:
+            if (d->is_tsreg(poa(p))) {
+                it = retrieve_orig_inst(b, it, 1);
             }
             break;
 
@@ -1564,6 +1579,19 @@ pit thumb_gen::retrieve_orig_inst(flowblock *b, pit pit, int save)
 
     if (save)
         ob(fillbuf, size);
+
+    return --pit;
+}
+
+pit thumb_gen::advance_to_inst_end(pit pit)
+{
+    flowblock *b = (*pit)->parent;
+    const Address &addr = (*pit)->get_addr();
+
+    for (++pit; pit != b->ops.end(); pit++) {
+        if ((*pit)->get_addr() != addr)
+            return --pit;
+    }
 
     return --pit;
 }

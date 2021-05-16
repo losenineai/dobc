@@ -86,6 +86,8 @@ public:
 
     /* save to so buf */
     pit retrieve_orig_inst(flowblock *b, pit pit, int save);
+    /* 跟新pit到当前inst的末尾pcode上*/
+    pit advance_to_inst_end(pit pit);
     pit g_push(flowblock *b, pit pit);
     pit g_pop(flowblock *b, pit pit);
     /* 
