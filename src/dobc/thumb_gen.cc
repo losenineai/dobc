@@ -648,9 +648,9 @@ void _mla(int rd, int rn, int rm, int ra)
 void _mul(int rd, int rn, int rm)
 {
     if (rd < 8 && rn < 8 && (rd == rm))
-        o(0x4340 | (rn << 3) | (rd << 3));
+        o(0x4340 | (rn << 3) | rd);
     else
-        o(0xfb00f000 | (rn << 3) | (rd << 8) | rm);
+        o(0xfb00f000 | (rn << 16) | (rd << 8) | rm);
 }
 
 void _rsb_imm(int rd, int imm, int rn)
@@ -1112,7 +1112,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 }
             }
             else if (isreg(p->output)) {
-                if (pi0(p)->is_constant()) {
+                if (pi0(p)->is_hard_constant()) {
                     _rsb_imm(reg2i(poa(p)), pi0(p)->get_val(), reg2i(pi1a(p)));
                 }
                 else if (isreg(pi0(p)) || (pi0a(p) == ama)) {
@@ -1122,13 +1122,8 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                         /* A8.8.223 */
                         rm = reg2i(pi1a(p));
 
-                        setflags = 0;
-                        if ((p1->opcode == CPUI_INT_EQUAL) && (p->output == pi0(p1))) {
-                            setflags = 1;
-                            advance(it, 2);
-                        }
-
                         _sub_reg(rd, rn, rm, SRType_LSL, 0);
+                        it = advance_to_inst_end(it);
                     }
                     /* sub sp, sp, c 
                     A8.8.225.T1
@@ -1398,7 +1393,16 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
 
         case CPUI_BOOL_NEGATE:
             p4 = *it1;
-            if (p4->opcode == CPUI_CBRANCH) {
+            if (p3->opcode == CPUI_CBRANCH) {
+                if (p->opcode == CPUI_BOOL_NEGATE
+                    && p1->opcode == CPUI_BOOL_AND
+                    && p2->opcode == CPUI_BOOL_NEGATE
+                    && pi0a(p) == azr
+                    && pi0a(p1) == acy) {
+                    write_cbranch(b, COND_LS);
+                }
+            }
+            else if (p4->opcode == CPUI_CBRANCH) {
                 if (p1->opcode == CPUI_INT_EQUAL
                     && p2->opcode == CPUI_BOOL_AND
                     && p3->opcode == CPUI_BOOL_NEGATE
@@ -1406,9 +1410,9 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     && pi0a(p1) == ang
                     && pi1a(p1) == aov) {
                     write_cbranch(b, COND_LE);
-                    advance(it, 4);
                 }
             }
+            it = advance_to_inst_end(it);
             break;
 
         case CPUI_SUBPIECE:
