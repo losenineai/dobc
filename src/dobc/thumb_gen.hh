@@ -84,6 +84,8 @@ public:
 
     uint32_t reg2i(const Address &a);
 
+    /* 确认simd指令是否需要修复，有些simd指令，访问了pc寄存器，无法从原始obj文件中抽取 */
+    bool simd_need_fix(pit it);
     /* save to so buf */
     pit retrieve_orig_inst(flowblock *b, pit pit, int save);
     /* 跟新pit到当前inst的末尾pcode上*/

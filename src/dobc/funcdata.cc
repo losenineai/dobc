@@ -307,6 +307,11 @@ void        funcdata::dead_phi_elimination()
             vector<pcodeop *> deadphi;
             if (dead_phi_detect(p, deadphi)) {
                 for (i = 0; i < deadphi.size(); i++) {
+                    /* 这里必须擦除一下，不擦的话，会导致整个出口活跃的集合数据错误.
+                    
+                    NOTE: 不过这里会擦除出口活跃集合会不会导致BUG？*/
+                    if (is_out_live(deadphi[i]))
+                        topname.erase(deadphi[i]);
                     op_destroy(deadphi[i], 1);
                 }
             }
@@ -326,10 +331,8 @@ void        funcdata::dead_code_elimination(vector<flowblock *> &blks, uint32_t 
     marks.clear();
     marks.resize(bblocks.get_size());
 
-#if 1
     if ((flags & F_REMOVE_DEAD_PHI))
         dead_phi_elimination();
-#endif
 
     for (i = blks.size() - 1; i >= 0; i--) {
         b = blks[i];

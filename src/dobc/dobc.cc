@@ -5794,7 +5794,6 @@ void        funcdata::op_destroy(pcodeop *op)
     int i;
     flowblock *b;
 
-
 	if (op->output) {
         destroy_varnode(op->output);
 		op->output = NULL;

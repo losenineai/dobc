@@ -160,6 +160,11 @@ uint32_t thumb_gen::reg2i(const Address &a)
     return d->reg2i(a);
 }
 
+bool thumb_gen::simd_need_fix(pit it)
+{
+    return false;
+}
+
 
 static void ot(uint16_t i)
 {
@@ -465,7 +470,7 @@ void _add_imm(int rd, int rn, int imm)
     int a = abs(imm), add = imm >= 0;
 
     if (add && imm < 8 && rd < 8 && rn < 8)
-        o(0x1600 | (imm << 6) | (rn << 3) | rd); // t1
+        o(0x1c00 | (imm << 6) | (rn << 3) | rd); // t1
     else if (add && imm < 256 && rd < 8 && (rd == rn))
         o(0x3000 | (rd << 8) | imm); // t2
     else if (add && imm < 4096)
@@ -926,7 +931,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     _mov_imm(LR, pi0(p)->get_val());
                 }
             }
-            else if (pi0(p)->is_constant()) {
+            else if (pi0(p)->is_hard_constant()) {
                 if (isreg(p->output))
                     _mov_imm(reg2i(poa(p)), pi0(p)->get_val());
                 else if (istemp(p->output)){
@@ -934,6 +939,19 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                         switch (p1->opcode) {
                         case CPUI_COPY:
                             _mov_imm(reg2i(poa(p1)), pi0(p)->get_val());
+                            break;
+
+                        case CPUI_LOAD:
+                            /* FIXME:假如load指令调用了一个常数，那么它一定是相对pc寄存器的？ */
+                            rn = reg2i(poa(p1));
+                            imm = pi0(p)->get_val();
+                            /*
+                            pc - (ind) - 4
+                            */
+                            _mov_imm(rn, imm - (ind + 4 * (stuff_const(0, imm) ? 1:2)) - 4);
+
+                            _add_reg(rn, rn, PC, SRType_LSL, 0);
+                            _ldr_imm(rn, rn, 0, 0);
                             break;
 
                         case CPUI_INT_ADD:
@@ -945,42 +963,27 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                             break;
 
                         case CPUI_INT_SUB:
-                            if (pi0(p)->is_hard_constant())
-                                _sub_imm(reg2i(poa(p1)), reg2i(pi0a(p1)), pi0(p)->get_val());
-                            else 
-                                _sub_reg(reg2i(poa(p1)), reg2i(pi0a(p1)), reg2i(pi0a(p)), SRType_LSL, 0);
+                            _sub_imm(reg2i(poa(p1)), reg2i(pi0a(p1)), pi0(p)->get_val());
                             break;
 
                         case CPUI_INT_AND:
-                            if (pi0(p)->is_constant()) {
-                                int lsb, width;
-                                if (continuous_zero_bits(pi0(p)->get_val(), &lsb, &width)) {
-                                }
-                                else {
-                                    _bfc(reg2i(poa(p1)), lsb, width);
-                                }
+                            int lsb, width;
+                            if (continuous_zero_bits(pi0(p)->get_val(), &lsb, &width)) {
                             }
-                            break;
-
-                        case CPUI_LOAD:
-                            /* FIXME:假如load指令调用了一个常数，那么它一定是相对pc寄存器的？ */
-                            if (pi0(p)->is_constant()) {
-                                rn = reg2i(poa(p1));
-                                imm = pi0(p)->get_val();
-                                /*
-                                pc - (ind) - 4
-                                */
-                                _mov_imm(rn, imm - (ind + 4 * (stuff_const(0, imm) ? 1:2)) - 4);
-
-                                _add_reg(rn, rn, PC, SRType_LSL, 0);
-                                _ldr_imm(rn, rn, 0, 0);
+                            else {
+                                _bfc(reg2i(poa(p1)), lsb, width);
                             }
                             break;
                         }
                         advance(it, 1);
                     }
                     else if (istemp(p1->output)) {
-                        if (p2 && p2->opcode == CPUI_INT_2COMP) {
+                        if (p2->opcode == CPUI_INT_2COMP) {
+                            it = retrieve_orig_inst(b, it, 1);
+                        }
+                    }
+                    else if (d->is_tsreg(poa(p1))) {
+                        if (p1->opcode == CPUI_INT_SBORROW) {
                             it = retrieve_orig_inst(b, it, 1);
                         }
                     }
@@ -998,10 +1001,25 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     vmov_imm(size, d->vreg2i(poa(p)), pi0(p)->get_val());
                 }
             }
-            else if (isreg(p->output) && isreg(pi0(p))) {
-                rd = reg2i(poa(p));
-                /* A8.8.103*/
-                o(0x4600 | (reg2i(pi0a(p)) << 3) | (rd & 7) | (rd >> 3 << 7));
+            else if (istemp(p->output)) {
+                _add_reg(reg2i(poa(p1)), reg2i(pi0a(p1)), reg2i(pi0a(p)), SRType_LSL, 0);
+                it = advance_to_inst_end(it);
+            }
+            else if (isreg(pi0(p))) {
+                if (isreg(p->output)) {
+                    rd = reg2i(poa(p));
+                    /* A8.8.103*/
+                    o(0x4600 | (reg2i(pi0a(p)) << 3) | (rd & 7) | (rd >> 3 << 7));
+                }
+                else if (istemp(p->output)) {
+                    switch (p1->opcode) {
+                    case CPUI_INT_SUB:
+                        _sub_reg(reg2i(poa(p1)), reg2i(pi0a(p1)), reg2i(pi0a(p)), SRType_LSL, 0);
+                        break;
+                    }
+
+                    it = advance_to_inst_end(it);
+                }
             }
             break;
 
@@ -1072,6 +1090,10 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     }
                 }
             }
+            break;
+
+        case CPUI_INT_SEXT:
+            it = retrieve_orig_inst(b, it, 1);
             break;
 
         case CPUI_INT_SUB:
@@ -1252,21 +1274,8 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 /* A8.8.4 */
                 if (pi1(p)->is_hard_constant()) {
                     imm = (int)pi1(p)->get_val();
-                    if ((poa(p) == pi0a(p)) && rd < 8 && imm < 256) {
-                        o(0x3000 | (rd << 8) | (imm & 0xff));       // T2
-                    }
-                    else {
-                        x = stuff_const(0xf1000000, imm);           // T3
-                        if (!x) {
-                            //x = 0xf2000000 | imm_map(imm, );
-                        }
-
-                        x |= (rn << 16) | (rd << 8);
-                        o(x);
-                    }
-
-                    if (p1 && p2 && poa(p1) == as("tmpZR") && poa(p2) == azr)
-                        advance(it, 2);
+                    _add_imm(rd, rn, imm);
+                    it = advance_to_inst_end(it);
                 }
                 else if (isreg(pi1(p)))
                     _add_reg(reg2i(poa(p)), reg2i(pi0a(p)), reg2i(pi1a(p)), SRType_LSL, 0);
@@ -1345,20 +1354,24 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 if (istemp(p1->output)) {
                     if (p1->opcode == CPUI_INT_ADD) {
                         if (p2->opcode == CPUI_LOAD) {
-                            _ldr_reg(reg2i(poa(p2)), reg2i(pi0a(p1)), reg2i(pi0a(p)), pi1(p)->get_val());
-                            advance(it, 2);
+                            if (isreg(p2->output))
+                                _ldr_reg(reg2i(poa(p2)), reg2i(pi0a(p1)), reg2i(pi0a(p)), pi1(p)->get_val());
+                            else  if (isreg(p3->output))
+                                it = retrieve_orig_inst(b, it, 1);
                         }
                         else if (p2->opcode == CPUI_STORE) {
                             _str_reg(reg2i(pi2a(p2)), reg2i(pi0a(p1)), reg2i(pi0a(p)), pi1(p)->get_val());
-                            advance(it, 2);
                         }
                     }
                     else if (p1->opcode == CPUI_COPY) {
                         if (p2->opcode == CPUI_INT_ADD) {
                             _add_reg(reg2i(poa(p2)), reg2i(pi0a(p2)), reg2i(pi0a(p)), SRType_LSL, pi1(p)->get_val());
-                            advance(it, 2);
+                        }
+                        else if (p2->opcode == CPUI_INT_SUB) {
+                            _sub_reg(reg2i(poa(p2)), reg2i(pi0a(p2)), reg2i(pi0a(p)), SRType_LSL, pi1(p)->get_val());
                         }
                     }
+                    it = advance_to_inst_end(it);
                 }
             }
             break;
@@ -1367,16 +1380,25 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
             if (isreg(p->output)) {
                 _lsr_imm(reg2i(poa(p)), reg2i(pi0a(p)), pi1(p)->get_val());
             }
+            else if (istemp(p->output)) {
+                if (istemp(p1->output)) {
+                    if (p1->opcode == CPUI_COPY) {
+                        if (p2->opcode == CPUI_INT_ADD) {
+                            _add_reg(reg2i(poa(p2)), reg2i(pi0a(p2)), reg2i(pi0a(p)), SRType_LSR, pi1(p)->get_val());
+                        }
+                    }
+                }
+
+                it = advance_to_inst_end(it);
+            }
             break;
 
         case CPUI_INT_SRIGHT:
-            if (istemp(p->output)) {
-                /* NOTE：
-                2021年5月15日，我从这个点开始，尝试把部分指令完全不处理，直接从原文中拷贝，但是因为我还没有考虑具体
-                哪些指令可以拷贝，哪些不可以，现在只能把一些我觉的影响比较小的，先处理了
-                */
-                it = retrieve_orig_inst(b, it, 1);
-            }
+            /* NOTE：
+            2021年5月15日，我从这个点开始，尝试把部分指令完全不处理，直接从原文中拷贝，但是因为我还没有考虑具体
+            哪些指令可以拷贝，哪些不可以，现在只能把一些我觉的影响比较小的，先处理了
+            */
+            it = retrieve_orig_inst(b, it, 1);
             break;
 
         case CPUI_INT_MULT:
