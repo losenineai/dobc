@@ -1876,6 +1876,7 @@ int         funcdata::constant_propagation3()
 	vector<pcodeop *> topstorelist;
     pcodeop_set::iterator it;
     pcodeop_set set;
+    pcodeop_set visit;
 	pcodeop_set maystore_set;
     pcodeop *op, *use, *load, *store, *maystore;
 	int ret = 0, r, changed = 0;
@@ -1917,6 +1918,9 @@ cp_label1:
         if (!out) continue;
 
         if (out->is_constant() || out->is_sp_constant()) {
+            if (visit.find(op) != visit.end()) continue;
+            visit.insert(op);
+
             for (iter1 = out->uses.begin(); iter1 != out->uses.end(); ++iter1) {
                 set.insert(*iter1);
             }

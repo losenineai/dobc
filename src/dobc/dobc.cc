@@ -381,9 +381,9 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 void dobc::plugin_ollvm()
 {
 #if 0
-    //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
+    funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
-    funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
+    //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
 #else
     funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
 #endif
@@ -2136,7 +2136,6 @@ void            pcodeop::to_constant1(void)
     varnode *vn, *out = output;
     pcodeop *op;
 
-
     /*
     非trace条件才能开启常量持久化
     */
@@ -2144,6 +2143,11 @@ void            pcodeop::to_constant1(void)
 
     /* simd别转了 */
     if (dobc::singleton()->is_simd(get_addr()) && fd->flags.disable_simd_to_const) return;
+    /* FIXME:
+    这里不对simd的phi节点做转换是为了在代码生成时减少工作量，否则我们需要在某些cfg头部插入vmov_imm的指令
+    
+    是否考虑修复掉他？  */
+    if ((opcode == CPUI_MULTIEQUAL) && fd->d->is_vreg(poa(this))) return;
 
     /* 
     1. 当有output节点，且output节点为常量时，运行进行常量持久化 

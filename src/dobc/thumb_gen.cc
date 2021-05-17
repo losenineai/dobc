@@ -633,6 +633,17 @@ void _ldrb_reg(int rt, int rn, int rm, int lsl)
 }
 
 /* A8.8.94 */
+void _lsl_imm(int rd, int rm, int imm)
+{
+    if (imm >= 32) return;
+
+    if (rm < 8 && rd < 8)
+        o((imm << 6) | (rm << 3) | (rd << 3));
+    else
+        o(0xea4f0000 | (rd << 8) | rm | imm_map(imm, 2, 3, 12) | imm_map(imm, 0, 2, 6));
+}
+
+/* A8.8.96 */
 void _lsr_imm(int rd, int rm, int imm)
 {
     if (imm >= 32) return;
@@ -760,6 +771,12 @@ void thumb_gen::_mov_imm(int rd, uint32_t v)
         v >>= 16;
         o(stuff_constw(0xf2c00000 | (rd << 8), v, 16));
     }
+}
+
+/* A8.8.101 */
+void _mls(int rd, int rn, int rm, int ra)
+{
+    o(0xfb000010 | (rn << 16) | (ra << 12) | (rd << 8) | rm);
 }
 
 /* A8.8.339 */
@@ -1166,9 +1183,8 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
             break;
 
         case CPUI_INT_LESSEQUAL:
-            if (d->is_tsreg(poa(p))) {
-                it = retrieve_orig_inst(b, it, 1);
-            }
+        case CPUI_INT_ZEXT:
+            it = retrieve_orig_inst(b, it, 1);
             break;
 
 
@@ -1374,6 +1390,10 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     it = advance_to_inst_end(it);
                 }
             }
+            else if (isreg(p->output)) {
+                if (pi1(p)->is_hard_constant())
+                    _lsl_imm(reg2i(poa(p)), reg2i(pi0a(p)), pi1(p)->get_val());
+            }
             break;
 
         case CPUI_INT_RIGHT:
@@ -1405,8 +1425,12 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
             if (istemp(p->output)) {
                 if (p1->opcode == CPUI_INT_ADD) {
                     _mla(reg2i(poa(p1)), reg2i(pi0a(p)), reg2i(pi1a(p)), reg2i(pi1a(p1)));
-                    advance(it, 1);
                 }
+                else if (p1->opcode == CPUI_INT_SUB) {
+                    _mls(reg2i(poa(p1)), reg2i(pi0a(p)), reg2i(pi1a(p)), reg2i(pi0a(p1)));
+                }
+
+                advance(it, 1);
             }
             else if (isreg(p->output)) {
                 _mul(reg2i(poa(p)), reg2i(pi0a(p)), reg2i(pi1a(p)));
