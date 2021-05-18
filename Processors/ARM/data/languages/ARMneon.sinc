@@ -3049,7 +3049,8 @@ define pcodeop VectorCopyNarrow;
 
 @if defined(VFPv2) || defined(VFPv3) || defined(SIMD)
 
-:vmrs^COND VRd,fpscr	is  COND & ( ($(AMODE) & c1627=0xef1 & c0011=0xa10) | ($(TMODE_E) &  c1627=0xef1 & c0011=0xa10)) & fpscr & VRd
+:vmrs^COND VRd,fpscr	is  COND & ( ($(AMODE) & c1627=0xef1 & c0011=0xa10) | ($(TMODE_E) &  c1627=0xef1 & c0011=0xa10)) & fpscr & VRd 
+						[simd=1; globalset(inst_start,simd);]
 {
 	VRd = fpscr;
 }
@@ -3057,6 +3058,7 @@ define pcodeop VectorCopyNarrow;
 apsr:   "apsr"  is TMode=1 {}
 
 :vmrs^COND apsr,fpscr	is COND & apsr & ( ($(AMODE) & c1627=0xef1 & c1215=15 & c0011=0xa10) | ($(TMODE_E) &  thv_c1627=0xef1 & thv_c1215=15 & thv_c0011=0xa10) ) & fpscr
+						[simd=1; globalset(inst_start,simd);]
 {
 	NG = $(FPSCR_N);
 	ZR = $(FPSCR_Z);
@@ -3065,6 +3067,7 @@ apsr:   "apsr"  is TMode=1 {}
 }
 
 :vmsr^COND fpscr,VRd	is COND & ( ($(AMODE) & c1627=0xee1 & c0011=0xa10) | ($(TMODE_E) &  thv_c1627=0xee1 & thv_c0011=0xa10) ) & VRd & fpscr
+						[simd=1; globalset(inst_start,simd);]
 {
 	fpscr = VRd;
 }
