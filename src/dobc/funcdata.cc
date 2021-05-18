@@ -408,16 +408,7 @@ void        funcdata::dead_code_elimination(vector<flowblock *> &blks, uint32_t 
 
 bool        funcdata::is_code(varnode *v0, varnode *v1) 
 { 
-    if ((v0->loc.getSpace()->getType() == IPTR_CONSTANT) && (v0->loc.getOffset() == (uintb)(d->trans->getDefaultCodeSpace())) && v1->is_constant()) {
-
-        /* FIXME: hardcode 直接编码了libjiagu.so 的 bss段位置，后面要去掉，从ida中获取到的 */
-        if ((v1->get_val() >= 0x855dc) && (v1->get_val() < 0x8576c))
-            return false;
-
-        return true;
-    }
-
-    return false;
+    return (v0->loc.isConstant() && (v0->loc.getOffset() == (uintb)(d->trans->getDefaultCodeSpace())));
 }
 
 bool        funcdata::is_sp_constant(varnode *v)

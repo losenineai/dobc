@@ -1527,7 +1527,7 @@ int             pcodeop::compute(int inslot, flowblock **branch)
 
         in1 = get_in(1);
         in2 = (inrefs.size() == 3) ? get_in(2):NULL;
-        if (fd->is_code(in0, in1) && in1->is_constant()) {
+        if (fd->is_code(in0, in1) && (in1->is_constant() || in1->is_pc_constant())) {
             loadram2out(Address(d->trans->getDefaultCodeSpace(), in1->type.v));
             //printf("addr=%llx, pcode=%d, load ram, pos = %llx, val = %llx\n", get_dis_addr().getOffset(), start.getTime(), in1->type.v, out->get_val());
         }
@@ -1838,6 +1838,9 @@ int             pcodeop::compute(int inslot, flowblock **branch)
         /* 0:(register,mult_addr,4) = INT_SUB (register,sp,4) (const,0x4,4) */
         else if (fd->is_sp_constant(in0) && in1->is_constant()) {
 			compute_add_sub();
+        }
+        else if (in0->is_pc_constant() && in1->is_constant()) {
+            out->set_pc_constant(in0->get_val() - in1->get_val());
         }
         /*
         peephole:
