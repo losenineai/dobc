@@ -16,10 +16,12 @@ void pcodefunc::add_cmp_const(flowblock *b, list<pcodeop *>::iterator it, const 
     if (it == b->ops.end()) end = 1;
 
     for (i = 0; i < count_of_array(op); i++) {
-        op[i] = fd->newop(2, SeqNum(Address(d->trans->getDefaultCodeSpace(), fd->user_offset++), fd->op_uniqid++));
+        op[i] = fd->newop(2, SeqNum(Address(d->trans->getDefaultCodeSpace(), fd->user_offset), fd->op_uniqid++));
         if (end) fd->op_insert(op[i], b, b->ops.end());
         else fd->op_insert(op[i], b, it++);
     }
+    fd->user_offset++;
+
     op[0]->set_opcode(CPUI_INT_SUB);
     fd->op_set_input(op[0], fd->clone_varnode(rn), 0);
     fd->op_set_input(op[0], fd->create_constant_vn(v->get_val(), v->get_size()), 1);
@@ -37,9 +39,10 @@ void pcodefunc::add__cbranch_eq(flowblock *b, int eq)
     int i;
 
     for (i = 0; i < count_of_array(op); i++) {
-        op[i] = fd->newop(2, SeqNum(Address(d->trans->getDefaultCodeSpace(), fd->user_offset++), fd->op_uniqid++));
+        op[i] = fd->newop(2, SeqNum(Address(d->trans->getDefaultCodeSpace(), fd->user_offset), fd->op_uniqid++));
         fd->op_insert_end(op[i], b);
     }
+    fd->user_offset++;
 
     op[0]->set_opcode(CPUI_INT_EQUAL);
     fd->op_set_input(op[0], fd->new_varnode(1, d->zr_addr), 0);

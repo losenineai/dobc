@@ -980,7 +980,10 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                             break;
 
                         case CPUI_INT_SUB:
-                            _sub_imm(reg2i(poa(p1)), reg2i(pi0a(p1)), pi0(p)->get_val());
+                            if (p->output == pi0(p1))
+                                _rsb_imm(reg2i(poa(p1)), pi0(p)->get_val(), reg2i(pi1a(p1)));
+                            else
+                                _sub_imm(reg2i(poa(p1)), reg2i(pi0a(p1)), pi0(p)->get_val());
                             break;
 
                         case CPUI_INT_AND:
@@ -1076,15 +1079,12 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     */
                     if (!imm && (p1->opcode == CPUI_BOOL_NEGATE) && (p2->opcode == CPUI_CBRANCH)) {
                         write_cbranch(b, ((p->opcode == CPUI_INT_NOTEQUAL)?COND_NE:COND_EQ));
-                        advance(it, 2);
                     }
                     else if (imm && p1->opcode == CPUI_CBRANCH) {
                         write_cbranch(b, ((p->opcode == CPUI_INT_NOTEQUAL)?COND_NE:COND_EQ));
-                        advance(it, 1);
                     }
                     else if (!imm && p1->opcode == CPUI_CBRANCH) {
                         write_cbranch(b, ((p->opcode == CPUI_INT_NOTEQUAL)?COND_EQ:COND_NE));
-                        advance(it, 1);
                     }
                 }
                 else if ((pi0a(p) == acy) && pi1(p)->is_constant()) {
@@ -1094,18 +1094,23 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
 
                     write_cbranch(b, imm?COND_CS:COND_CC);
 
-                    it = advance_to_inst_end(it);
+                }
+                else if ((pi0a(p) == ang) && pi1(p)->is_hard_constant()) {
+                    imm = pi1(p)->get_val();
+                    if (p->opcode == CPUI_INT_NOTEQUAL) imm = !imm;
+                    if (p1->opcode == CPUI_BOOL_NEGATE) imm = !imm;
+                    write_cbranch(b, imm ? COND_MI:COND_PL);
                 }
                 else if (pi0a(p) == ang && pi1a(p) == aov && p1->opcode == CPUI_BOOL_NEGATE && p2->opcode == CPUI_CBRANCH) {
                     write_cbranch(b, (p->opcode == CPUI_INT_EQUAL) ? COND_LT:COND_GE);
-                    advance(it, 2);
                 }
                 else if ((p1->opcode == CPUI_BOOL_OR) && (p2->opcode == CPUI_BOOL_NEGATE) && (p3->opcode == CPUI_CBRANCH)) {
                     if ((pi0a(p) == ang) && (pi1a(p) == aov) && (pi0a(p1) == azr)) {
                         write_cbranch(b, COND_GT);
-                        advance(it, 3);
                     }
                 }
+
+                it = advance_to_inst_end(it);
             }
             break;
 
@@ -1136,10 +1141,11 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                         _cmp_reg(rn, rm);
                     }
 
-                    if ((p2->opcode == CPUI_COPY) && (poa(p2) == azr)) 
-                        advance(it, 2);
-                    else 
-                        advance(it, 1);
+                    it = advance_to_inst_end(it);
+                    break;
+
+                case CPUI_INT_SLESS:
+                    it = retrieve_orig_inst(b, it, 1);
                     break;
 
                 case CPUI_SUBPIECE:
