@@ -8,7 +8,7 @@ class codegen {
 public:
     funcdata *fd;
 
-
+    void sort_blocks(vector<flowblock *> &blks);
     codegen(funcdata *f) { fd = f;  }
     ~codegen();
 };

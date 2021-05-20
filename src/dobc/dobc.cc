@@ -2671,6 +2671,32 @@ pcodeop*    flowblock::get_cbranch_sub_from_cmp(void)
     return NULL;
 }
 
+bool        flowblock::is_stack_check_fail()
+{
+    if (out.size()) return false;
+    pcodeop *p = last_op();
+
+    if (p->is_call() && p->flags.exit)
+        return true;
+
+    return false;
+}
+
+int         flowblock::incoming_forward_branches()
+{
+    int i, count = 0;
+
+    for (i = 0; i < in.size(); i++) {
+        blockedge &e = in[i];
+        if (!(e.label & a_forward_edge)) continue;
+        if (e.point->is_mark()) continue;
+
+        count++;
+    }
+
+    return count;
+}
+
 bool        flowblock::is_iv_in_normal_loop(pcodeop *sub)
 {
     varnode *in1 = sub->get_in(1);
