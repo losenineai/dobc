@@ -127,7 +127,7 @@ int continuous_zero_bits(uint32_t x, int *lsb, int *width)
 
 static  thumb_gen *g_cg = NULL;
 
-thumb_gen::thumb_gen(funcdata *f)
+thumb_gen::thumb_gen(funcdata *f) : codegen(f)
 {
     fd = f;
     d = fd->d;
@@ -843,16 +843,20 @@ int thumb_gen::run()
     //fd->bblocks.dump_live_set(fd->find_op(SeqNum(Address(), 2170)));
     fd->dump_cfg(fd->name, "exe_pre", 1);
 
-    /* 对block进行排序 */
-    /* FIXME:这里直接用最土炮的方法来做了，实际上应该用topsort来做会好点，更具体的请参考:
+    /* 对block进行排序 
 
-    Linear Scan Register Allocation for the Java HotSpot™ Client Compiler
     */
-    blist = fd->bblocks.blist;
+    sort_blocks(blist);
 
     /* 针对每一个Block生成代码，但是不处理末尾的jmp */
     for (i = 0; i < blist.size(); i++) {
-        run_block(blist[i], i);
+        flowblock *b = blist[i];
+        run_block(b, i);
+
+        if (b->is_rel_branch()) {
+            /* FIXME:bblock的start_addr起始和first op的addr可能不是一回事，一般出现在复制的情况下 */
+            while (blist[i + 1]->first_op()->get_addr() == b->first_op()->get_addr()) i++;
+        }
     }
 
     /* 修复末尾的跳转 */
@@ -887,9 +891,6 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
     pcodeop *p, *p1, *p2, *p3, *p4, *tp;
     uint32_t x, rt, rd, rn, rm, setflags;
     int oind, imm, target_thumb ;
-
-    if (b->is_rel_branch() || b->is_rel_cbranch()) 
-        vm_error("not support rel cbranch");
 
     b->cg.data = data + ind;
 
@@ -1496,6 +1497,9 @@ inst_label:
     }
 
     if (b->out.size() == 0) return 0;
+
+    /* 相对跳转，不需要任何额外处理，直接返回 */
+    if (b->is_rel_branch()) return 0;
 
     int add_jmp = 0;
     flowblock *b1;

@@ -11,25 +11,70 @@ void codegen::sort_blocks(vector<flowblock *> &blks)
     int i, j;
     vector<flowblock *> &exitlist = fd->bblocks.exitlist;
     vector<flowblock *> q;
-    flowblock *b;
+    flowblock *b, *tmpb, *outb;
 
     blks.resize(fd->bblocks.get_size());
 
+    j = blks.size() - 1;
+    for (i = 0; i < exitlist.size(); i++) {
+        b = exitlist[i];
+        if (b->is_stack_check_fail()) {
+            tmpb = b->get_in(0);
+            blks[j--] = b;
+            b->set_mark();
+            break;
+        }
+    }
+
+    for (i = 0; i < exitlist.size(); i++) {
+        b = exitlist[i];
+        if (!b->is_stack_check_fail()) {
+            blks[j--] = b;
+            b->set_mark();
+        }
+    }
+
+    if (tmpb) {
+        blks[j--] = tmpb;
+        tmpb->set_mark();
+    }
+
     q.push_back(fd->bblocks.get_entry_point());
     i = 0;
-    while (q.empty()) {
+    while (!q.empty()) {
         b = q.front();
         q.erase(q.begin());
 
-        blks[i++] = b;
+        if (b->is_mark()) continue;
 
+        blks[i++] = b;
         b->set_mark();
 
-        for (j = 0; j < b->out.size(); j++) {
-            flowblock *outb = b->get_out(j);
+        /* 某些simd指令会生成指令内相对跳转。需要把这几个cfg，全部排列在一起 */
+        if ((b->out.size() == 1) && b->get_out(0)->is_rel_cbranch()) {
+            tmpb = b->get_out(0);
+            if (tmpb->is_mark())
+                printf("aa\n");
+            blks[i++] = tmpb;
+            tmpb->set_mark();
 
-            if (0 == outb->incoming_forward_branches())
+            outb = tmpb->get_out(0)->is_rel_branch() ? tmpb->get_out(0) : tmpb->get_out(1);
+            if (outb->is_mark())
+                printf("aa\n");
+            blks[i++] = outb;
+            outb->set_mark();
+
+            outb = tmpb->get_cbranch_xor_out(outb);
+            q.push_back(outb);
+            continue;
+        }
+
+        for (j = 0; j < b->out.size(); j++) {
+            outb = b->get_out(j);
+
+            if (0 == outb->incoming_forward_branches()) {
                 q.push_back(outb);
+            }
         }
     }
 

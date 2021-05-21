@@ -45,7 +45,7 @@ t1:4 = copy #1:4
 
 int ntz(uint32_t x);
 
-class thumb_gen  {
+class thumb_gen : public codegen  {
 public:
     funcdata *fd;
     dobc *d;

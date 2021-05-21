@@ -819,6 +819,10 @@ struct flowblock {
     bool        is_stack_check_fail();
     /* 获取输入节点中没有被标记过的数量 */
     int         incoming_forward_branches();
+    /* 当flowblock是一个分支跳转节点时，给出除了b以外的另外一个节点 */
+    flowblock*  get_cbranch_xor_out(flowblock *b) {
+        return (b == get_out(0)) ? get_out(1) : get_out(0);
+    }
 };
 
 class blockgraph {

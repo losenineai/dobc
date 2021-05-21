@@ -8,9 +8,11 @@ class codegen {
 public:
     funcdata *fd;
 
+    /* 《Linear Scan Register Allocation for the Java HotSpot™ Client Compiler》 
+    */
     void sort_blocks(vector<flowblock *> &blks);
     codegen(funcdata *f) { fd = f;  }
-    ~codegen();
+    ~codegen() {}
 };
 
 class cgtrie_node {
