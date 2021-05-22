@@ -454,10 +454,10 @@ enum SRType {
 /* A8.8.6 */
 void _add_reg(int rd, int rn, int rm, enum SRType sh_type, int shift)
 {
-    if (!shift && rn < 8 && rm < 8 && rd < 8) // t1
-        o(0x1800 | (rm << 6) | (rn << 3) | rd);
-    else if (!shift && rd == rn) // t2
+    if (!shift && rd == rn) // t2
         o(0x4400 | (rm << 3) | (rd & 7) | (rd >> 3 << 7));
+    else if (!shift && rn < 8 && rm < 8 && rd < 8) // t1
+        o(0x1800 | (rm << 6) | (rn << 3) | rd);
     else
         o(0xeb000000 | (rn << 16) | (rd << 8) | rm | (sh_type << 4) | ((shift & 3) << 6) | (shift >> 2 << 12));
 }
@@ -1024,7 +1024,10 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 }
             }
             else if (istemp(p->output)) {
-                _add_reg(reg2i(poa(p1)), reg2i(pi0a(p1)), reg2i(pi0a(p)), SRType_LSL, 0);
+                if (p1->opcode == CPUI_INT_ADD)
+                    _add_reg(reg2i(poa(p1)), reg2i(pi0a(p1)), reg2i(pi0a(p)), SRType_LSL, 0);
+                else if (p1->opcode == CPUI_INT_SUB)
+                    _sub_reg(reg2i(poa(p1)), reg2i(pi0a(p1)), reg2i(pi0a(p)), SRType_LSL, 0);
                 it = advance_to_inst_end(it);
             }
             else if (isreg(pi0(p))) {
