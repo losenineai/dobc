@@ -823,6 +823,12 @@ struct flowblock {
     flowblock*  get_cbranch_xor_out(flowblock *b) {
         return (b == get_out(0)) ? get_out(1) : get_out(0);
     }
+    /* 某些指令内部有循环，比如: vld2.8 {d18,d19},[r3] 
+    
+    拆开循环以后，内部的pcode会分成多块，这个是判断当前的cfg节点，是否是首快 */
+    bool        is_rel_header() {
+        return ((out.size() == 1) && get_out(0)->is_rel_cbranch());
+    }
 };
 
 class blockgraph {

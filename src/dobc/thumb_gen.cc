@@ -51,7 +51,6 @@
 #define imm_map(imm, l, bw, r)          (((imm >> l) & ((1 <<  bw) - 1)) << r)
 #define bit_get(imm, l, bw)             ((imm >> l) & ((1 << bw) - 1))
 
-
 #define read_thumb2(b)          ((((uint32_t)(b)[0]) << 16) | (((uint32_t)(b)[1]) << 24) | ((uint32_t)(b)[2]) | (((uint32_t)(b)[3]) << 8))
 #define write_thumb2(i, buf) do { \
             (buf)[2] = i & 255; \
@@ -63,7 +62,6 @@
             (buf)[1] = i & 255; \
             i >>= 8; \
     } while (0)
-
 
 uint32_t bitcount(uint32_t x)
 {
@@ -874,7 +872,7 @@ int thumb_gen::run()
             x =  (x & 0x03c00000)| encbranch(item->from, item->to_blk->cg.data - data, 0);
         }
         write_thumb2(x, data + item->from);
-        dump_one_inst(item->from, NULL);
+        //dump_one_inst(item->from, NULL);
     }
     printf("fix jmp list success\n");
 
@@ -887,10 +885,11 @@ void thumb_gen::save(void)
 
 int thumb_gen::run_block(flowblock *b, int b_ind)
 {
+    vector<fix_vldr_item> fix_vlist;
     list<pcodeop *>::iterator it, it1;
     pcodeop *p, *p1, *p2, *p3, *p4, *tp;
     uint32_t x, rt, rd, rn, rm, setflags;
-    int oind, imm, target_thumb ;
+    int oind, imm, target_thumb, i;
 
     b->cg.data = data + ind;
 
@@ -917,6 +916,8 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
         setflags = 0;
 
         if (dobc::singleton()->is_simd(p->get_addr())) {
+            if (p->output && p->output->is_pc_constant())
+                fix_vlist.push_back(fix_vldr_item(p, p3, ind));
             it = retrieve_orig_inst(b, it, 1);
             goto inst_label;
         }
@@ -1499,7 +1500,7 @@ inst_label:
     if (b->out.size() == 0) return 0;
 
     /* 相对跳转，不需要任何额外处理，直接返回 */
-    if (b->is_rel_branch()) return 0;
+    if (b->is_rel_header()) return 0;
 
     int add_jmp = 0;
     flowblock *b1;
@@ -1518,6 +1519,23 @@ inst_label:
     else 
         throw LowlevelError("now not support switch code gen");
 
+    /* 假如出现了需要修复的vldr指令，那么我们把所有加载的数据全部移动到，这个block末尾，
+
+    那么这个块末尾，必须得加上一个jmp，否则会把数据解析成指令
+
+
+    b1:
+
+    0002:   xxx 
+    0004:   xxxx
+    cbranch bX
+    branch bN
+    data: xxxx
+    */
+
+    if (fix_vlist.size()) 
+        add_jmp = 1;
+
     if (add_jmp) {
         //x = COND_AL << 22;
         x = 0xf0009000;
@@ -1525,9 +1543,47 @@ inst_label:
         if (!b1->cg.data)
             add_fix_list(ind, b1, COND_AL);
         o(x);
-        dump_one_inst(ind - 4, NULL);
+        // dump_one_inst(ind - 4, NULL);
     }
+
+    for (i = 0; i < fix_vlist.size(); i++)
+        fix_vldr(fix_vlist[i]);
+
     return 0;
+}
+
+/* A8.8.333 */
+void thumb_gen::fix_vldr(fix_vldr_item &vldr)
+{
+    uint1 fillbuf[16];
+    int siz = vldr.end->output->get_size(), oind = ind, offset;
+
+
+    offset = (oind - vldr.ind - 4);
+    if (offset >= 1024)
+        vm_error("vldr only support <1024 offset");
+
+    /* 
+    4字节对齐，因为vldr加载的偏移必须4字节对齐，假如偏移不够，则补齐， 因为thumb指令，
+    只有2字节对齐，和4字节对齐2种，假如没有4字节对齐，那么就是2字节，对齐，补2个字节即可 
+    */
+    if (!align4(offset)) {
+        ind += 2;
+        offset += 2;
+    }
+
+    d->loader1->loadFill(fillbuf, siz, Address(d->get_code_space(), vldr.end->get_in(1)->get_val()));
+
+    memcpy(data + ind, fillbuf, siz);
+    ind += siz;
+
+    uint32_t inst = read_thumb2(data + vldr.ind);
+
+    inst &= ~0xff;
+
+    inst |= (offset >> 2);
+
+    write_thumb2(inst, data + vldr.ind);
 }
 
 void thumb_gen::write_cbranch(flowblock *b, uint32_t cond)
@@ -1545,7 +1601,7 @@ int thumb_gen::dump_one_inst(int oind, pcodeop *p)
 {
     int i, siz;
     AssemblyRaw assem;
-    assem.disbable_html();
+    assem.disable_html();
     char buf[128];
     assem.set_buf(buf);
     siz = d->trans->printAssembly(assem, Address(d->trans->getDefaultCodeSpace(), oind));

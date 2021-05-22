@@ -37,6 +37,24 @@ struct fix_item {
     fix_item(int from1, flowblock *b1, int c) { from = from1; to_blk = b1; cond = c; }
 };
 
+/* vldr从pc加载的指令转成pcode以后，都是4条 
+
+vldr.64 d17,[pc,#0xe0]
+1. u1 = add (pc, 4)
+2. u2 = and (u1, 0xfffffffc)
+3. u3 = aadd (u2, e0);
+4. d17 = load [u3]
+
+假如是 vldr.32 ，那么指令4处的output寄存器应该是 Sn
+*/
+struct fix_vldr_item {
+    pcodeop *start;
+    pcodeop *end;
+    int ind;
+
+    fix_vldr_item(pcodeop *op1, pcodeop *op2, int ind1) { start = op1; end = op2; ind = ind1; }
+};
+
 
 /*
 ma:4 = copy r0:4
@@ -133,6 +151,7 @@ public:
     static void _sub_sp_imm(int imm);
     void _sub_imm(int rd, int rn, uint32_t imm);
     void _cmp_imm(int rn, uint32_t imm);
+    void fix_vldr(fix_vldr_item &item);
     static void _mov_imm(int rd, uint32_t imm);
 };
 

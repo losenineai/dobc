@@ -51,7 +51,7 @@ void codegen::sort_blocks(vector<flowblock *> &blks)
         b->set_mark();
 
         /* 某些simd指令会生成指令内相对跳转。需要把这几个cfg，全部排列在一起 */
-        if ((b->out.size() == 1) && b->get_out(0)->is_rel_cbranch()) {
+        if (b->is_rel_header()) {
             tmpb = b->get_out(0);
             blks[i++] = tmpb;
             tmpb->set_mark();
@@ -60,9 +60,9 @@ void codegen::sort_blocks(vector<flowblock *> &blks)
             blks[i++] = outb;
             outb->set_mark();
 
-            outb = tmpb->get_cbranch_xor_out(outb);
-            q.push_back(outb);
-            continue;
+            b = tmpb->get_cbranch_xor_out(outb);
+            blks[i++] = b;
+            b->set_mark();
         }
 
         for (j = 0; j < b->out.size(); j++) {

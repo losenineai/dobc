@@ -41,7 +41,7 @@ public:
     void set_buf(char *b) { buf = b; }
     void set_fp(FILE *f) { fp = f; }
     void set_sp(int s) { sp = s;  };
-    void disbable_html() { enable_html = 0;  }
+    void disable_html() { enable_html = 0;  }
 };
 
 #endif
