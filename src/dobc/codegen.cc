@@ -53,14 +53,10 @@ void codegen::sort_blocks(vector<flowblock *> &blks)
         /* 某些simd指令会生成指令内相对跳转。需要把这几个cfg，全部排列在一起 */
         if ((b->out.size() == 1) && b->get_out(0)->is_rel_cbranch()) {
             tmpb = b->get_out(0);
-            if (tmpb->is_mark())
-                printf("aa\n");
             blks[i++] = tmpb;
             tmpb->set_mark();
 
             outb = tmpb->get_out(0)->is_rel_branch() ? tmpb->get_out(0) : tmpb->get_out(1);
-            if (outb->is_mark())
-                printf("aa\n");
             blks[i++] = outb;
             outb->set_mark();
 

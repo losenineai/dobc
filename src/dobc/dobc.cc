@@ -1379,7 +1379,7 @@ int				pcodeop::compute_add_sub()
 
 	op = in0->def;
 
-	if (!is_trace() && op && ((op->opcode == CPUI_INT_ADD) || (op->opcode == CPUI_INT_SUB))) {
+	if (!is_trace() && !(dobc::singleton()->is_simd(get_addr())) && op && ((op->opcode == CPUI_INT_ADD) || (op->opcode == CPUI_INT_SUB))) {
 		_in0 = op->get_in(0);
 		_in1 = op->get_in(1);
 
