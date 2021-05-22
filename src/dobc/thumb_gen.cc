@@ -451,6 +451,20 @@ enum SRType {
     SRType_ROR
 };
 
+void _adr(int rd, int imm)
+{
+    int x = abs(imm), add = imm >= 0;
+
+    if (x >= 4096) return;
+
+    if (align4(imm) && (imm < 1024) && (rd < 8))
+        o(0xa000 | (rd << 8) || (imm >> 2));
+    else if (!add)
+        o(0xf2af0000 | (rd << 8) | imm_map(x, 11, 1, 26) | imm_map(x, 8, 3, 12) | imm_map(x, 0, 8, 0));
+    else
+        o(0xf20f0000 | (rd << 8) | imm_map(x, 11, 1, 26) | imm_map(x, 8, 3, 12) | imm_map(x, 0, 8, 0));
+}
+
 /* A8.8.6 */
 void _add_reg(int rd, int rn, int rm, enum SRType sh_type, int shift)
 {

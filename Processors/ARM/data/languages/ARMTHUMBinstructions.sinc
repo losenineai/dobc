@@ -1171,6 +1171,7 @@ with : ARMcondCk=1 {
 }
 
 :adr^ItCond	Rd0810,Pcrel8		is TMode=1 & ItCond & op11=0x14 & Rd0810 & Pcrel8
+                                                [is_adr = 1; globalset(inst_start,is_adr); ]
 {
   build ItCond;
   Rd0810 = &Pcrel8;
@@ -1179,18 +1180,21 @@ with : ARMcondCk=1 {
 @if defined(VERSION_6T2) || defined(VERSION_7)
 
 :adr^ItCond^".w"	Rd0811,NegPcrelImmed12Addr 		is TMode=1 & ItCond & (op11=0x1e & thc0909=1 & sop0508=5 & thc0404=0 & sop0003=0xf; thc1515=0 & Rd0811) & NegPcrelImmed12Addr
+                                                [is_adr = 1; globalset(inst_start, is_adr); ]
 {
   build ItCond;
   Rd0811 = &NegPcrelImmed12Addr;
 }
 
 :adr^ItCond^".w"	Rd0811,PcrelImmed12Addr 		is TMode=1 & ItCond & (op11=0x1e & thc0909=1 & sop0508=0 & thc0404=0 & sop0003=0xf; thc1515=0 & Rd0811) & PcrelImmed12Addr
+                                                [is_adr = 1; globalset(inst_start, is_adr); ]
 {
   build ItCond;
   Rd0811 = &PcrelImmed12Addr;
 }
 
 :adr^ItCond^".w"	Rd0811,NegPcrelImmed12Addr 		is TMode=1 & ItCond & (op11=0x1e & thc0909=1 & sop0508=5 & thc0404=0 & sop0003=0xf; thc1515=0 & Rd0811 & thc0811=15) & NegPcrelImmed12Addr
+                                                [is_adr = 1; globalset(inst_start, is_adr); ]
 {
   build ItCond;
   pc = &NegPcrelImmed12Addr;
@@ -1198,6 +1202,7 @@ with : ARMcondCk=1 {
 }
 
 :adr^ItCond^".w"	Rd0811,PcrelImmed12Addr 		is TMode=1 & ItCond & (op11=0x1e & thc0909=1 & sop0508=0 & thc0404=0 & sop0003=0xf; thc1515=0 & Rd0811 & thc0811=15) & PcrelImmed12Addr
+                                                [is_adr = 1; globalset(inst_start, is_adr); ]
 {
   build ItCond;
   pc = &PcrelImmed12Addr;

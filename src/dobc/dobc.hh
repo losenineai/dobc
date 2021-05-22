@@ -1875,6 +1875,7 @@ public:
     void        set_shelltype(char *shelltype);
 
     bool        is_simd(const Address &addr) { return context->getVariable("simd", addr);  }
+    bool        is_adr(const Address &addr) { return context->getVariable("is_adr", addr);  }
     int         func_is_thumb(int offset);
     void        run();
     void        set_func_alias(const string &func, const string &alias);

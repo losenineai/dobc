@@ -55,6 +55,14 @@ struct fix_vldr_item {
     fix_vldr_item(pcodeop *op1, pcodeop *op2, int ind1) { start = op1; end = op2; ind = ind1; }
 };
 
+struct fix_vld_item {
+    pcodeop *start;
+    pcodeop *end;
+    int ind;
+
+    fix_vld_item(pcodeop *op1, pcodeop *op2, int ind1) { start = op1; end = op2; ind = ind1; }
+};
+
 
 /*
 ma:4 = copy r0:4

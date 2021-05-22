@@ -200,6 +200,11 @@ void pcodeemit2::dump(const Address &addr, OpCode opc, VarnodeData *outvar, Varn
         }
     }
 
+    if (d->is_adr(addr)) {
+        vn->set_pc_constant(vn->get_offset());
+        vn->flags.from_pc = 1;
+    }
+
     prevp = op;
 
 #if ENABLE_DUMP_PCODE
