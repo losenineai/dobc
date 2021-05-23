@@ -35,9 +35,12 @@ public:
     FILE *fp = NULL;
     int sp = 0;
     int enable_html = 1;
+    int mnem1 = 0;
 
     virtual void dump(const Address &addr, const string &mnem, const string &body);
 
+
+    void set_mnem(int m) { mnem1 = m; }
     void set_buf(char *b) { buf = b; }
     void set_fp(FILE *f) { fp = f; }
     void set_sp(int s) { sp = s;  };

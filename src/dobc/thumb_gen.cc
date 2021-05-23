@@ -903,6 +903,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
     list<pcodeop *>::iterator it, it1;
     pcodeop *p, *p1, *p2, *p3, *p4, *tp;
     uint32_t x, rt, rd, rn, rm, setflags;
+    pc_rel_table pc_rel_tab;
     int oind, imm, target_thumb, i;
 
     b->cg.data = data + ind;
@@ -1035,6 +1036,12 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                         advance(it, 1);
                     }
                     vmov_imm(size, d->vreg2i(poa(p)), pi0(p)->get_val());
+                }
+            }
+            else if (pi0(p)->is_hard_pc_constant()) {
+                if (isreg(p->output)) {
+                    _adr(reg2i(poa(p)), 0);
+                    pc_rel_tab[pi0(p)->get_val()] = p;
                 }
             }
             else if (istemp(p->output)) {

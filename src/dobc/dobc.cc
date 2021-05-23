@@ -300,8 +300,24 @@ struct pltentry {
     { "vmp360_op3",         0x66ac, 4, 0, 0, 1 },
     { "vmp360_op4",         0x61c0, 4, 0, 0, 1 },
     { "vmp360_op5",         0x6204, 4, 0, 0, 1 },
-    { "vmp360_cbranch",        0x68cc, 4, 0, 0, 1 },
+    { "vmp360_cbranch",     0x68cc, 4, 0, 0, 1 },
 };
+
+void        dobc::add_inst_mnem(const Address &addr, const string &mnem)
+{
+    mnemtab[addr.getOffset()] = mnem;
+}
+
+string&     dobc::get_inst_mnem(intb addr)
+{
+    static string empty = "";
+
+    auto it = mnemtab.find(addr);
+    if (it == mnemtab.end())
+        return empty;
+
+    return it->second;
+}
 
 funcdata *dobc::add_func(const Address &a)
 {
@@ -4917,6 +4933,9 @@ bool        funcdata::process_instruction(const Address &curaddr, bool &startbas
     if (flags.dump_inst)
         d->trans->printAssembly(assem, curaddr);
 
+    assem.set_mnem(1);
+    d->trans->printAssembly(assem, curaddr);
+    
     step = d->trans->oneInstruction(emitter, curaddr);
 
     VisitStat &stat(visited[curaddr]);

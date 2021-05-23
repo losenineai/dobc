@@ -29,6 +29,26 @@ typedef list<pcodeop *>::iterator pit;
 #define CY          18
 #define OV          19
 
+/* A8.8 */
+typedef enum thumb_inst_type {
+    THUMB_ADR = 12,
+
+    THUMB_VLD1_1 = 320,
+    THUMB_VLD1_2,
+    THUMB_VLD1_3,
+    THUMB_VLD2_1,
+    THUMB_VLD2_2,
+    THUMB_VLD2_3,
+    THUMB_VLD3_1,
+    THUMB_VLD3_2,
+    THUMB_VLD3_3,
+    THUMB_VLD4_1,
+    THUMB_VLD4_2,
+    THUMB_VLD4_3,
+    THUMB_VLDM,
+    THUMB_VLDR,
+} thumb_inst_type_t;
+
 struct fix_item {
     int from;
     int cond;

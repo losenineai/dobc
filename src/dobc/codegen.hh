@@ -4,6 +4,8 @@
 
 #include "dobc.hh"
 
+typedef map<intb, pcodeop *>         pc_rel_table;
+
 class codegen {
 public:
     funcdata *fd;

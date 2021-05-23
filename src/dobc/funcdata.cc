@@ -12,6 +12,18 @@
 #define print_level		4
 
 void AssemblyRaw::dump(const Address &addr, const string &mnem, const string &body) {
+    if (mnem1) {
+        dobc::singleton()->add_inst_mnem(addr, mnem);
+        return;
+    }
+
+    /* 
+    1.假如有外部传入的buf
+    1.1 假如有开启HTML，那么用html的格式，把内容格式化输出到buf上
+    1.2 假如没有开启HTML，就用普通格式输出到BUF
+    2. 假如有传入fp指针，则输出到fp上
+    3. 假如都没有，输出到标注输出上(stdout)
+    */
     if (buf) {
         if (enable_html) {
             int simd = dobc::singleton()->is_simd(addr);
@@ -25,14 +37,12 @@ void AssemblyRaw::dump(const Address &addr, const string &mnem, const string &bo
         }
         else
             sprintf(buf, "0x%04x: %s %s", (int)addr.getOffset(), mnem.c_str(), body.c_str());
-        //sprintf(buf, "0x%08x:%10s %s", (int)addr.getOffset(), mnem.c_str(), body.c_str());
     }
-    else {
-        if (fp)
-            fprintf(fp, "0x%04x: %s %s\n", (int)addr.getOffset(), mnem.c_str(), body.c_str());
-        else
-            fprintf(stdout, "0x%04x: %s %s\n", (int)addr.getOffset(), mnem.c_str(), body.c_str());
+    else if (fp) {
+        fprintf(fp, "0x%04x: %s %s\n", (int)addr.getOffset(), mnem.c_str(), body.c_str());
     }
+    else
+        fprintf(stdout, "0x%04x: %s %s\n", (int)addr.getOffset(), mnem.c_str(), body.c_str());
 }
 
 int  funcdata::loop_dfa_connect(uint32_t flags)

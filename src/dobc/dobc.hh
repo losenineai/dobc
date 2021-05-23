@@ -295,6 +295,7 @@ public:
     bool            is_hard_constant(void) const { return (type.height == a_constant) && get_addr().isConstant(); }
     bool            in_constant_space() { return get_addr().isConstant(); }
     bool            is_pc_constant() { return type.height == a_pc_constant;  }
+    bool            is_hard_pc_constant() { return flags.from_pc; }
 #define MASK_SIZE(m,s)          (m & (((uintb)1 << (s * 8)) - 1))
     void            set_val(intb v) { type.height = a_constant;  type.v = v; }
     /* set_val1 会对传入的值，根据自身的size做裁剪，
@@ -1091,11 +1092,6 @@ public:
     pcodeop_tree     optree;
     funcproto       funcp;
 
-    struct {
-        funcdata *next = NULL;
-        funcdata *prev = NULL;
-    } node;
-
     list<op_edge *>    edgelist;
 
     /* jmp table */
@@ -1857,6 +1853,13 @@ public:
     AddrSpace *ram_spc = NULL;
     AddrSpace *reg_spc = NULL;
 
+    /* 记录全部指令的助记符(mnemonic)，用来确认指令类型用的 
+    
+    WARN & TODO:在做了去壳和重新生成exe写入以后，具体地址的指令类型发生了变化，这个时候要
+                跟新这个表和funcdata，不过现在没做。
+    */
+    map<intb, string> mnemtab;
+
     int wordsize = 4;
     vector<int>     insts;
 
@@ -1871,11 +1874,16 @@ public:
     void init_plt(void);
     void build_instructions();
 
+    void        add_inst_mnem(const Address &addr, const string &mnem);
+    string&     get_inst_mnem(intb addr);
     funcdata*   add_func(const Address &addr);
     void        set_shelltype(char *shelltype);
 
     bool        is_simd(const Address &addr) { return context->getVariable("simd", addr);  }
-    bool        is_adr(const Address &addr) { return context->getVariable("is_adr", addr);  }
+    bool        is_adr(const Address &addr) { 
+        string &m = get_inst_mnem(addr.getOffset());
+        return (strncmp(m.c_str(), "adr", strlen("adr") == 0));
+    }
     int         func_is_thumb(int offset);
     void        run();
     void        set_func_alias(const string &func, const string &alias);
