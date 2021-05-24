@@ -1639,7 +1639,7 @@ void thumb_gen::fix_vld1(fix_vld1_item &item, pc_rel_table &tab)
     if (adr == NULL)
         vm_error("pc_rel_offset = %llx, not found correspond adr instruction", item.loadaddr);
 
-    offset = oind - adr->ind;
+    offset = oind - ((adr->ind + 4) & ~3);
     if (offset >= 4096)
         vm_error("vld write offset[%d] exceed 4095", offset);
 
