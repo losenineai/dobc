@@ -460,9 +460,9 @@ void _adr(int rd, int imm)
     if (align4(imm) && (imm < 1024) && (rd < 8))
         o(0xa000 | (rd << 8) || (imm >> 2));
     else if (!add)
-        o(0xf2af0000 | (rd << 8) | imm_map(x, 11, 1, 26) | imm_map(x, 8, 3, 12) | imm_map(x, 0, 8, 0));
+        o(0xf2af0000 | (rd << 8) | stuff_constw(0, x, 12));
     else
-        o(0xf20f0000 | (rd << 8) | imm_map(x, 11, 1, 26) | imm_map(x, 8, 3, 12) | imm_map(x, 0, 8, 0));
+        o(0xf20f0000 | (rd << 8) | stuff_constw(0, x, 12));
 }
 
 /* A8.8.6 */
@@ -899,7 +899,8 @@ void thumb_gen::save(void)
 
 int thumb_gen::run_block(flowblock *b, int b_ind)
 {
-    vector<fix_vldr_item> fix_vlist;
+    vector<fix_vldr_item> fix_vldr_list;
+    vector<fix_vld1_item> fix_vld1_list;
     list<pcodeop *>::iterator it, it1;
     pcodeop *p, *p1, *p2, *p3, *p4, *tp;
     uint32_t x, rt, rd, rn, rm, setflags;
@@ -927,12 +928,23 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
         if (it1 != b->ops.end())
             p3 = *it1++;
 
-        oind = ind;
+        p->ind = oind = ind;
         setflags = 0;
 
         if (dobc::singleton()->is_simd(p->get_addr())) {
-            if (p->output && p->output->is_pc_constant())
-                fix_vlist.push_back(fix_vldr_item(p, p3, ind));
+            if (p->output && p->output->is_pc_constant()) {
+                intb loadaddr;
+                int loadsize;
+
+                get_load_addr_size(p, loadaddr, loadsize);
+                if (d->is_vldr(p->get_addr()))
+                    fix_vldr_list.push_back(fix_vldr_item(p, p3, ind));
+                else if (d->is_vld(p->get_addr())) {
+                    fix_vld1_list.push_back(fix_vld1_item(loadaddr, loadsize));
+                }
+                else
+                    vm_error("meet not support pc-rel-offset simd instruction");
+            }
             it = retrieve_orig_inst(b, it, 1);
             goto inst_label;
         }
@@ -1040,7 +1052,8 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
             }
             else if (pi0(p)->is_hard_pc_constant()) {
                 if (isreg(p->output)) {
-                    _adr(reg2i(poa(p)), 0);
+                    /*  _adr一般都是占位符号，不用节省空间，直接用4字节充满 */
+                    _adr(reg2i(poa(p)), 4095);
                     pc_rel_tab[pi0(p)->get_val()] = p;
                 }
             }
@@ -1557,7 +1570,7 @@ inst_label:
     data: xxxx
     */
 
-    if (fix_vlist.size()) 
+    if (fix_vldr_list.size() || fix_vld1_list.size())
         add_jmp = 1;
 
     if (add_jmp) {
@@ -1570,8 +1583,11 @@ inst_label:
         // dump_one_inst(ind - 4, NULL);
     }
 
-    for (i = 0; i < fix_vlist.size(); i++)
-        fix_vldr(fix_vlist[i]);
+    for (i = 0; i < fix_vldr_list.size(); i++)
+        fix_vldr(fix_vldr_list[i]);
+
+    for (i = 0; i < fix_vld1_list.size(); i++)
+        fix_vld1(fix_vld1_list[i], pc_rel_tab);
 
     return 0;
 }
@@ -1581,7 +1597,6 @@ void thumb_gen::fix_vldr(fix_vldr_item &vldr)
 {
     uint1 fillbuf[16];
     int siz = vldr.end->output->get_size(), oind = ind, offset;
-
 
     offset = (oind - vldr.ind - 4);
     if (offset >= 1024)
@@ -1609,6 +1624,66 @@ void thumb_gen::fix_vldr(fix_vldr_item &vldr)
 
     write_thumb2(inst, data + vldr.ind);
 }
+
+void thumb_gen::fix_vld1(fix_vld1_item &item, pc_rel_table &tab)
+{
+    uint1 fillbuf[32];
+    int oind = ind, offset;
+
+    d->loader1->loadFill(fillbuf, item.loadsiz, Address(d->get_code_space(), item.loadaddr));
+
+    memcpy(data + ind, fillbuf, item.loadsiz);
+    ind += item.loadsiz;
+
+    pcodeop *adr = tab[item.loadaddr];
+    if (adr == NULL)
+        vm_error("pc_rel_offset = %llx, not found correspond adr instruction", item.loadaddr);
+
+    offset = oind - adr->ind;
+    if (offset >= 4096)
+        vm_error("vld write offset[%d] exceed 4095", offset);
+
+    /* A8.8.12 T2 */
+    uint32_t inst = read_thumb2(data + adr->ind);
+
+    inst &= ~0x040070ff;
+    inst |= stuff_constw(0, offset, 12);
+
+    write_thumb2(inst, data + adr->ind);
+}
+
+int thumb_gen::get_load_addr_size(pcodeop *p, intb &loadaddr, int &loadsiz)
+{
+    pcodeop *p1;
+    const Address &addr = p->get_addr();
+    list<pcodeop *>::iterator it = p->basiciter;
+    flowblock *b = p->parent;
+
+    loadaddr = 0;
+    loadsiz = 0;
+
+    for (; it != b->ops.end(); it++) {
+        p1 = *it;
+        if (p1->get_addr() != addr)
+            break;
+
+        if (p1->opcode != CPUI_LOAD) continue;
+        if (!p1->get_in(1)->is_pc_constant()) continue;
+
+        if (!loadaddr) {
+            loadaddr = pi1(p1)->get_val();
+            loadsiz = p1->output->get_size();
+        }
+        else if ((loadaddr + loadsiz) == pi1(p1)->get_val()) {
+            loadsiz += p1->output->get_size();
+        }
+        else
+            vm_error("single instruction load address not continuous");
+    }
+
+    return 0;
+}
+
 
 void thumb_gen::write_cbranch(flowblock *b, uint32_t cond)
 {

@@ -465,6 +465,8 @@ public:
     bitset<32>      live_out;
     bitset<32>      live_gen;
     bitset<32>      live_kill;
+    /* 数据写入obj时的文件位置 */
+    int             ind = 0;
 
     /* block 里的 */
     list<pcodeop *>::iterator basiciter;
@@ -1879,11 +1881,22 @@ public:
     funcdata*   add_func(const Address &addr);
     void        set_shelltype(char *shelltype);
 
+#define strprefix(m1,c)     (strncmp(m1.c_str(), c, strlen(c)) == 0)
     bool        is_simd(const Address &addr) { return context->getVariable("simd", addr);  }
     bool        is_adr(const Address &addr) { 
         string &m = get_inst_mnem(addr.getOffset());
-        return (strncmp(m.c_str(), "adr", strlen("adr") == 0));
+        return strprefix(m, "adr");
     }
+    /* 使用strprefix来判断指令的前缀时 */
+    bool        is_vld(const Address &addr) {
+        string &m = get_inst_mnem(addr.getOffset());
+        return strprefix(m, "vld") && (m[3] >= '1' && m[3] <= '3');
+    }
+    bool        is_vldr(const Address &addr) { 
+        string &m = get_inst_mnem(addr.getOffset());
+        return strprefix(m, "vldr");
+    }
+
     int         func_is_thumb(int offset);
     void        run();
     void        set_func_alias(const string &func, const string &alias);

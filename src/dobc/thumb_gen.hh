@@ -57,6 +57,10 @@ struct fix_item {
     fix_item(int from1, flowblock *b1, int c) { from = from1; to_blk = b1; cond = c; }
 };
 
+class fix_inst {
+public:
+};
+
 /* vldr从pc加载的指令转成pcode以后，都是4条 
 
 vldr.64 d17,[pc,#0xe0]
@@ -75,12 +79,14 @@ struct fix_vldr_item {
     fix_vldr_item(pcodeop *op1, pcodeop *op2, int ind1) { start = op1; end = op2; ind = ind1; }
 };
 
-struct fix_vld_item {
-    pcodeop *start;
-    pcodeop *end;
-    int ind;
+struct fix_vld1_item {
+    intb loadaddr;
+    int loadsiz;
 
-    fix_vld_item(pcodeop *op1, pcodeop *op2, int ind1) { start = op1; end = op2; ind = ind1; }
+    fix_vld1_item(intb loadaddr0, int loadsiz0) { 
+        loadaddr = loadaddr0;
+        loadsiz = loadsiz0;
+    }
 };
 
 
@@ -180,6 +186,9 @@ public:
     void _sub_imm(int rd, int rn, uint32_t imm);
     void _cmp_imm(int rn, uint32_t imm);
     void fix_vldr(fix_vldr_item &item);
+    void fix_vld1(fix_vld1_item &item, pc_rel_table &tab);
+    /* 收集p指向的instruction中所访问的ldr位置和大小，后面坐重定位用  */
+    int get_load_addr_size(pcodeop *p, intb &addr, int &size);
     static void _mov_imm(int rd, uint32_t imm);
 };
 
