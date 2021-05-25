@@ -1388,6 +1388,19 @@ bool            pcodeop::all_inrefs_is_constant(void)
     return true;
 }
 
+bool            pcodeop::all_inrefs_is_adj(void)
+{
+    int i;
+
+    for (i = 0; i < inrefs.size(); i++) {
+        pcodeop *p = inrefs[i]->def;
+        if (!p) return false;
+        if (parent->is_adjacent(p->parent)) continue;
+        return false;
+    }
+    return true;
+}
+
 int				pcodeop::compute_add_sub()
 {
 	varnode *in0, *in1, *_in0, *_in1, *out;
@@ -1844,6 +1857,7 @@ int             pcodeop::compute(int inslot, flowblock **branch)
 
     case CPUI_INT_SUB:
         in1 = get_in(1);
+        op = in0->def;
 
         if (in0->is_constant() && in1->is_constant()) {
             if (in0->size == 1)
@@ -1891,8 +1905,16 @@ int             pcodeop::compute(int inslot, flowblock **branch)
             intb imm = (op->get_in(0)->get_val() == op1->get_in(1)->get_val()) ? op->get_in(1)->get_val() : op->get_in(0)->get_val();
             out->set_sub_val(in0->size, imm, in1->get_val());
         }
-        else
+        else {
+            /* 在同一个block内 */
+            if (op && (op->parent == parent) && (op->opcode == CPUI_MULTIEQUAL) && (op->inrefs.size() == 2) && op->all_inrefs_is_constant() 
+                && op->all_inrefs_is_adj()
+                && in1->is_constant()) {
+                fd->propchains.push_back(&op->parent->in[0]);
+            }
+
             out->type.height = a_top;
+        }
         break;
 
     case CPUI_INT_SBORROW:

@@ -1620,7 +1620,8 @@ void thumb_gen::fix_vldr(fix_vldr_item &vldr)
 
     inst &= ~0xff;
 
-    inst |= (offset >> 2);
+    /* 全部转成正向的pc相对偏移 */
+    inst |= (0x00800000 | (offset >> 2));
 
     write_thumb2(inst, data + vldr.ind);
 }

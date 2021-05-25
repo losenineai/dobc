@@ -1865,6 +1865,7 @@ void    funcdata::heritage_clear()
     domdepth.clear();
     merge.clear();
     alias_clear();
+    propchains.clear();
 
     maxdepth = -1;
     pass = 0;

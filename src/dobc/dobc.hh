@@ -557,6 +557,7 @@ public:
 
     void            on_MULTIEQUAL();
     bool            all_inrefs_is_constant(void);
+    bool            all_inrefs_is_adj(void);
     void            loadram2out(Address &addr);
 };
 
@@ -1112,6 +1113,8 @@ public:
     list<pcodeop *>     philist;
     /* 安全的别名信息，可以传播用 */
     list<pcodeop *>     safe_aliaslist;
+
+    vector<blockedge *>   propchains;
 
     /* 函数出口活跃的变量 */
     pcodeop_def_set topname;
