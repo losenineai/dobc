@@ -571,7 +571,7 @@ void thumb_gen::_cmp_imm(int rn, uint32_t imm)
         o(0xf1b00f00 | x | (rn << 16));
     else {
         rm = regalloc(curp);
-        _mov_imm(rm, imm);
+        _mov_imm(rm, imm, 0);
         _cmp_reg(rn, rm);
     }
 }
@@ -762,11 +762,14 @@ void _strb_imm(int rt, int rn, int imm, int w)
 
 }
 
-void thumb_gen::_mov_imm(int rd, uint32_t v)
+void thumb_gen::_mov_imm(int rd, uint32_t v, int setflags)
 {
     /* A8.8.102 */
-    if (in_imm8(v) && in_imm3(rd)) 
+    if (setflags && in_imm8(v) && in_imm3(rd)) 
         o(0x2000 | (rd << 8) | v); // T1
+    else if (!setflags && (v < 65536)) { // T3
+        o(stuff_constw(0xf2400000 | (rd << 8), v, 16));
+    }
     else {
         uint32_t x = stuff_const(0xf04f0000 | (rd << 8), v); // T2
         if (x) {
@@ -974,17 +977,17 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     advance(it, 1);
                 }
                 else if (pi0(p)->is_constant()) {
-                    _mov_imm(LR, pi0(p)->get_val());
+                    _mov_imm(LR, pi0(p)->get_val(), 0);
                 }
             }
             else if (pi0(p)->is_hard_constant()) {
                 if (isreg(p->output))
-                    _mov_imm(reg2i(poa(p)), pi0(p)->get_val());
+                    _mov_imm(reg2i(poa(p)), pi0(p)->get_val(), 0);
                 else if (istemp(p->output)){
                     if (isreg(p1->output)) {
                         switch (p1->opcode) {
                         case CPUI_COPY:
-                            _mov_imm(reg2i(poa(p1)), pi0(p)->get_val());
+                            _mov_imm(reg2i(poa(p1)), pi0(p)->get_val(), 0);
                             break;
 
                         case CPUI_LOAD:
@@ -994,7 +997,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                             /*
                             pc - (ind) - 4
                             */
-                            _mov_imm(rn, imm - (ind + 4 * (stuff_const(0, imm) ? 1:2)) - 4);
+                            _mov_imm(rn, imm - (ind + 4 * (stuff_const(0, imm) ? 1:2)) - 4, 0);
 
                             _add_reg(rn, rn, PC, SRType_LSL, 0);
                             _ldr_imm(rn, rn, 0, 0);
@@ -1085,7 +1088,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
         case CPUI_LOAD:
             if (isreg(p->output) && pi1(p)->is_constant()) {
                 rd = reg2i(poa(p));
-                _mov_imm(rd, pi1(p)->get_val());
+                _mov_imm(rd, pi1(p)->get_val(), 0);
                 o(0xf8d00000 | (rd << 12) | (rd << 16) | 0);
             }
             break;
@@ -1244,7 +1247,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                             if (pi2(p2)->size == 1) {
                                 if (!d->is_greg(pi0a(p1))) {
                                     rt = regalloc(p1);
-                                    _mov_imm(rt, pi0(p1)->get_val());
+                                    _mov_imm(rt, pi0(p1)->get_val(), 0);
                                 }
                                 else
                                     rt = d->reg2i(pi0a(p1));
@@ -1316,7 +1319,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     if (pi0(p)->flags.from_pc && isreg(p1->output)) {
                         rd = reg2i(poa(p1));
                         imm = p1->output->get_val();
-                        _mov_imm(rd, imm - (ind + 4 * (stuff_const(0, imm) ? 1:2)) - 4);
+                        _mov_imm(rd, imm - (ind + 4 * (stuff_const(0, imm) ? 1:2)) - 4, 0);
                         _add_reg(rd, rd, PC, SRType_LSL, 0);
                         advance(it, 1);
                     }
