@@ -407,7 +407,9 @@ void dobc::plugin_ollvm()
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
 #else
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
-    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x366f5));
+    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x366f5));
+
+    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15f09));
 #endif
     fd_main->ollvm_deshell();
     loader->saveFile("test.so");
@@ -2738,7 +2740,7 @@ bool        flowblock::is_iv_in_normal_loop(pcodeop *sub)
 {
     varnode *in1 = sub->get_in(1);
 
-    if (in1->is_constant() && in1->get_val() <= 1024)
+    if (in1->is_constant() && (in1->get_val() >= 0) && in1->get_val() <= 1024)
         return true;
 
     return false;
