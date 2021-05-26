@@ -1056,6 +1056,9 @@ int         funcdata::ollvm_detect_propchains2(flowblock *&from, blockedge *&out
             goto success_label;
     }
 
+    if (0 == ollvm_detect_propchain3(from, outedge))
+        goto success_label;
+
     return -1;
 
 success_label:
@@ -1175,6 +1178,31 @@ int         funcdata::ollvm_detect_propchain2(ollvmhead *oh, flowblock *&from, b
                 return 1;
             }
         }
+    }
+
+    return -1;
+}
+
+int         funcdata::ollvm_detect_propchain3(flowblock *&from, blockedge *&outedge)
+{
+    int i;
+    pcodeop *sub, *op;
+
+    for (i = 0; i < bblocks.blist.size(); i++) {
+        flowblock *b = bblocks.get_block(i);
+        if (b->in.size() != 2) continue;
+        if (!b->is_cbranch()) continue;
+
+        sub = b->get_cbranch_sub_from_cmp();
+        if (!sub) continue;
+        
+        op = sub->get_in(0)->def;
+
+        if (!op || (op->parent != b) || (op->opcode != CPUI_MULTIEQUAL) || !op->all_inrefs_is_constant() || !op->all_inrefs_is_adj()) continue;
+
+        from = b->get_in(0);
+        outedge = &from->out[from->get_out_index(b)];
+        return 0;
     }
 
     return -1;

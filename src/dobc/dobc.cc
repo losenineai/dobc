@@ -1906,13 +1906,6 @@ int             pcodeop::compute(int inslot, flowblock **branch)
             out->set_sub_val(in0->size, imm, in1->get_val());
         }
         else {
-            /* 在同一个block内 */
-            if (op && (op->parent == parent) && (op->opcode == CPUI_MULTIEQUAL) && (op->inrefs.size() == 2) && op->all_inrefs_is_constant() 
-                && op->all_inrefs_is_adj()
-                && in1->is_constant()) {
-                fd->propchains.push_back(&op->parent->in[0]);
-            }
-
             out->type.height = a_top;
         }
         break;
