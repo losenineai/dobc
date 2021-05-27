@@ -189,6 +189,7 @@ public:
     void fix_vld1(fix_vld1_item &item, pc_rel_table &tab);
     /* 收集p指向的instruction中所访问的ldr位置和大小，后面坐重定位用  */
     int get_load_addr_size(pcodeop *p, intb &addr, int &size);
+    int follow_by_set_cpsr(pcodeop *p1);
     static void _mov_imm(int rd, uint32_t imm, int setflags);
 };
 

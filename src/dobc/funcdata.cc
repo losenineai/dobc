@@ -1196,7 +1196,9 @@ int         funcdata::ollvm_detect_propchain3(flowblock *&from, blockedge *&oute
         if (!b->is_cbranch()) continue;
 
         sub = b->get_cbranch_sub_from_cmp();
-        if (!sub) continue;
+        if (!sub) {
+            continue;
+        }
         
         op = sub->get_in(0)->def;
 
