@@ -1080,7 +1080,7 @@ int         funcdata::ollvm_detect_propchain2(ollvmhead *oh, flowblock *&from, b
 {
     if (oh->h->flags.f_dead) return -1;
 
-    flowblock *h = oh->h, *pre, *cur, *h1;
+    flowblock *h = oh->h, *pre, *pre1, *cur, *cur1, *h1;
     int i, j, top;
     pcodeop *p = h->find_pcode_def(oh->st1), *p1;
     varnode *vn;
@@ -1135,12 +1135,12 @@ int         funcdata::ollvm_detect_propchain2(ollvmhead *oh, flowblock *&from, b
             if ((h->is_adjacent(h1)) || ((h1->out.size() == 1) && h->is_adjacent(h1->get_out(0)))) {
                 for (j = 0; j < h1->in.size(); j++) {
                     vn = p1->get_in(j);
-                    pre = p1->parent->get_in(j);
-                    cur = p1->parent;
+                    pre1 = p1->parent->get_in(j);
+                    cur1 = p1->parent;
 
                     if (vn->is_constant()) {
-                        from = pre;
-                        e = &pre->out[pre->get_out_index(cur)];
+                        from = pre1;
+                        e = &pre1->out[pre1->get_out_index(cur1)];
                         /* 假如已经被标记过，不可计算了 */
                         if (e->is(a_unpropchain)) continue;
                         outedge = e;
@@ -1160,6 +1160,7 @@ int         funcdata::ollvm_detect_propchain2(ollvmhead *oh, flowblock *&from, b
 
             if (p1->opcode == CPUI_COPY) {
                 if (ollvm_combine_lcts(p1)) {
+                    printf("ollvm detect propchains do lcts\n");
                     heritage_clear();
                     heritage();
                     dump_cfg(name, "lcts", 1);
@@ -1172,6 +1173,7 @@ int         funcdata::ollvm_detect_propchain2(ollvmhead *oh, flowblock *&from, b
 
             if (defs.size() > 1) {
                 cond_copy_expand(p1, pre, pre->get_out_index(cur));
+                printf("ollvm detect propchains do copy_expand\n");
                 heritage_clear();
                 heritage();
                 dump_cfg(name, "cond_copy_expand", 1);
