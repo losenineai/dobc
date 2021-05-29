@@ -1848,7 +1848,7 @@ void thumb_gen::preprocess()
     fd->bblocks.compute_local_live_sets_p();
     fd->bblocks.compute_global_live_sets_p();
 
-    mov_const_to_end();
+    collect_const();
 }
 
 int thumb_gen::regalloc(pcodeop *p)
@@ -2035,7 +2035,7 @@ int const_item_cmp(const_item *l, const_item *r)
     return r->count < l->count;
 }
 
-void thumb_gen::mov_const_to_end()
+void thumb_gen::collect_const()
 {
     int i, pos;
     uint32_t imm;
@@ -2073,7 +2073,3 @@ void thumb_gen::mov_const_to_end()
     }
 }
 
-int thumb_gen::const_write_end(uint32_t imm)
-{
-    return 0;
-}

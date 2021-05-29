@@ -186,24 +186,13 @@ public:
     void dump();
     int dump_one_inst(int index, pcodeop *p);
     void write_cbranch(flowblock *b, uint32_t cond);
-    int const_write_end(uint32_t imm);
     int regalloc(pcodeop *p);
 
     static uint32_t thumb_gen::stuff_const(uint32_t op, uint32_t c);
     static void stuff_const_harder(uint32_t op, uint32_t v);
     static int _add_sp_imm(int rd, int rn, uint32_t imm);
     static void _sub_sp_imm(int imm);
-    /* 
-    有些程序不怎么大小于4k，但是访问了太多的常数，我们会尝试收集这些常数，并
-    把它写到末尾，然后挂到全局map中
-
-    当我们碰到如下的pcode:
-
-    mov rd, imm
-
-    常看这个数是否有被移动到末尾，有的话，计算偏移是否足够，是的话，改成ldr
-    */
-    void mov_const_to_end();
+    void collect_const();
     void _sub_imm(int rd, int rn, uint32_t imm);
     void _cmp_imm(int rn, uint32_t imm);
     void fix_vldr(fix_vldr_item &item);
