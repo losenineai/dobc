@@ -298,6 +298,8 @@ public:
     bool            is_hard_pc_constant() { return flags.from_pc; }
 #define MASK_SIZE(m,s)          (m & (((uintb)1 << (s * 8)) - 1))
     void            set_val(intb v) { type.height = a_constant;  type.v = v; }
+    bool            in_ram();
+    intb            get_ram_val() { return get_addr().getOffset();  }
     /* set_val1 会对传入的值，根据自身的size做裁剪，
     这个从语义上比set_val更加标准，也更加的正确，但是由于工程实现的原因，暂时还有以下BUG:
 

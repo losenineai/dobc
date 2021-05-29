@@ -410,6 +410,7 @@ void dobc::plugin_ollvm()
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x366f5));
 
     funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15f09));
+    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x132ed));
 #endif
     fd_main->ollvm_deshell();
     loader->saveFile("test.so");
@@ -687,6 +688,11 @@ varnode::varnode(int s, const Address &m)
 
 varnode::~varnode()
 {
+}
+
+bool            varnode::in_ram() 
+{ 
+    return get_addr().getSpace() == dobc::singleton()->ram_spc; 
 }
 
 void            varnode::set_def(pcodeop *op)
@@ -2195,12 +2201,12 @@ void            pcodeop::to_constant1(void)
     1. 当有output节点，且output节点为常量时，运行进行常量持久化 
     2. opcode不能为copy，因为常量持久化就是把常量节点，改成copy操作 
     3. output节点为temp的不允许进行常量化，这个会破坏原始的inst结构，导致无法识别出原先的inst，在codegen时加大了难度
-    4. opcode可以为copy，除非是操作ramspace的节点，这个时候它实际上上有一个load的行为在里面
-    5. opcode不能为store，因为store有副作用，它的use也不是特别好计算 
+    4. opcode不能为store，因为store有副作用，它的use也不是特别好计算 
     */
     if (output && output->is_constant() 
         && !dobc::singleton()->is_temp(output->get_addr()) 
-        && (opcode != CPUI_COPY || get_in(0)->get_addr().getSpace() == fd->d->ram_spc) && (opcode != CPUI_STORE)) {
+        && (opcode != CPUI_COPY) 
+        && (opcode != CPUI_STORE)) {
         /* phi节点转成 copy指令时，需要记录下这个copy节点来自于phi节点，在删除phi节点时，假如有需要可以删除这个copy  */
         if (opcode == CPUI_MULTIEQUAL) flags.copy_from_phi = 1;
         while (num_input() > 0) 
