@@ -1081,8 +1081,8 @@ int         funcdata::ollvm_detect_propchain2(ollvmhead *oh, flowblock *&from, b
     if (oh->h->flags.f_dead) return -1;
 
     flowblock *h = oh->h, *pre, *pre1, *cur, *cur1, *h1;
-    int i, j, top;
-    pcodeop *p = h->find_pcode_def(oh->st1), *p1;
+    int i, j, k, top;
+    pcodeop *p = h->find_pcode_def(oh->st1), *p1, *p2;
     varnode *vn;
     blockedge *e;
     vector<blockedge *> invec;
@@ -1146,6 +1146,22 @@ int         funcdata::ollvm_detect_propchain2(ollvmhead *oh, flowblock *&from, b
                         outedge = e;
                         return 0;
                     }
+                    else if ((p2 = vn->def) && (vn->def->opcode == CPUI_MULTIEQUAL)) {
+                        for (k = 0; k < p2->inrefs.size(); k++) {
+                            vn = p2->get_in(k);
+                            pre1 = p2->parent->get_in(k);
+                            cur1 = p2->parent;
+
+                            if (vn->is_constant()) {
+                                from = pre1;
+                                e = &pre1->out[pre1->get_out_index(cur1)];
+                                /* 假如已经被标记过，不可计算了 */
+                                if (e->is(a_unpropchain)) continue;
+                                outedge = e;
+                                return 0;
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1196,9 +1212,7 @@ int         funcdata::ollvm_detect_propchain3(flowblock *&from, blockedge *&oute
         if (!b->is_cbranch()) continue;
 
         sub = b->get_cbranch_sub_from_cmp();
-        if (!sub) {
-            continue;
-        }
+        if (!sub) continue;
         
         op = sub->get_in(0)->def;
 
