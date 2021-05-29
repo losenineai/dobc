@@ -79,6 +79,14 @@ struct fix_vldr_item {
     fix_vldr_item(pcodeop *op1, pcodeop *op2, int ind1) { start = op1; end = op2; ind = ind1; }
 };
 
+struct const_item {
+    uint32_t imm = 0;
+    int count = 0;
+    int ind = 0;
+
+    const_item(uint32_t i, int ind0) { imm = i; ind = ind0;  }
+};
+
 struct fix_vld1_item {
     intb loadaddr;
     int loadsiz;
@@ -112,6 +120,7 @@ public:
     int ind = 0;
     int end = 0;
     int maxend = 0;
+    map<uint32_t, const_item *>     constmap;
 
     cgtrie  cgtrie;
 
@@ -177,12 +186,24 @@ public:
     void dump();
     int dump_one_inst(int index, pcodeop *p);
     void write_cbranch(flowblock *b, uint32_t cond);
+    int const_write_end(uint32_t imm);
     int regalloc(pcodeop *p);
 
     static uint32_t thumb_gen::stuff_const(uint32_t op, uint32_t c);
     static void stuff_const_harder(uint32_t op, uint32_t v);
     static int _add_sp_imm(int rd, int rn, uint32_t imm);
     static void _sub_sp_imm(int imm);
+    /* 
+    有些程序不怎么大小于4k，但是访问了太多的常数，我们会尝试收集这些常数，并
+    把它写到末尾，然后挂到全局map中
+
+    当我们碰到如下的pcode:
+
+    mov rd, imm
+
+    常看这个数是否有被移动到末尾，有的话，计算偏移是否足够，是的话，改成ldr
+    */
+    void mov_const_to_end();
     void _sub_imm(int rd, int rn, uint32_t imm);
     void _cmp_imm(int rn, uint32_t imm);
     void fix_vldr(fix_vldr_item &item);
@@ -190,7 +211,7 @@ public:
     /* 收集p指向的instruction中所访问的ldr位置和大小，后面坐重定位用  */
     int get_load_addr_size(pcodeop *p, intb &addr, int &size);
     int follow_by_set_cpsr(pcodeop *p1);
-    static void _mov_imm(int rd, uint32_t imm, int setflags);
+    void _mov_imm(int rd, uint32_t imm, int setflags);
 };
 
 #endif

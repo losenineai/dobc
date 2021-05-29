@@ -143,3 +143,15 @@ void ElfLoadImage::saveFile(const char *filename)
 {
     file_save(filename, (char *)filedata, filelen);
 }
+
+intb    ElfLoadImage::read_val(intb addr, int siz)
+{
+    if (siz == 1)
+        return filedata[addr];
+    else if (siz == 2)
+        return *(short *)(filedata + addr);
+    else if (siz == 4)
+        return *(int *)(filedata + addr);
+    else
+        return *(intb *)(filedata + addr);
+}

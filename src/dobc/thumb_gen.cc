@@ -597,8 +597,21 @@ void _ldrd_imm(int rt, int rt2, int rn, int imm)
     /* wback ? */
 }
 
-void _ldr_lit(int rt, int imm)
+/* 这个指令和其他的ldr指令不一样的地方在于，传入的是一个绝对pos，
+需要根据当前的pc(g_cg->ind)转成一个PIC code*/
+int _ldr_lit(int rt, int pos)
 {
+    int imm = pos - ((g_cg->ind + 4) & ~3), add = imm >= 0, x = abs(imm);
+    int imm8 = x >> 2;
+
+    if ((imm >= 0) && (imm < 1024) && align4(imm))
+        o(0x4800 | (rt << 8) | imm8);
+    else if (x < 4096)
+        o(0xf85f0000 | (add << 23) | (rt << 12) | x);
+    else
+        return -1;
+
+    return 0;
 }
 
 /* A8.8.62 */
@@ -770,8 +783,18 @@ void _strb_imm(int rt, int rn, int imm, int w)
 
 }
 
+/*
+_mov_imm一般的情况，就是参照arm_arch_ref进行对照即可，但是有几张情况需要说明一下
+
+1. 尽可能的把数赛进去一条指令
+2. 最糟糕的情况是用 movw, movt 2条指令来生成一个 立即数拷贝，比起最好的情况，它多占用了6个字节
+3. 填充数的逻辑是 T1 -> T3 -> T2 -> ldr搜索 -> 2指令填充，看代码即可
+4. ldr搜索是指，搜索原先的代码填入的一些DATA，假如没有被擦，那么尝试用ldr访问
+*/
 void thumb_gen::_mov_imm(int rd, uint32_t v, int setflags)
 {
+    const_item *item;
+
     /* A8.8.102 */
     if (setflags && in_imm8(v) && in_imm3(rd)) 
         o(0x2000 | (rd << 8) | v); // T1
@@ -784,6 +807,11 @@ void thumb_gen::_mov_imm(int rd, uint32_t v, int setflags)
             o(x);
             return;
         }
+
+        /* 假如constmap里面有这个值 */
+        item = constmap[v];
+        if (item && !_ldr_lit(rd, item->ind))
+            return;
 
         /* 
         碰见超大数
@@ -864,7 +892,7 @@ int thumb_gen::run()
 
     preprocess();
     //fd->bblocks.dump_live_set(fd->find_op(SeqNum(Address(), 2170)));
-    fd->dump_cfg(fd->name, "exe_pre", 1);
+    //fd->dump_cfg(fd->name, "exe_pre", 1);
 
     /* 对block进行排序 
 
@@ -1099,6 +1127,13 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
 
                     it = advance_to_inst_end(it);
                 }
+            }
+            /* 是从内存的某个地址加载的一个字
+
+            FIXME:要从代码段加载的数据才是有意义的
+            */
+            else if (isreg(p->output) && pi0(p)->in_ram() && p->output->is_constant()) {
+                _mov_imm(reg2i(poa(p)),  p->output->get_val(), 0);
             }
             break;
 
@@ -1518,16 +1553,25 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
         case CPUI_BOOL_NEGATE:
             p4 = *it1;
             if (p3->opcode == CPUI_CBRANCH) {
-                if ((p->opcode == CPUI_BOOL_NEGATE) && (pi0a(p) == azr)) {
-                    if (p1->opcode == CPUI_BOOL_AND
-                        && p2->opcode == CPUI_BOOL_NEGATE
-                        && pi0a(p1) == acy) {
-                        write_cbranch(b, COND_LS);
+                if ((p->opcode == CPUI_BOOL_NEGATE)) {
+                    if (pi0a(p) == azr) {
+                        if (p1->opcode == CPUI_BOOL_AND
+                            && p2->opcode == CPUI_BOOL_NEGATE
+                            && pi0a(p1) == acy) {
+                            write_cbranch(b, COND_LS);
+                        }
+                        else if (p1->opcode == CPUI_INT_EQUAL
+                            && p2->opcode == CPUI_BOOL_AND
+                            && pi0a(p1) == ang && pi1a(p1) == aov) {
+                            write_cbranch(b, COND_GT);
+                        }
                     }
-                    else if (p1->opcode == CPUI_INT_EQUAL
-                        && p2->opcode == CPUI_BOOL_AND
-                        && pi0a(p1) == ang && pi1a(p1) == aov) {
-                        write_cbranch(b, COND_GT);
+                    else if (pi0a(p) == acy) {
+                        if (p1->opcode == CPUI_BOOL_OR
+                            && p2->opcode == CPUI_BOOL_NEGATE
+                            && pi1a(p1) == azr) {
+                            write_cbranch(b, COND_HI);
+                        }
                     }
                 }
             }
@@ -1803,6 +1847,8 @@ void thumb_gen::preprocess()
 #endif
     fd->bblocks.compute_local_live_sets_p();
     fd->bblocks.compute_global_live_sets_p();
+
+    mov_const_to_end();
 }
 
 int thumb_gen::regalloc(pcodeop *p)
@@ -1984,3 +2030,50 @@ pit thumb_gen::g_vpush(flowblock *b, pit pit)
     return pit;
 }
 
+int const_item_cmp(const_item *l, const_item *r)
+{
+    return r->count < l->count;
+}
+
+void thumb_gen::mov_const_to_end()
+{
+    int i, pos;
+    uint32_t imm;
+    intb val;
+    list<pcodeop *>::iterator it;
+    map<uint32_t, const_item *>::iterator cit;
+    const_item *item;
+
+    for (i = 0; i < fd->bblocks.get_size(); i++) {
+        flowblock *b = fd->bblocks.get_block(i);
+
+        for (it = b->ops.begin(); it != b->ops.end(); it++) {
+            pcodeop *p = *it;
+            if (!p->output || !p->output->is_constant() || (p->opcode != CPUI_COPY)) continue;
+            if (pi0(p)->in_ram()) {
+                pos = (int)pi0(p)->get_ram_val();
+                val = d->loader->read_val(pos, p->output->get_size());
+
+                /* 假如PIC区域读出的值和原始的值已经不等，证明这块区域被擦除了，跳过  */
+                if (val != p->output->get_val()) continue;
+
+                /* 暂时先只处理uint32_t 类型的*/
+                if (p->output->get_size() != 4) continue;
+
+                imm = (uint32_t)val;
+                cit = constmap.find(imm);
+                if ((cit == constmap.end()))
+                    constmap[imm] = item = new const_item(imm, pos);
+                else
+                    item = cit->second;
+
+                item->count++;
+            }
+        }
+    }
+}
+
+int thumb_gen::const_write_end(uint32_t imm)
+{
+    return 0;
+}

@@ -41,4 +41,6 @@ public:
     void saveFile(const char *filename);
     addrtab::iterator   beginSymbol() { return addrtab.begin();  }
     addrtab::iterator   endSymbol() { return addrtab.end();  }
+
+    intb    read_val(intb addr, int siz);
 };
