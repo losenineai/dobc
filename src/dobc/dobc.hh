@@ -1325,6 +1325,7 @@ public:
     /* flag: 1: enable pcode */
     void        dump_cfg(const string &name, const char *postfix, int flag);
     void        dump_pcode(const char *postfix);
+    void        dump_rank(FILE *fp);
     /* 打印loop的包含关系 */
     void        dump_loop(const char *postfix);
     /* dump dom-joint graph */

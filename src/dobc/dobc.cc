@@ -409,8 +409,8 @@ void dobc::plugin_ollvm()
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x366f5));
 
-    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15f09));
-    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x132ed));
+    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15f09));
+    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x132ed));
 #endif
     fd_main->ollvm_deshell();
     loader->saveFile("test.so");
@@ -5635,6 +5635,35 @@ char*       funcdata::block_color(flowblock *b)
     return "white";
 }
 
+void        funcdata::dump_rank(FILE *fp)
+{
+    int i, j, k;
+    vector<vector<flowblock *>> ranks;
+
+    ranks.resize(bblocks.blist.size());
+
+    for (i = 0; i < bblocks.blist.size(); i++) {
+        flowblock *b = bblocks.blist[i];
+        ranks[domdepth[b->index]].push_back(b);
+    }
+
+
+    fprintf(fp, "{ rank = same; ");
+
+    for (i = k = 0; i < ranks.size(); i++) {
+        if (ranks[i].size() == 0) break;
+
+        for (j = 0; j < ranks[i].size(); j++) {
+            fprintf(fp, "loc_%x; ", ranks[i][j]->sub_id());
+
+            if (++k % 50 == 0)
+                fprintf(fp, "}\n { rank = same; ");
+        }
+    }
+
+    fprintf(fp, "}\n");
+}
+
 void        funcdata::dump_cfg(const string &name, const char *postfix, int dumppcode)
 {
     char obuf[512];
@@ -5650,23 +5679,27 @@ void        funcdata::dump_cfg(const string &name, const char *postfix, int dump
     fprintf(fp, "digraph G {\n");
     fprintf(fp, "node [fontname = \"helvetica\"]\n");
 
-    int i, j;
+    int i, j, k;
     for (i = 0; i < bblocks.blist.size(); ++i) {
         blockbasic *b = bblocks.blist[i];
 
         dump_block(fp, b, dumppcode);
     }
 
-    for (i = 0; i < bblocks.blist.size(); ++i) {
+    int size = bblocks.blist.size();
+    for (i = 0, k = 0; i < size; ++i) {
         blockbasic *b = bblocks.blist[i];
 
-        for (j = 0; j < b->out.size(); ++j) {
+        for (j = 0; j < b->out.size(); ++j, k++) {
             blockedge *e = &b->out[j];
 
             fprintf(fp, "loc_%x ->loc_%x [label = \"%s\" color=\"%s\" penwidth=%d]\n",
                 b->sub_id(), e->point->sub_id(),  e->is_true() ? "true":"false", edge_color(e), edge_width(e));
         }
     }
+
+    if (k > 600)
+        dump_rank(fp);
 
     fprintf(fp, "}");
 
