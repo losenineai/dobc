@@ -368,6 +368,13 @@ Pcrel8: [reloc]		is immed8
   export *[const]:4 reloc;
 }
 
+Pcrel8_ram: [reloc]		is immed8
+  [ reloc = ((inst_start+4) $and 0xfffffffc) + 4*immed8; ]
+{
+  # don't export as an address, may be PIC code, and would add spurious symbols.
+  export *[ram]:4 reloc;
+}
+
 @if defined(VERSION_6T2) || defined(VERSION_7)
 
 Pcrel8_s8: [reloc]		is immed8
@@ -1164,10 +1171,10 @@ with : ARMcondCk=1 {
   Rd0810 = Sprel8;
 }
 
-:add^ItCond	sp,Immed7_4		is TMode=1 & ItCond & op7=0x160 & sp & Immed7_4
+:add^ItCond	sp,immval		is TMode=1 & ItCond & op7=0x160 & sp & immed7 [ immval = immed7 * 4; ]
 {
   build ItCond;
-  sp = sp + Immed7_4;
+  sp = sp + immval;
 }
 
 :adr^ItCond	Rd0810,Pcrel8		is TMode=1 & ItCond & op11=0x14 & Rd0810 & Pcrel8
@@ -2011,11 +2018,13 @@ XYZ:  X^Y^Z             is TMode=1 & X & Y & Z  { }
   Rd0002 = *RnRmIndirect;
 }
 
-:ldr^ItCond	Rd0810,Pcrel8Indirect	is TMode=1 & ItCond & op11=9 & Pcrel8Indirect & Rd0810
+:ldr^ItCond	Rd0810,Pcrel8_ram	is TMode=1 & ItCond & op11=9 & Pcrel8_ram & Rd0810
 {
   build ItCond;
-  build Pcrel8Indirect;
-  Rd0810 = Pcrel8Indirect;
+  #build Pcrel8Indirect;
+  #Rd0810 = Pcrel8Indirect;
+  #build Pcrel8;
+  Rd0810 = Pcrel8_ram;
 }
 
   # Note: NO '*' IS INTENTIONAL
