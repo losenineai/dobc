@@ -151,6 +151,7 @@ struct pcodeop_domdepth_cmp {
 
 typedef set<pcodeop *, pcodeop_cmp_def> pcodeop_def_set;
 
+/* 基于pcode time做的比较 */
 struct pcodeop_cmp {
     bool operator() ( const pcodeop *a, const pcodeop *b ) const;
 };
@@ -1754,6 +1755,8 @@ public:
                     1           合并成功
     */
     int         combine_lcts(vector<flowblock *> &blks);
+    /* 尝试去搜索一个block的所有in节点，找到 */
+    int         combine_lcts_blk(flowblock *b);
     int         ollvm_combine_lcts(pcodeop *p);
 
     int         cmp_itblock_cbranch_conditions(pcodeop *cbr1, pcodeop* cbr2);

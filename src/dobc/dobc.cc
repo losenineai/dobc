@@ -401,9 +401,9 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 
 void dobc::plugin_ollvm()
 {
-#if 0
-    funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
-    //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
+#if 1
+    //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
+    funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
 #else
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
@@ -980,6 +980,7 @@ bool pcodeop_cmp::operator()(const pcodeop *a, const pcodeop *b) const
     return a->start.getTime() < b->start.getTime();
     //return a->output->get_addr() < b->output->get_addr();
 }
+
 
 bool pcodeop_domdepth_cmp::operator()(const pcodeop *a, const pcodeop *b) const
 {
@@ -3691,7 +3692,7 @@ int         funcdata::combine_lcts(vector<flowblock *> &blks)
     b = bblocks.new_block_basic(user_offset += user_step);
 
     for (i = 0; i < ops.size(); i++) {
-        Address addr2(d->get_code_space(), user_offset + p->get_addr().getOffset());
+        Address addr2(d->get_code_space(), p->get_addr().getOffset());
         const SeqNum sq(addr2, op_uniqid++);
         p = cloneop(p, sq);
         op_insert_end(p, b);
@@ -3713,6 +3714,73 @@ int         funcdata::combine_lcts(vector<flowblock *> &blks)
     bblocks.add_edge(b, tob);
 
     structure_reset();
+
+    return 1;
+}
+
+
+/* 基于pcode结构做的比较
+
+1. opcode必须一致
+2. phi节点例外
+3. 任何 非uniq 变量必须一致
+4. const部分必须一致
+5. 所有output和in的 size必须一致
+*/
+int pcodeop_struct_cmp(pcodeop *a, pcodeop *b)
+{
+    int i;
+
+    dobc *d = a->parent->fd->d;
+
+    if (a->opcode == CPUI_MULTIEQUAL) return -1;
+    if (a->opcode != b->opcode) return -1;
+    if (a->output) {
+        if ((d->is_temp(poa(a)) != d->is_temp(poa(b))) || (poa(a) != poa(b))) return -1;
+    }
+
+    for (i = 0; i < a->inrefs.size(); i++) {
+        varnode *l = a->get_in(i);
+        varnode *r = b->get_in(i);
+        bool istemp = d->is_temp(l->get_addr());
+        if ((istemp == d->is_temp(r->get_addr()))) continue;
+        if (!istemp && (l->get_addr() == r->get_addr()) && (l->get_size() == r->get_size())) continue;
+
+        return -1;
+    }
+
+    return 0;
+}
+
+int         funcdata::combine_lcts_blk(flowblock *b)
+{
+    flowblock *inb;
+    pcodeop *lastop;
+    int i, j;
+    vector<vector<flowblock *>> blks_list;
+
+    if (b->in.size() <= 1) return 0;
+
+    for (i = 0; i < b->in.size(); i++) {
+        inb = b->get_in(i);
+        lastop = inb->last_op();
+
+        if (inb->out.size() != 1) continue;
+
+        for (j = 0; j < blks_list.size(); j++) {
+            if (pcodeop_struct_cmp(blks_list[j][0]->last_op(), lastop)) break;
+        }
+
+        if (j == blks_list.size()) {
+            blks_list.push_back(vector<flowblock *>());
+            blks_list.back().push_back(inb);
+        }
+    }
+
+    for (i = 0; i < blks_list.size(); i++) {
+        if (blks_list[i].size() >= 2)
+            combine_lcts(blks_list[i]);
+    }
 
     return 1;
 }
@@ -5698,7 +5766,7 @@ void        funcdata::dump_cfg(const string &name, const char *postfix, int dump
         }
     }
 
-    if (k > 600)
+    if (k > 1000)
         dump_rank(fp);
 
     fprintf(fp, "}");
