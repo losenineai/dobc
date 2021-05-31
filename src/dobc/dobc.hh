@@ -1757,6 +1757,7 @@ public:
     int         combine_lcts(vector<flowblock *> &blks);
     /* 尝试去搜索一个block的所有in节点，找到 */
     int         combine_lcts_blk(flowblock *b);
+    int         combine_lcts_all(void);
     int         ollvm_combine_lcts(pcodeop *p);
 
     int         cmp_itblock_cbranch_conditions(pcodeop *cbr1, pcodeop* cbr2);

@@ -405,9 +405,9 @@ void dobc::plugin_ollvm()
     //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
     funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
-#else
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x366f5));
+#else
 
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15f09));
     funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x132ed));
@@ -3632,6 +3632,40 @@ int         funcdata::ollvm_combine_lcts(pcodeop *p)
     return combine_lcts(blks);
 }
 
+/* 基于pcode结构做的比较
+
+1. opcode必须一致
+2. phi节点例外
+3. 任何 非uniq 变量必须一致
+4. const部分必须一致
+5. 所有output和in的 size必须一致
+*/
+int pcodeop_struct_cmp(pcodeop *a, pcodeop *b)
+{
+    int i;
+
+    dobc *d = a->parent->fd->d;
+
+    if (a->get_addr() != b->get_addr()) return -1;
+    if (a->opcode == CPUI_MULTIEQUAL) return -1;
+    if (a->opcode != b->opcode) return -1;
+    if (a->output) {
+        if ((d->is_temp(poa(a)) != d->is_temp(poa(b))) || (poa(a) != poa(b))) return -1;
+    }
+
+    for (i = 0; i < a->inrefs.size(); i++) {
+        varnode *l = a->get_in(i);
+        varnode *r = b->get_in(i);
+        bool istemp = d->is_temp(l->get_addr());
+        if ((istemp == d->is_temp(r->get_addr()))) continue;
+        if (!istemp && (l->get_addr() == r->get_addr()) && (l->get_size() == r->get_size())) continue;
+
+        return -1;
+    }
+
+    return 0;
+}
+
 int         funcdata::combine_lcts(vector<flowblock *> &blks)
 {
     flowblock *b = blks[0], *tob;
@@ -3652,11 +3686,13 @@ int         funcdata::combine_lcts(vector<flowblock *> &blks)
         its[i] = b->ops.rbegin();
     }
 
-    while (!end) {
+    b = NULL;
+    while (b) {
         p = *(its[0]);
         for (i = 1; i < its.size(); i++) {
             p1 = *(its[i]);
 
+#if 0
             if (p->opcode == CPUI_MULTIEQUAL) break;
             if (p->opcode != p1->opcode) break;
             if (!p->output != !p1->output) break;
@@ -3674,6 +3710,9 @@ int         funcdata::combine_lcts(vector<flowblock *> &blks)
 
                 break;
             }
+#else
+            if (pcodeop_struct_cmp(p, p1)) break;
+#endif
         }
 
         if (i == its.size())
@@ -3683,73 +3722,51 @@ int         funcdata::combine_lcts(vector<flowblock *> &blks)
 
         for (i = 0; i < its.size(); i++) {
             its[i]++;
-            if (its[i] == blks[i]->ops.rend()) end = 1;
+            if (its[i] == blks[i]->ops.rend()) b = blks[i];
         }
     }
 
+    /* FIXME: 提取的公共pcode系列，不能跨instruction */
+
     if ((ops.size() == 0) || ((ops.size() == 1) && (ops.back()->opcode == CPUI_BRANCH))) return 0;
 
-    b = bblocks.new_block_basic(user_offset += user_step);
+    /*
+    合并前驱节点的公共尾部子串时，假如某个前驱刚好满足交集，直接使用整个前驱
+    */
+    if (!b) {
+        b = bblocks.new_block_basic(user_offset += user_step);
 
-    for (i = 0; i < ops.size(); i++) {
-        Address addr2(d->get_code_space(), p->get_addr().getOffset());
-        const SeqNum sq(addr2, op_uniqid++);
-        p = cloneop(p, sq);
-        op_insert_end(p, b);
+        for (i = 0; i < ops.size(); i++) {
+            Address addr2(d->get_code_space(), p->get_addr().getOffset());
+            const SeqNum sq(addr2, op_uniqid++);
+            p = cloneop(p, sq);
+            op_insert_end(p, b);
+        }
+
+        bblocks.add_edge(b, tob);
     }
 
     len = ops.size();
     while (len--) {
         for (i = 0; i < its.size(); i++) {
             its[i]--;
+
+            if ((*(its[i]))->parent == b) continue;
+
             op_destroy_ssa(*(its[i]));
         }
     }
 
     for (i = 0; i < blks.size(); i++) {
-        bblocks.remove_edge(blks[i], tob);
-        bblocks.add_edge(blks[i], b);
+        if (blks[i] != b) {
+            bblocks.remove_edge(blks[i], tob);
+            bblocks.add_edge(blks[i], b);
+        }
     }
-
-    bblocks.add_edge(b, tob);
 
     structure_reset();
 
     return 1;
-}
-
-
-/* 基于pcode结构做的比较
-
-1. opcode必须一致
-2. phi节点例外
-3. 任何 非uniq 变量必须一致
-4. const部分必须一致
-5. 所有output和in的 size必须一致
-*/
-int pcodeop_struct_cmp(pcodeop *a, pcodeop *b)
-{
-    int i;
-
-    dobc *d = a->parent->fd->d;
-
-    if (a->opcode == CPUI_MULTIEQUAL) return -1;
-    if (a->opcode != b->opcode) return -1;
-    if (a->output) {
-        if ((d->is_temp(poa(a)) != d->is_temp(poa(b))) || (poa(a) != poa(b))) return -1;
-    }
-
-    for (i = 0; i < a->inrefs.size(); i++) {
-        varnode *l = a->get_in(i);
-        varnode *r = b->get_in(i);
-        bool istemp = d->is_temp(l->get_addr());
-        if ((istemp == d->is_temp(r->get_addr()))) continue;
-        if (!istemp && (l->get_addr() == r->get_addr()) && (l->get_size() == r->get_size())) continue;
-
-        return -1;
-    }
-
-    return 0;
 }
 
 int         funcdata::combine_lcts_blk(flowblock *b)
@@ -3783,6 +3800,16 @@ int         funcdata::combine_lcts_blk(flowblock *b)
     }
 
     return 1;
+}
+
+int         funcdata::combine_lcts_all(void)
+{
+    int i;
+
+    for (i = 0; i < bblocks.blist.size(); i++) {
+    }
+
+    return 0;
 }
 
 int         funcdata::cmp_itblock_cbranch_conditions(pcodeop *cbr1, pcodeop* cbr2)
