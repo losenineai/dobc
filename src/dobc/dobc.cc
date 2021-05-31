@@ -401,7 +401,7 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 
 void dobc::plugin_ollvm()
 {
-#if 1
+#if 0
     //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
     funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
@@ -3672,7 +3672,7 @@ int         funcdata::combine_lcts(vector<flowblock *> &blks)
     vector<list<pcodeop *>::reverse_iterator> its;
     vector<pcodeop *> ops;
     pcodeop *p, *p1;
-    int i, j, len, end = 0;
+    int i, len, end = 0;
 
     its.resize(blks.size());
     tob = b->get_out(0);
@@ -3687,7 +3687,7 @@ int         funcdata::combine_lcts(vector<flowblock *> &blks)
     }
 
     b = NULL;
-    while (b) {
+    while (!b) {
         p = *(its[0]);
         for (i = 1; i < its.size(); i++) {
             p1 = *(its[i]);
@@ -3765,6 +3765,7 @@ int         funcdata::combine_lcts(vector<flowblock *> &blks)
     }
 
     structure_reset();
+    clear_block_phi(tob);
 
     return 1;
 }
@@ -3784,13 +3785,19 @@ int         funcdata::combine_lcts_blk(flowblock *b)
 
         if (inb->out.size() != 1) continue;
 
+        /* 查找是否有相同pcode的blk，找到就退出 */
         for (j = 0; j < blks_list.size(); j++) {
-            if (pcodeop_struct_cmp(blks_list[j][0]->last_op(), lastop)) break;
+            if (pcodeop_struct_cmp(blks_list[j][0]->last_op(), lastop) == 0) break;
         }
 
         if (j == blks_list.size()) {
+            /* 没找到相同的blk，创建一个新的vector */
             blks_list.push_back(vector<flowblock *>());
             blks_list.back().push_back(inb);
+        }
+        else {
+            /* 找到了相同的blk，放入一个数组 */
+            blks_list[j].push_back(inb);
         }
     }
 
@@ -3804,10 +3811,17 @@ int         funcdata::combine_lcts_blk(flowblock *b)
 
 int         funcdata::combine_lcts_all(void)
 {
-    int i;
+    int i, size = bblocks.blist.size();
 
     for (i = 0; i < bblocks.blist.size(); i++) {
+        combine_lcts_blk(bblocks.blist[i]);
     }
+    
+    do
+    {
+        cond_constant_propagation();
+        dead_code_elimination(bblocks.blist, 0);
+    } while (!cbrlist.empty() || !emptylist.empty());
 
     return 0;
 }
@@ -3926,7 +3940,7 @@ int         funcdata::ollvm_deshell()
         printf("[%s] loop_unrolling sub_%llx %d times*********************** \n\n", mtime2s(NULL),  h->get_start().getOffset(), i);
         dead_code_elimination(bblocks.blist, RDS_UNROLL0);
 #if defined(DCFG_CASE)
-        dump_cfg(name, _itoa(i, buf, 10), 1);
+        //dump_cfg(name, _itoa(i, buf, 10), 1);
 #endif
     }
 
@@ -3943,6 +3957,7 @@ int         funcdata::ollvm_deshell()
     } while (!cbrlist.empty() || !emptylist.empty());
 
     dead_code_elimination(bblocks.blist, F_REMOVE_DEAD_PHI);
+    //combine_lcts_all();
 
     dump_cfg(name, "final", 1);
     dump_pcode("1");
