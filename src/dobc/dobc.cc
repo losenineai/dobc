@@ -401,16 +401,16 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 
 void dobc::plugin_ollvm()
 {
-#if 0
+#if 1
     //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
-    funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
+    //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
-    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
+    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x366f5));
 #else
 
-    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15f09));
-    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x132ed));
+    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15f09));
+    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x132ed));
 #endif
     fd_main->ollvm_deshell();
     loader->saveFile("test.so");
@@ -3573,6 +3573,7 @@ void        funcdata::rewrite_no_sub_cbranch_blk(flowblock *b)
     vector<flowblock *> cloneblks;
 
     end = bblocks.get_it_end_block(b);
+    //end = bblocks.get_it_end_block(end);
 
     clear_block_phi(b);
     clear_block_phi(end);
@@ -3644,6 +3645,8 @@ int pcodeop_struct_cmp(pcodeop *a, pcodeop *b)
 {
     int i;
 
+    if (!a || !b) return -1;
+
     dobc *d = a->parent->fd->d;
 
     if (a->get_addr() != b->get_addr()) return -1;
@@ -3653,7 +3656,11 @@ int pcodeop_struct_cmp(pcodeop *a, pcodeop *b)
         if ((d->is_temp(poa(a)) != d->is_temp(poa(b))) || (poa(a) != poa(b))) return -1;
     }
 
-    for (i = 0; i < a->inrefs.size(); i++) {
+    /* 不比较load的虚拟节点 */
+    int sz = a->inrefs.size();
+    if (a->opcode == CPUI_LOAD) sz = 2;
+
+    for (i = 0; i < sz; i++) {
         varnode *l = a->get_in(i);
         varnode *r = b->get_in(i);
         bool istemp = d->is_temp(l->get_addr());
@@ -3671,6 +3678,7 @@ int         funcdata::combine_lcts(vector<flowblock *> &blks)
     flowblock *b = blks[0], *tob;
     vector<list<pcodeop *>::reverse_iterator> its;
     vector<pcodeop *> ops;
+    list<pcodeop *>::reverse_iterator it;
     pcodeop *p, *p1;
     int i, len, end = 0;
 
@@ -3692,41 +3700,20 @@ int         funcdata::combine_lcts(vector<flowblock *> &blks)
         for (i = 1; i < its.size(); i++) {
             p1 = *(its[i]);
 
-#if 0
-            if (p->opcode == CPUI_MULTIEQUAL) break;
-            if (p->opcode != p1->opcode) break;
-            if (!p->output != !p1->output) break;
-            if (p->inrefs.size() != p1->inrefs.size()) break;
-            if (p->output) {
-                if ((d->is_temp(poa(p)) != d->is_temp(poa(p1))) || (poa(p) != poa(p1))) break;
-            }
-
-            for (j = 0; j < p->inrefs.size(); j++) {
-                varnode *l = p->get_in(j);
-                varnode *r = p1->get_in(j);
-                bool istemp = d->is_temp(l->get_addr());
-                if ((istemp == d->is_temp(r->get_addr()))) continue;
-                if (!istemp && (l->get_addr() == r->get_addr()) && (l->get_size() == r->get_size())) continue;
-
-                break;
-            }
-#else
             if (pcodeop_struct_cmp(p, p1)) break;
-#endif
         }
 
         if (i == its.size())
             ops.insert(ops.begin(), p);
-        else
+        else {
             break;
+        }
 
         for (i = 0; i < its.size(); i++) {
             its[i]++;
             if (its[i] == blks[i]->ops.rend()) b = blks[i];
         }
     }
-
-    /* FIXME: 提取的公共pcode系列，不能跨instruction */
 
     if ((ops.size() == 0) || ((ops.size() == 1) && (ops.back()->opcode == CPUI_BRANCH))) return 0;
 
@@ -3737,9 +3724,10 @@ int         funcdata::combine_lcts(vector<flowblock *> &blks)
         b = bblocks.new_block_basic(user_offset += user_step);
 
         for (i = 0; i < ops.size(); i++) {
-            Address addr2(d->get_code_space(), p->get_addr().getOffset());
+            pcodeop *p1 = ops[i];
+            Address addr2(d->get_code_space(), p1->get_addr().getOffset());
             const SeqNum sq(addr2, op_uniqid++);
-            p = cloneop(p, sq);
+            p = cloneop(p1, sq);
             op_insert_end(p, b);
         }
 
@@ -3774,10 +3762,15 @@ int         funcdata::combine_lcts_blk(flowblock *b)
 {
     flowblock *inb;
     pcodeop *lastop;
-    int i, j;
+    int i, j, ret = 0;
     vector<vector<flowblock *>> blks_list;
 
     if (b->in.size() <= 1) return 0;
+
+    lastop = b->last_op();
+    if (lastop && lastop->start.getTime() == 11269) {
+        printf("a\n");
+    }
 
     for (i = 0; i < b->in.size(); i++) {
         inb = b->get_in(i);
@@ -3803,25 +3796,30 @@ int         funcdata::combine_lcts_blk(flowblock *b)
 
     for (i = 0; i < blks_list.size(); i++) {
         if (blks_list[i].size() >= 2)
-            combine_lcts(blks_list[i]);
+            ret |= combine_lcts(blks_list[i]);
     }
 
-    return 1;
+    return ret;
 }
 
 int         funcdata::combine_lcts_all(void)
 {
-    int i, size = bblocks.blist.size();
+    int i, size = bblocks.blist.size(), lcts;
 
-    for (i = 0; i < bblocks.blist.size(); i++) {
-        combine_lcts_blk(bblocks.blist[i]);
-    }
-    
-    do
-    {
-        cond_constant_propagation();
-        dead_code_elimination(bblocks.blist, 0);
-    } while (!cbrlist.empty() || !emptylist.empty());
+    do {
+        lcts = 0;
+        for (i = 0; i < bblocks.blist.size(); i++) {
+            lcts |= combine_lcts_blk(bblocks.blist[i]);
+        }
+        
+        if (lcts) {
+            do
+            {
+                cond_constant_propagation();
+                dead_code_elimination(bblocks.blist, 0);
+            } while (!cbrlist.empty() || !emptylist.empty());
+        }
+    } while (lcts);
 
     return 0;
 }
@@ -3949,15 +3947,17 @@ int         funcdata::ollvm_deshell()
     bblocks.clear_all_vminfo();
 
     remove_dead_stores();
-    dead_code_elimination(bblocks.blist, 0);
+    dead_code_elimination(bblocks.blist, F_REMOVE_DEAD_PHI);
 
     do {
         cond_constant_propagation();
         dead_code_elimination(bblocks.blist, 0);
     } while (!cbrlist.empty() || !emptylist.empty());
 
-    dead_code_elimination(bblocks.blist, F_REMOVE_DEAD_PHI);
-    //combine_lcts_all();
+    //dead_code_elimination(bblocks.blist, F_REMOVE_DEAD_PHI);
+    //dump_cfg(name, "before_lcts", 1);
+
+    combine_lcts_all();
 
     dump_cfg(name, "final", 1);
     dump_pcode("1");
