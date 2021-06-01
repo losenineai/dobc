@@ -823,6 +823,9 @@ struct flowblock {
         pcodeop *p = last_op();
         return p ? (p->opcode == CPUI_CBRANCH) : false;
     }
+    bool        is_it_cbranch() {
+        return is_cbranch() ? last_op()->flags.itblock : 0;
+    }
     bool        is_stack_check_fail();
     /* 获取输入节点中没有被标记过的数量 */
     int         incoming_forward_branches();

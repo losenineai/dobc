@@ -955,6 +955,13 @@ int         funcdata::ollvm_detect_frameworkinfo()
         blks[i]->dump();
     }
     printf("no sub cbranch block search end\n");
+    /* 
+    libmakeurl.so:
+    1. 0x15521
+
+    liblazarus:
+    1. 0x15f09
+    */
     rewrite_no_sub_cbranch_blks(blks);
 
     for (i = 0; i < bblocks.blist.size(); i++) {

@@ -105,9 +105,9 @@ int continuous_zero_bits(uint32_t x, int *lsb, int *width)
     /* 去掉低部的连续1，兼容以0开始 */
     uint32_t t = ~((x + 1) & x);
     if ((t + 1) & t)
-        return -1;
+        return 0;
 
-    if (x == (uint32_t)-1) return -1;
+    if (x == (uint32_t)-1) return 0;
 
     int i = 0;
 
@@ -116,7 +116,7 @@ int continuous_zero_bits(uint32_t x, int *lsb, int *width)
     *lsb = i;
     *width = ntz((x >> i));
 
-    return 0;
+    return 1;
 }
 
 
@@ -529,16 +529,16 @@ void _bic(int rd, int rn, int rm, SRType shtype,  int shift, int setflags)
 }
 
 /* A8.8.221 */
-void thumb_gen::_sub_imm(int rd, int rn, uint32_t imm)
+void thumb_gen::_sub_imm(int rd, int rn, uint32_t imm, int setflags)
 {
-    if ((imm < 8) && (rd < 8) && (rn < 8)) // t1
+    if (setflags && (imm < 8) && (rd < 8) && (rn < 8)) // t1
         o(0x1e00 | (imm << 6) | (rn << 3) | rd);
-    else if (imm < 256 && (rd == rn) && (rn < 8)) // t2
+    else if (setflags && imm < 256 && (rd == rn) && (rn < 8)) // t2
         o(0x3800 | imm | (rn << 8));
     else if (imm <= 0x0fff && rd != 13 && rd != 15) { // t4
-        o(stuff_constw(0xf2a00000 | (rn << 16) | (rd << 8), imm, 0));
+        o(stuff_constw(0xf2a00000 | (rn << 16) | (rd << 8), imm, 0) | (setflags << 20));
     }
-    else
+    else if (!setflags)
         stuff_const_harder(0xf1a00000 | (rn << 16) | (rd << 8), imm);
 }
 
@@ -1024,6 +1024,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                         switch (p1->opcode) {
                         case CPUI_COPY:
                             _mov_imm(reg2i(poa(p1)), pi0(p)->get_val(), 0);
+                            advance(it, 1);
                             break;
 
                         case CPUI_LOAD:
@@ -1037,6 +1038,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
 
                             _add_reg(rn, rn, PC, SRType_LSL, 0);
                             _ldr_imm(rn, rn, 0, 0);
+                            advance(it, 1);
                             break;
 
                         case CPUI_INT_ADD:
@@ -1045,25 +1047,22 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                                 _add_sp_imm(reg2i(poa(p1)), rn, pi0(p)->get_val());
                             else
                                 _add_imm(reg2i(poa(p1)), rn, pi0(p)->get_val());
+                            advance(it, 1);
                             break;
 
                         case CPUI_INT_SUB:
                             if (p->output == pi0(p1))
                                 _rsb_imm(reg2i(poa(p1)), pi0(p)->get_val(), reg2i(pi1a(p1)));
-                            else
-                                _sub_imm(reg2i(poa(p1)), reg2i(pi0a(p1)), pi0(p)->get_val());
+                            else {
+                                _sub_imm(reg2i(poa(p1)), reg2i(pi0a(p1)), pi0(p)->get_val(), follow_by_set_cpsr(p1));
+                            }
+                            it = advance_to_inst_end(it);
                             break;
 
                         case CPUI_INT_AND:
-                            int lsb, width;
-                            if (continuous_zero_bits(pi0(p)->get_val(), &lsb, &width)) {
-                            }
-                            else {
-                                _bfc(reg2i(poa(p1)), lsb, width);
-                            }
+                            it = retrieve_orig_inst(b, it, 1);
                             break;
                         }
-                        advance(it, 1);
                     }
                     else if (istemp(p1->output)) {
                         if (p2->opcode == CPUI_INT_2COMP) {
@@ -1106,10 +1105,15 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 }
             }
             else if (istemp(p->output)) {
-                if (p1->opcode == CPUI_INT_ADD)
+                switch (p1->opcode) {
+                case CPUI_INT_ADD:
                     _add_reg(reg2i(poa(p1)), reg2i(pi0a(p1)), reg2i(pi0a(p)), SRType_LSL, 0);
-                else if (p1->opcode == CPUI_INT_SUB)
+                    break;
+
+                case CPUI_INT_SUB:
                     _sub_reg(reg2i(poa(p1)), reg2i(pi0a(p1)), reg2i(pi0a(p)), SRType_LSL, 0);
+                    break;
+                }
                 it = advance_to_inst_end(it);
             }
             else if (isreg(pi0(p))) {
@@ -1279,8 +1283,10 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                             }
                             _sub_sp_imm(pi1(p)->get_val());
                         }
-                        else
-                            _sub_imm(rd, rn, pi1(p)->get_val());
+                        else {
+                            _sub_imm(rd, rn, pi1(p)->get_val(), follow_by_set_cpsr(p));
+                            it = advance_to_inst_end(it);
+                        }
                     }
                 }
             }
@@ -1440,7 +1446,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 }
             }
             else 
-                _xor_reg(reg2i(poa(p)), reg2i(pi0a(p)), reg2i(pi1a(p)));
+                it = retrieve_orig_inst(b, it, 1);
             break;
 
         case CPUI_INT_AND:

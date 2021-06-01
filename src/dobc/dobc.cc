@@ -401,7 +401,7 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 
 void dobc::plugin_ollvm()
 {
-#if 1
+#if 0
     //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
@@ -409,8 +409,8 @@ void dobc::plugin_ollvm()
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x366f5));
 #else
 
-    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15f09));
-    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x132ed));
+    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15f09));
+    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x132ed));
 #endif
     fd_main->ollvm_deshell();
     loader->saveFile("test.so");
@@ -3573,7 +3573,8 @@ void        funcdata::rewrite_no_sub_cbranch_blk(flowblock *b)
     vector<flowblock *> cloneblks;
 
     end = bblocks.get_it_end_block(b);
-    //end = bblocks.get_it_end_block(end);
+    while (end->is_it_cbranch())
+        end = bblocks.get_it_end_block(end);
 
     clear_block_phi(b);
     clear_block_phi(end);
@@ -3766,11 +3767,6 @@ int         funcdata::combine_lcts_blk(flowblock *b)
     vector<vector<flowblock *>> blks_list;
 
     if (b->in.size() <= 1) return 0;
-
-    lastop = b->last_op();
-    if (lastop && lastop->start.getTime() == 11269) {
-        printf("a\n");
-    }
 
     for (i = 0; i < b->in.size(); i++) {
         inb = b->get_in(i);
@@ -5981,6 +5977,7 @@ pcodeop*    funcdata::cloneop(pcodeop *op, const SeqNum &seq)
     pcodeop *newop1 = newop(sz, seq);
     op_set_opcode(newop1, op->opcode);
 
+    newop1->flags.itblock = op->flags.itblock;
     newop1->flags.startinst = op->flags.startinst;
     newop1->flags.startblock = op->flags.startblock;
 	newop1->flags.uncalculated_store = op->flags.uncalculated_store;

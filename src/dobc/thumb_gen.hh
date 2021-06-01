@@ -193,7 +193,7 @@ public:
     static int _add_sp_imm(int rd, int rn, uint32_t imm);
     static void _sub_sp_imm(int imm);
     void collect_const();
-    void _sub_imm(int rd, int rn, uint32_t imm);
+    void _sub_imm(int rd, int rn, uint32_t imm, int setflags);
     void _cmp_imm(int rn, uint32_t imm);
     void fix_vldr(fix_vldr_item &item);
     void fix_vld1(fix_vld1_item &item, pc_rel_table &tab);
