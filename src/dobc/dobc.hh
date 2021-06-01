@@ -1878,6 +1878,7 @@ public:
 
     int wordsize = 4;
     vector<int>     insts;
+    vector<string>  useroplist;
 
     dobc(const char *slafilename, const char *filename);
     ~dobc();
@@ -1893,6 +1894,7 @@ public:
     void        add_inst_mnem(const Address &addr, const string &mnem);
     string&     get_inst_mnem(intb addr);
     funcdata*   add_func(const Address &addr);
+    string&     get_userop_name(int i) { return useroplist[i];  }
     void        set_shelltype(char *shelltype);
 
 #define strprefix(m1,c)     (strncmp(m1.c_str(), c, strlen(c)) == 0)

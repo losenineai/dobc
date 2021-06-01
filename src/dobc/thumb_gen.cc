@@ -1149,6 +1149,10 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
             }
             break;
 
+        case CPUI_CALLOTHER:
+            it = retrieve_orig_inst(b, it, 1);
+            break;
+
         case CPUI_INT_NOTEQUAL:
         case CPUI_INT_EQUAL:
             if (istemp(p->output) ) {

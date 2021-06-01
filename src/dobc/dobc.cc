@@ -588,6 +588,7 @@ dobc::dobc(const char *sla, const char *bin)
     argument_regs.push_back(&r2_addr);
     argument_regs.push_back(&r3_addr);
 
+    trans->getUserOpNames(useroplist);
 }
 
 dobc*    dobc::singleton()
@@ -1184,7 +1185,13 @@ int             pcodeop::dump(char *buf, uint32_t flags)
     if (callfd) 
         i += sprintf(buf + i, ".%s ", callfd->name.c_str());
 
-    for (j = 0; j < inrefs.size(); ++j) {
+    j = 0;
+    if (opcode == CPUI_CALLOTHER) {
+        i += sprintf(buf + i, ".%s", d->get_userop_name(inrefs[0]->get_addr().getOffset()).c_str());
+        j = 1;
+    }
+
+    for (; j < inrefs.size(); ++j) {
         if (j == in_limit) break;
         i += sprintf(buf + i, " ");
         i += print_varnode(trans, buf + i, inrefs[j]);
