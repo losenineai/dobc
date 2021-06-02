@@ -670,10 +670,10 @@ void _lsl_imm(int rd, int rm, int imm, int setflags)
 {
     if (imm >= 32) return;
 
-    if (!setflags && rm < 8 && rd < 8)
+    if (setflags && rm < 8 && rd < 8)
         o((imm << 6) | (rm << 3) | (rd << 3));
     else
-        o(0xea4f0000 | (rd << 8) | rm | imm_map(imm, 2, 3, 12) | imm_map(imm, 0, 2, 6));
+        o(0xea4f0000 | (rd << 8) | rm | imm_map(imm, 2, 3, 12) | imm_map(imm, 0, 2, 6) | (setflags << 20));
 }
 
 /* A8.8.96 */
@@ -1065,18 +1065,12 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                         }
                     }
                     else if (istemp(p1->output)) {
-                        if (p2->opcode == CPUI_INT_2COMP) {
-                            it = retrieve_orig_inst(b, it, 1);
-                        }
+                        it = retrieve_orig_inst(b, it, 1);
                     }
                     else if (d->is_tsreg(poa(p1))) {
                         if ((p1->opcode == CPUI_INT_SBORROW) || (p1->opcode == CPUI_INT_LESSEQUAL)) {
                             it = retrieve_orig_inst(b, it, 1);
                         }
-                    }
-                    else if (d->is_vreg(poa(p1))) {
-                        vmov_imm(p1->output->get_size(), d->vreg2i(poa(p1)), pi0(p)->get_val());
-                        advance(it, 1);
                     }
                 }
                 else if (d->is_vreg(poa(p))) {
