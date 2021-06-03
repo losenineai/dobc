@@ -409,8 +409,8 @@ void dobc::plugin_ollvm()
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x366f5));
 #else
 
-    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15f09));
-    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x132ed));
+    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15f09));
+    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x132ed));
 #endif
     fd_main->ollvm_deshell();
     loader->saveFile("test.so");
@@ -3458,13 +3458,13 @@ int         funcdata::cond_copy_expand(pcodeop *p, flowblock *b, int outslot)
 {
     flowblock *b1, *b2, *pb1, *pb2, *outb;
     vector<varnode *> defs;
-    int i, have_top;
+    int i, have_top, dfnum;
     varnode *def;
     assert(p->opcode == CPUI_COPY || p->opcode == CPUI_LOAD || p->opcode == CPUI_MULTIEQUAL);
     assert(outslot >= 0);
     outb = b->get_out(outslot);
 
-    have_top = collect_all_const_defs(p, defs);
+    have_top = collect_all_const_defs(p, defs, dfnum);
 
     if (defs.size() == 0)
         return -1;
@@ -3510,7 +3510,41 @@ int         funcdata::cond_copy_expand(pcodeop *p, flowblock *b, int outslot)
     return 0;
 }
 
-int         funcdata::collect_all_const_defs(pcodeop *start, vector<varnode *> &defs)
+int         funcdata::ollvm_do_copy_expand(pcodeop *p, flowblock *b, int outslot)
+{
+    vector<varnode *> defs;
+    int top, dfnum;
+
+    /*
+    我们处理以下情况的代码：
+
+1.    v1 = -2117566407;
+2.    if ( !((x_71 * (x_71 - 1)) << 31) )
+3.        v1 = 1048196999;
+4.    if ( y_72 < 10 )
+5.        v1 = 1048196999;
+
+    在这种情况下，没必要去展开指令5处的代码，因为v1的值其实就2个，直接做常数拷贝扩展。
+    */
+    if (p->opcode != CPUI_MULTIEQUAL) return -1;
+    if (p->all_inrefs_is_constant()) return -1;
+    if (p->inrefs.size() != 2) return -1;
+    if (p->parent->out.size() != 1) return -1;
+
+    top = collect_all_const_defs(p, defs, dfnum);
+    if (top)
+        return -1;
+
+    if (defs.size() == dfnum)  return -1;
+
+    cond_copy_expand(p, b, outslot);
+    heritage_clear();
+    heritage();
+
+    return 0;
+}
+
+int         funcdata::collect_all_const_defs(pcodeop *start, vector<varnode *> &defs, int &dfnum)
 {
     pcodeop *p, *def;
     pcodeop_set visit;
@@ -3518,6 +3552,8 @@ int         funcdata::collect_all_const_defs(pcodeop *start, vector<varnode *> &
     vector<pcodeop *> q;
     varnode *in;
     int i, j, have_top_def = 0;
+
+    dfnum = 0;
 
     q.push_back(start);
     visit.insert(start);
@@ -3528,6 +3564,7 @@ int         funcdata::collect_all_const_defs(pcodeop *start, vector<varnode *> &
 #define cad_push_def(in)        do { \
             def = (in)->def; \
             if (in->is_constant()) { \
+                dfnum++; \
                 for (j = 0; j < defs.size(); j++) { \
                     if (defs[j]->get_val() == in->get_val()) break; \
                 } \
@@ -3941,7 +3978,7 @@ int         funcdata::ollvm_deshell()
         printf("[%s] loop_unrolling sub_%llx %d times*********************** \n\n", mtime2s(NULL),  h->get_start().getOffset(), i);
         dead_code_elimination(bblocks.blist, RDS_UNROLL0);
 #if defined(DCFG_CASE)
-        //dump_cfg(name, _itoa(i, buf, 10), 1);
+        dump_cfg(name, _itoa(i, buf, 10), 1);
 #endif
     }
 
