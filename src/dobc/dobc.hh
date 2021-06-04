@@ -561,6 +561,7 @@ public:
     void            on_MULTIEQUAL();
     bool            all_inrefs_is_constant(void);
     bool            all_inrefs_is_adj(void);
+    bool            all_inrefs_is_top(void);
     void            loadram2out(Address &addr);
 };
 
@@ -722,8 +723,14 @@ struct flowblock {
     int         last_order() { return last_op()->start.getOrder();  }
 
     int         get_out_rev_index(int i) { return out[i].reverse_index;  }
-    /* 判断这个block是否指令为空 */
-    bool        is_empty(void);
+    /* 判断这个block是否指令为空
+
+    1. phi节点不算
+
+    @except_branch      计算指令总数时，不算branch
+    */
+    bool        is_empty(int except_branch);
+
     /* 判断这个block指令为空后，能否删除，有几种情况不删除 
     1. 有多个out边
     2. 有一条out边，但是指向自己

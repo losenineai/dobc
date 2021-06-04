@@ -402,15 +402,15 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 void dobc::plugin_ollvm()
 {
 #if 0
-    //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
+    funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
-    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
+    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x366f5));
 #else
 
-    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15f09));
-    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x132ed));
+    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15f09));
+    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x132ed));
 #endif
     fd_main->ollvm_deshell();
     loader->saveFile("test.so");
@@ -1405,6 +1405,17 @@ bool            pcodeop::all_inrefs_is_constant(void)
     return true;
 }
 
+bool            pcodeop::all_inrefs_is_top(void)
+{
+    int i;
+
+    for (i = 0; i < inrefs.size(); i++) {
+        if (!inrefs[i]->is_top()) return false;
+    }
+
+    return true;
+}
+
 bool            pcodeop::all_inrefs_is_adj(void)
 {
     int i;
@@ -1974,6 +1985,16 @@ int             pcodeop::compute(int inslot, flowblock **branch)
         in1 = get_in(1);
         if (in0->is_constant() && in1->is_constant()) {
             out->set_val1((uintb)in0->get_val() << (uintb)in1->get_val());
+        }
+        else if (in1->is_constant() && (in1->get_val() == 0x1f)
+            && (op = in0->def)
+            && (op->opcode == CPUI_INT_MULT)
+            && (op1 = op->get_in(0)->def)
+            && (op1->opcode == CPUI_INT_SUB)
+            && (op->get_in(1) == op1->get_in(0))
+            && (op1->get_in(1)->is_constant())
+            && (op1->get_in(1)->get_val() == 1)) {
+            out->set_val(0);
         }
         else
             out->type.height = a_top;
@@ -2643,7 +2664,7 @@ void        flowblock::set_initial_range(const Address &b, const Address &e)
     cover.insertRange(b.getSpace(), b.getOffset(), e.getOffset());
 }
 
-bool        flowblock::is_empty(void)
+bool        flowblock::is_empty(int except_branch)
 {
     pcodeop *op;
     list<pcodeop *>::iterator it;
@@ -2654,7 +2675,8 @@ bool        flowblock::is_empty(void)
 
     for (it = ops.begin(); it != ops.end(); it++) {
         op = *it;
-        if ((op->opcode == CPUI_BRANCH) || (op->opcode == CPUI_MULTIEQUAL)) continue;
+        if ((op->opcode == CPUI_MULTIEQUAL)) continue;
+        if (except_branch && (op->opcode == CPUI_BRANCH)) continue;
 
         return false;
     }
@@ -2667,7 +2689,7 @@ bool        flowblock::is_empty_delete(void)
     if (out.size() != 1) return false;
     if (get_out(0) == this) return false;
 
-    return is_empty();
+    return is_empty(0);
 }
 
 void        flowblock::insert(list<pcodeop *>::iterator iter, pcodeop *inst)
@@ -5867,8 +5889,10 @@ void        funcdata::dump_cfg(const string &name, const char *postfix, int dump
         }
     }
 
+#if 0
     if (k > 1000)
         dump_rank(fp);
+#endif
 
     fprintf(fp, "}");
 
