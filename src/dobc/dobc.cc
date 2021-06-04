@@ -2030,6 +2030,25 @@ int             pcodeop::compute(int inslot, flowblock **branch)
             && (op->get_in(0)->get_addr() == in0->def->get_in(1)->get_addr())) {
             out->set_val(0);
         }
+        /* 新增
+        r0 = ((x * (x - 1)) & 1 == 0)
+
+        因为x * (x - 1) 一定是偶数，所以与1为0
+        那么r0 == 1
+        */
+        else if (in0->is_constant() && (in0->get_val() == 1)
+            && in1->def 
+            && (in1->def->opcode == CPUI_INT_NEGATE)
+            && (op = in1->def->get_in(0)->def)
+            && (op->opcode == CPUI_INT_MULT)
+            && (op1 = op->get_in(0)->def)
+            && (op1->opcode == CPUI_INT_SUB)
+            && (op->get_in(1) == op1->get_in(0))
+            && (op1->get_in(1)->is_constant())
+            && (op1->get_in(1)->get_val() == 1)
+            ) {
+            out->set_val(1);
+        }
         /* (sp - even) & 0xfffffffe == sp - even
         因为sp一定是偶数，减一个偶数，也一定还是偶数，所以他和 0xfffffffe 相与值不变
         */
