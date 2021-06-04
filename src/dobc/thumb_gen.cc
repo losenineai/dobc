@@ -1206,8 +1206,10 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     }
                 }
                 else if ((p1->opcode == CPUI_CBRANCH) && isreg(pi0(p)) && pi1(p)->is_constant()) {
+                    imm = pi1(p)->get_val();
+
                     _cmp_imm(reg2i(pi0a(p)), imm);
-                    write_cbranch(b, ((p->opcode == CPUI_INT_EQUAL)?COND_EQ:COND_NE));
+                    write_cbranch(b, ((p->opcode == CPUI_INT_NOTEQUAL)?COND_NE:COND_EQ));
                 }
 
                 it = advance_to_inst_end(it);
