@@ -485,12 +485,14 @@ void        funcdata::place_multiequal(void)
                 p = *it++;
                 nextit = it;
 
+
                 if ((p->opcode == CPUI_MULTIEQUAL) && (p->inrefs.size() != bl->in.size())) {
                     op_destroy_ssa(p);
                     continue;
                 }
 
                 if ((p->opcode != CPUI_MULTIEQUAL) && !p->flags.copy_from_phi) break;
+
                 if ((p->output->get_addr() == addr)) {
                     multiop = p;
                     break;
@@ -498,9 +500,10 @@ void        funcdata::place_multiequal(void)
             }
 
             /* 假如说某个PHI节点已经被转成了copy节点，则说明这个值已经被常量化，这个节点在下次heritage
-            时已经被需要在插入phi 了。 
+            时已经不需要在插入phi 了。 
             FIXME:这个理解是否正确？*/
-            if ((it != bl->ops.end()) && p->flags.copy_from_phi) continue;
+            if (p->flags.copy_from_phi) continue;
+            //if ((it != bl->ops.end()) && p->flags.copy_from_phi) continue;
 
             if (!multiop) {
                 multiop = newop(bl->in.size(), bl->get_start());
@@ -510,14 +513,18 @@ void        funcdata::place_multiequal(void)
                 j = 0;
             }
             else {
+#if 1
                 /* 假如已经有个从phi节点转成的copy节点，删除它的输入节点 */
                 if (multiop->opcode == CPUI_COPY) {
+                    throw LowlevelError("meet copy ");
                     while (multiop->num_input() > 0)
                         op_remove_input(multiop, 0);
 
                     op_set_opcode(multiop, CPUI_MULTIEQUAL);
                     multiop->flags.copy_from_phi = 0;
                 }
+#else
+#endif
 
                 j = multiop->num_input();
             }
@@ -1117,6 +1124,10 @@ int         funcdata::ollvm_detect_propchain2(ollvmhead *oh, flowblock *&from, b
 
     std::sort(invec.begin(), invec.end(), block_dfnum_cmp);
 
+    /* 调试用 */
+    static int trace = 0;
+    trace++;
+
     p1 = p;
     for (i = 0; i < invec.size(); i++) {
         e = invec[i];
@@ -1192,6 +1203,14 @@ int         funcdata::ollvm_detect_propchain2(ollvmhead *oh, flowblock *&from, b
                     dump_cfg(name, "lcts", 1);
                     return 2;
                 }
+            }
+
+            if ((p1->opcode == CPUI_MULTIEQUAL) && p1->all_inrefs_is_top() && p1->parent->is_empty(1)) {
+                remove_empty_block(p1->parent);
+                structure_reset();
+                heritage_clear();
+                heritage();
+                return 2;
             }
 
             top = collect_all_const_defs(p1, defs, dfnum);
