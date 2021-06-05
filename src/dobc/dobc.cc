@@ -402,10 +402,10 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 void dobc::plugin_ollvm()
 {
 #if 0
-    funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
+    //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
-    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
+    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x366f5));
 #else
 
@@ -413,6 +413,12 @@ void dobc::plugin_ollvm()
     funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x132ed));
 #endif
     fd_main->ollvm_deshell();
+
+#if 0
+    fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15f09));
+    fd_main->ollvm_deshell();
+#endif
+
     loader->saveFile("test.so");
 }
 
@@ -2052,10 +2058,9 @@ int             pcodeop::compute(int inslot, flowblock **branch)
             out->set_val(0);
         }
         /* 新增
-        r0 = ((x * (x - 1)) & 1 == 0)
+        rn = (~(x * (x - 1))) & 1 == 0
 
-        因为x * (x - 1) 一定是偶数，所以与1为0
-        那么r0 == 1
+        那么rn == 1
         */
         else if (in0->is_constant() && (in0->get_val() == 1)
             && in1->def 
@@ -2069,6 +2074,20 @@ int             pcodeop::compute(int inslot, flowblock **branch)
             && (op1->get_in(1)->get_val() == 1)
             ) {
             out->set_val(1);
+        }
+        /* 
+        rn = ((x * (x - 1)) & 1
+        rn = 0;
+        */
+        else if (in1->is_constant() && (in1->get_val() == 1)
+            && (op = in0->def)
+            && (op->opcode == CPUI_INT_MULT)
+            && (op1 = op->get_in(0)->def)
+            && (op1->opcode == CPUI_INT_SUB)
+            && (op1->get_in(0) == op->get_in(1))
+            && (op1->get_in(1)->is_constant())
+            && (op1->get_in(1)->get_val() == 1)) {
+            out->set_val(0);
         }
         /* (sp - even) & 0xfffffffe == sp - even
         因为sp一定是偶数，减一个偶数，也一定还是偶数，所以他和 0xfffffffe 相与值不变
