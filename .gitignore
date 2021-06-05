@@ -1,4 +1,7 @@
 
 build
-data
 data/*.idb
+data/**/*.id*
+data/**/*.nam
+data/**/*.til
+data/**/*.idb

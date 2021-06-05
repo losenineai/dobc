@@ -485,12 +485,14 @@ void        funcdata::place_multiequal(void)
                 p = *it++;
                 nextit = it;
 
+
                 if ((p->opcode == CPUI_MULTIEQUAL) && (p->inrefs.size() != bl->in.size())) {
                     op_destroy_ssa(p);
                     continue;
                 }
 
                 if ((p->opcode != CPUI_MULTIEQUAL) && !p->flags.copy_from_phi) break;
+
                 if ((p->output->get_addr() == addr)) {
                     multiop = p;
                     break;
@@ -498,9 +500,10 @@ void        funcdata::place_multiequal(void)
             }
 
             /* 假如说某个PHI节点已经被转成了copy节点，则说明这个值已经被常量化，这个节点在下次heritage
-            时已经被需要在插入phi 了。 
+            时已经不需要在插入phi 了。 
             FIXME:这个理解是否正确？*/
-            if ((it != bl->ops.end()) && p->flags.copy_from_phi) continue;
+            if (p->flags.copy_from_phi) continue;
+            //if ((it != bl->ops.end()) && p->flags.copy_from_phi) continue;
 
             if (!multiop) {
                 multiop = newop(bl->in.size(), bl->get_start());
@@ -510,14 +513,18 @@ void        funcdata::place_multiequal(void)
                 j = 0;
             }
             else {
+#if 1
                 /* 假如已经有个从phi节点转成的copy节点，删除它的输入节点 */
                 if (multiop->opcode == CPUI_COPY) {
+                    throw LowlevelError("meet copy ");
                     while (multiop->num_input() > 0)
                         op_remove_input(multiop, 0);
 
                     op_set_opcode(multiop, CPUI_MULTIEQUAL);
                     multiop->flags.copy_from_phi = 0;
                 }
+#else
+#endif
 
                 j = multiop->num_input();
             }
@@ -1025,6 +1032,8 @@ int         funcdata::ollvm_detect_frameworkinfo()
     }
     printf("search maybe safezone alias end...\n");
 
+    ollvm_copy_expand_all_vmhead();
+
     return 0;
 }
 
@@ -1046,7 +1055,8 @@ int         funcdata::ollvm_detect_propchains2(flowblock *&from, blockedge *&out
 
         if (oh->h->flags.f_dead) continue;
 
-        if (!ollvm_detect_propchain2(oh, from, outedge, 0))
+        ret = ollvm_detect_propchain2(oh, from, outedge, 0);
+        if (!ret)
             goto success_label;
     }
 
@@ -1088,7 +1098,7 @@ int         funcdata::ollvm_detect_propchain2(ollvmhead *oh, flowblock *&from, b
     if (oh->h->flags.f_dead) return -1;
 
     flowblock *h = oh->h, *pre, *pre1, *cur, *cur1, *h1;
-    int i, j, k, top;
+    int i, j, k, top, dfnum;
     pcodeop *p = h->find_pcode_def(oh->st1), *p1, *p2;
     varnode *vn;
     blockedge *e;
@@ -1113,6 +1123,10 @@ int         funcdata::ollvm_detect_propchain2(ollvmhead *oh, flowblock *&from, b
     }
 
     std::sort(invec.begin(), invec.end(), block_dfnum_cmp);
+
+    /* 调试用 */
+    static int trace = 0;
+    trace++;
 
     p1 = p;
     for (i = 0; i < invec.size(); i++) {
@@ -1191,7 +1205,15 @@ int         funcdata::ollvm_detect_propchain2(ollvmhead *oh, flowblock *&from, b
                 }
             }
 
-            top = collect_all_const_defs(p1, defs);
+            if ((p1->opcode == CPUI_MULTIEQUAL) && p1->all_inrefs_is_top() && p1->parent->is_empty(1)) {
+                remove_empty_block(p1->parent);
+                structure_reset();
+                heritage_clear();
+                heritage();
+                return 2;
+            }
+
+            top = collect_all_const_defs(p1, defs, dfnum);
             p1->flags.mark_cond_copy_prop = 1;
 
             if (defs.size() > 1) {
@@ -1233,12 +1255,64 @@ int         funcdata::ollvm_detect_propchain3(flowblock *&from, blockedge *&oute
     return -1;
 }
 
+int         funcdata::ollvm_copy_expand_all_vmhead()
+{
+    int i;
+
+    for (i = 0; i < ollvm.heads.size(); i++) {
+        while (0 == ollvm_copy_expand_vmhead_phi(ollvm.heads[i]));
+    }
+
+    return 0;
+}
+
+int         funcdata::ollvm_copy_expand_vmhead_phi(ollvmhead *oh)
+{
+    flowblock *h = oh->h, *pre, *cur, *h1;
+    int i;
+    pcodeop *p = h->find_pcode_def(oh->st1), *p1;
+    varnode *vn;
+    blockedge *e;
+    vector<blockedge *> invec;
+
+    for (i = 0; i < h->in.size(); i++) {
+        e = & h->in[i];
+        e->index = i;
+        invec.push_back(&h->in[i]);
+    }
+
+    std::sort(invec.begin(), invec.end(), block_dfnum_cmp);
+
+    p1 = p;
+    for (i = 0; i < invec.size(); i++) {
+        e = invec[i];
+        pre = e->point;
+        cur = h;
+        vn = p->get_in(e->index);
+
+        p1 = vn->def;
+        h1 = p1->parent;
+
+        if (p1->opcode != CPUI_MULTIEQUAL)
+            continue;
+
+        /* 假如某个in节点是phi节点
+        1. 刚好邻接vmhead，那么尝试搜索它
+        */
+        if (h->is_adjacent(h1)) 
+            if (!ollvm_do_copy_expand (p1, pre, pre->get_out_index(cur))) return 0;
+    }
+
+    return -1;
+}
+
 int         funcdata::ollvm_detect_fsm(ollvmhead *oh)
 {
     flowblock *h = oh->h;
     list<pcodeop *>::reverse_iterator it;
     varnode *in0, *in1, *in, *vn;
     pcodeop *store;
+    int dfnum;
 
     for (it = h->ops.rbegin(); it != h->ops.rend(); it++) {
         pcodeop *p = *it;
@@ -1253,7 +1327,7 @@ int         funcdata::ollvm_detect_fsm(ollvmhead *oh)
                 vector<varnode *> defs;
 
                 if (in0->def && (in0->def->opcode == CPUI_MULTIEQUAL)) {
-                    collect_all_const_defs(in0->def, defs);
+                    collect_all_const_defs(in0->def, defs, dfnum);
 
                     if (defs.size() > 1) {
                         oh->st1 = in0->get_addr();

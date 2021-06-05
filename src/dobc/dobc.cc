@@ -402,10 +402,10 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 void dobc::plugin_ollvm()
 {
 #if 0
-    //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
+    funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
-    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
+    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x366f5));
 #else
 
@@ -1405,6 +1405,17 @@ bool            pcodeop::all_inrefs_is_constant(void)
     return true;
 }
 
+bool            pcodeop::all_inrefs_is_top(void)
+{
+    int i;
+
+    for (i = 0; i < inrefs.size(); i++) {
+        if (!inrefs[i]->is_top()) return false;
+    }
+
+    return true;
+}
+
 bool            pcodeop::all_inrefs_is_adj(void)
 {
     int i;
@@ -1975,6 +1986,16 @@ int             pcodeop::compute(int inslot, flowblock **branch)
         if (in0->is_constant() && in1->is_constant()) {
             out->set_val1((uintb)in0->get_val() << (uintb)in1->get_val());
         }
+        else if (in1->is_constant() && (in1->get_val() == 0x1f)
+            && (op = in0->def)
+            && (op->opcode == CPUI_INT_MULT)
+            && (op1 = op->get_in(0)->def)
+            && (op1->opcode == CPUI_INT_SUB)
+            && (op->get_in(1) == op1->get_in(0))
+            && (op1->get_in(1)->is_constant())
+            && (op1->get_in(1)->get_val() == 1)) {
+            out->set_val(0);
+        }
         else
             out->type.height = a_top;
         break;
@@ -2029,6 +2050,25 @@ int             pcodeop::compute(int inslot, flowblock **branch)
             && (op->get_in(0)->get_addr() == op->get_in(1)->get_addr())
             && (op->get_in(0)->get_addr() == in0->def->get_in(1)->get_addr())) {
             out->set_val(0);
+        }
+        /* 新增
+        r0 = ((x * (x - 1)) & 1 == 0)
+
+        因为x * (x - 1) 一定是偶数，所以与1为0
+        那么r0 == 1
+        */
+        else if (in0->is_constant() && (in0->get_val() == 1)
+            && in1->def 
+            && (in1->def->opcode == CPUI_INT_NEGATE)
+            && (op = in1->def->get_in(0)->def)
+            && (op->opcode == CPUI_INT_MULT)
+            && (op1 = op->get_in(0)->def)
+            && (op1->opcode == CPUI_INT_SUB)
+            && (op->get_in(1) == op1->get_in(0))
+            && (op1->get_in(1)->is_constant())
+            && (op1->get_in(1)->get_val() == 1)
+            ) {
+            out->set_val(1);
         }
         /* (sp - even) & 0xfffffffe == sp - even
         因为sp一定是偶数，减一个偶数，也一定还是偶数，所以他和 0xfffffffe 相与值不变
@@ -2624,7 +2664,7 @@ void        flowblock::set_initial_range(const Address &b, const Address &e)
     cover.insertRange(b.getSpace(), b.getOffset(), e.getOffset());
 }
 
-bool        flowblock::is_empty(void)
+bool        flowblock::is_empty(int except_branch)
 {
     pcodeop *op;
     list<pcodeop *>::iterator it;
@@ -2635,7 +2675,8 @@ bool        flowblock::is_empty(void)
 
     for (it = ops.begin(); it != ops.end(); it++) {
         op = *it;
-        if ((op->opcode == CPUI_BRANCH) || (op->opcode == CPUI_MULTIEQUAL)) continue;
+        if ((op->opcode == CPUI_MULTIEQUAL)) continue;
+        if (except_branch && (op->opcode == CPUI_BRANCH)) continue;
 
         return false;
     }
@@ -2648,7 +2689,7 @@ bool        flowblock::is_empty_delete(void)
     if (out.size() != 1) return false;
     if (get_out(0) == this) return false;
 
-    return is_empty();
+    return is_empty(0);
 }
 
 void        flowblock::insert(list<pcodeop *>::iterator iter, pcodeop *inst)
@@ -3458,13 +3499,13 @@ int         funcdata::cond_copy_expand(pcodeop *p, flowblock *b, int outslot)
 {
     flowblock *b1, *b2, *pb1, *pb2, *outb;
     vector<varnode *> defs;
-    int i, have_top;
+    int i, have_top, dfnum;
     varnode *def;
     assert(p->opcode == CPUI_COPY || p->opcode == CPUI_LOAD || p->opcode == CPUI_MULTIEQUAL);
     assert(outslot >= 0);
     outb = b->get_out(outslot);
 
-    have_top = collect_all_const_defs(p, defs);
+    have_top = collect_all_const_defs(p, defs, dfnum);
 
     if (defs.size() == 0)
         return -1;
@@ -3510,7 +3551,41 @@ int         funcdata::cond_copy_expand(pcodeop *p, flowblock *b, int outslot)
     return 0;
 }
 
-int         funcdata::collect_all_const_defs(pcodeop *start, vector<varnode *> &defs)
+int         funcdata::ollvm_do_copy_expand(pcodeop *p, flowblock *b, int outslot)
+{
+    vector<varnode *> defs;
+    int top, dfnum;
+
+    /*
+    我们处理以下情况的代码：
+
+1.    v1 = -2117566407;
+2.    if ( !((x_71 * (x_71 - 1)) << 31) )
+3.        v1 = 1048196999;
+4.    if ( y_72 < 10 )
+5.        v1 = 1048196999;
+
+    在这种情况下，没必要去展开指令5处的代码，因为v1的值其实就2个，直接做常数拷贝扩展。
+    */
+    if (p->opcode != CPUI_MULTIEQUAL) return -1;
+    if (p->all_inrefs_is_constant()) return -1;
+    if (p->inrefs.size() != 2) return -1;
+    if (p->parent->out.size() != 1) return -1;
+
+    top = collect_all_const_defs(p, defs, dfnum);
+    if (top)
+        return -1;
+
+    if (defs.size() == dfnum)  return -1;
+
+    cond_copy_expand(p, b, outslot);
+    heritage_clear();
+    heritage();
+
+    return 0;
+}
+
+int         funcdata::collect_all_const_defs(pcodeop *start, vector<varnode *> &defs, int &dfnum)
 {
     pcodeop *p, *def;
     pcodeop_set visit;
@@ -3518,6 +3593,8 @@ int         funcdata::collect_all_const_defs(pcodeop *start, vector<varnode *> &
     vector<pcodeop *> q;
     varnode *in;
     int i, j, have_top_def = 0;
+
+    dfnum = 0;
 
     q.push_back(start);
     visit.insert(start);
@@ -3528,6 +3605,7 @@ int         funcdata::collect_all_const_defs(pcodeop *start, vector<varnode *> &
 #define cad_push_def(in)        do { \
             def = (in)->def; \
             if (in->is_constant()) { \
+                dfnum++; \
                 for (j = 0; j < defs.size(); j++) { \
                     if (defs[j]->get_val() == in->get_val()) break; \
                 } \
@@ -3941,7 +4019,7 @@ int         funcdata::ollvm_deshell()
         printf("[%s] loop_unrolling sub_%llx %d times*********************** \n\n", mtime2s(NULL),  h->get_start().getOffset(), i);
         dead_code_elimination(bblocks.blist, RDS_UNROLL0);
 #if defined(DCFG_CASE)
-        //dump_cfg(name, _itoa(i, buf, 10), 1);
+        dump_cfg(name, _itoa(i, buf, 10), 1);
 #endif
     }
 
@@ -5811,8 +5889,10 @@ void        funcdata::dump_cfg(const string &name, const char *postfix, int dump
         }
     }
 
+#if 0
     if (k > 1000)
         dump_rank(fp);
+#endif
 
     fprintf(fp, "}");
 

@@ -561,6 +561,7 @@ public:
     void            on_MULTIEQUAL();
     bool            all_inrefs_is_constant(void);
     bool            all_inrefs_is_adj(void);
+    bool            all_inrefs_is_top(void);
     void            loadram2out(Address &addr);
 };
 
@@ -722,8 +723,14 @@ struct flowblock {
     int         last_order() { return last_op()->start.getOrder();  }
 
     int         get_out_rev_index(int i) { return out[i].reverse_index;  }
-    /* 判断这个block是否指令为空 */
-    bool        is_empty(void);
+    /* 判断这个block是否指令为空
+
+    1. phi节点不算
+
+    @except_branch      计算指令总数时，不算branch
+    */
+    bool        is_empty(int except_branch);
+
     /* 判断这个block指令为空后，能否删除，有几种情况不删除 
     1. 有多个out边
     2. 有一条out边，但是指向自己
@@ -1535,6 +1542,7 @@ public:
     int         ollvm_detect_propchains2(flowblock *&from, blockedge *&outedge);
     int         ollvm_detect_fsm(ollvmhead *oh);
     int         ollvm_check_fsm(varnode *vn);
+    int         ollvm_combine_propchain(ollvmhead *oh);
 
     bool        use_outside(varnode *vn);
     void        use2undef(varnode *vn);
@@ -1701,6 +1709,12 @@ public:
     这个改完以后，程序的语义没有发生任何变化
     */
     int         cond_copy_expand(pcodeop *p, flowblock *b, int outslot);
+
+    /* 测试是否需要 copy_expand，必须是Phi节点 */
+    int         ollvm_copy_expand_vmhead_phi(ollvmhead *oh);
+    int         ollvm_copy_expand_all_vmhead();
+    int         ollvm_do_copy_expand(pcodeop *p, flowblock *b, int outslot);
+
     /*
     收集vn的所有def，维护一个队列
 
@@ -1708,10 +1722,12 @@ public:
     2. v来自于phi，扫描phi的所有in
     3. 不是copy，也不是phi，认为其实一个定值
 
+    @defs       这个数组里存了扫描到的常量，已去重
+    @dfnum      这个值表示，里面有多少次常量的定义，不去重
     @return     0           当前v的所有def都是常量，defs里的def就是v的所有def
                 1           v有值类型为top的def
     */
-    int         collect_all_const_defs(pcodeop *start, vector<varnode *> &defs);
+    int         collect_all_const_defs(pcodeop *start, vector<varnode *> &defs, int &dfnum);
     /* 裁剪由collect_all_const_defs收集到的常量定义 
 
     有如下代码:
@@ -1724,8 +1740,24 @@ public:
     我们会从defs里面删除不等于对应常量的常量
     */
     int         cut_const_defs_on_condition(pcodeop *start, vector<varnode *> &defs);
+    /*
+    label0: 
+        cmp r0, r1
+        goto label4; 
+    label1: 
+        cmp r1, r2
+        goto label4; 
+
+    label:
+        bgt label5
+
+    全部修改成:
+
+    */
     void        rewrite_no_sub_cbranch_blk(flowblock *b);
     void        rewrite_no_sub_cbranch_blks(vector<flowblock *> &blks);
+
+    /**/
 
     /* 合并这些block中，最长公共尾串 
     action:
@@ -1761,6 +1793,7 @@ public:
     /* 尝试去搜索一个block的所有in节点，找到 */
     int         combine_lcts_blk(flowblock *b);
     int         combine_lcts_all(void);
+
     int         ollvm_combine_lcts(pcodeop *p);
 
     int         cmp_itblock_cbranch_conditions(pcodeop *cbr1, pcodeop* cbr2);
