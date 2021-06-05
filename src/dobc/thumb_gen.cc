@@ -1671,6 +1671,7 @@ inst_label:
         // dump_one_inst(ind - 4, NULL);
     }
 
+
     for (i = 0; i < fix_vldr_list.size(); i++)
         fix_vldr(fix_vldr_list[i]);
 
@@ -1686,7 +1687,7 @@ void thumb_gen::fix_vldr(fix_vldr_item &vldr)
     uint1 fillbuf[16];
     int siz = vldr.end->output->get_size(), oind = ind, offset;
 
-    offset = (oind - vldr.ind - 4);
+    offset = oind - ((vldr.ind + 4) & ~3);
     if (offset >= 1024)
         vm_error("vldr only support <1024 offset");
 
