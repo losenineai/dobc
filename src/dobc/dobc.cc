@@ -1377,6 +1377,79 @@ void            pcodeop::on_MULTIEQUAL()
         output->set_top();
 }
 
+int             pcodeop::on_cond_MULTIEQUAL()
+{
+    funcdata *fd = parent->fd;
+
+    if (inrefs.size() != 2) 
+        return -1;
+
+    varnode *constvn = get_const_in();
+    varnode *topvn = get_top_in(), *condvn, *vn, *vn1;
+    pcodeop *topp, *condop;
+    flowblock *topb, *constb, *topb1, *topb2, *if2;
+
+    if (!(topp = topvn->def) || !constvn->def || (topp->inrefs.size() != 2) || !topp->all_inrefs_is_constant())
+        return -1;
+
+    topb1 = topp->parent;
+
+    /* 保证这个phi 处于这样一个结构中:
+        topb2
+       /    \
+      if2    /
+       \    /
+        topb1
+        /   \
+      xorb  /
+       \   /
+        topb
+       /   \
+    constb /
+       \  /
+      this(parent)
+    */
+
+    if (!fd->is_ifthenfi_structure((topb = topp->parent), constb = constvn->def->parent, parent)
+        || topb->in.size() != 2
+        || !fd->is_ifthenfi_structure(topb1 = topb->get_biggest_dfnum_in(),  topb1->get_cbranch_xor_out(topb), topb)
+        || (topb1->in.size() != 2)
+        || !(topb2 = topb1->get_biggest_dfnum_in())
+        || !fd->is_ifthenfi_structure(topb2, if2 = topb2->get_cbranch_xor_out(topb1), topb1))
+        return -1;
+
+    int cond = topb->get_cbranch_cond();
+
+    if (cond == COND_EQ) {
+        topp = topvn->def;
+
+        pcodeop *zrp = topb->get_last_oper_zr();
+        pcodeop *core;
+        if (zrp->opcode == CPUI_COPY) {
+            zrp = zrp->get_in(0)->def;
+            core = zrp->get_in(0)->def;
+            if (zrp->get_in(1)->is_constant() && (zrp->get_in(1)->get_val() == 0)
+                && (core->opcode == CPUI_INT_XOR) && (pi1(core)->get_val() == 0)
+                && (condop = (condvn = pi0(core))->def)
+                && (condop->opcode == CPUI_MULTIEQUAL)
+                && (condop->all_inrefs_is_constant())
+                && topb1->have_same_cmp_condition(topb2)
+                && topb1->have_same_cmp_condition(topb)
+                && (vn = topb->get_false_vn(this))
+                && vn->is_constant()
+                && (vn1 = topb1->get_true_vn(topp))
+                && vn1->is_constant()
+                && vn->get_val() == vn1->get_val()) {
+                output->set_val(vn->get_val());
+                return 0;
+            }
+        }
+    }
+
+    return -1;
+}
+
+
 void            pcodeop::loadram2out(Address &addr)
 {
     dobc *d = parent->fd->d;
@@ -2784,6 +2857,11 @@ pcodeop*    flowblock::get_cbranch_sub_from_cmp(void)
     return NULL;
 }
 
+pcodeop*    flowblock::get_last_oper_zr(void)
+{
+    return NULL;
+}
+
 bool        flowblock::is_stack_check_fail()
 {
     if (out.size()) return false;
@@ -2793,6 +2871,28 @@ bool        flowblock::is_stack_check_fail()
         return true;
 
     return false;
+}
+
+int         flowblock::get_cbranch_cond()
+{
+    pcodeop *op = last_op();
+
+    return -1;
+}
+
+bool        flowblock::have_same_cmp_condition(flowblock *b)
+{
+    return false;
+}
+
+varnode*    flowblock::get_false_vn(pcodeop *phi)
+{
+    return NULL;
+}
+
+varnode*    flowblock::get_true_vn(pcodeop *phi)
+{
+    return NULL;
 }
 
 int         flowblock::incoming_forward_branches()
@@ -3401,7 +3501,7 @@ void        funcdata::remove_calculated_loop(flowblock *lheader)
     varnode *vn;
 
     do {
-        int inslot = cur->get_inslot(pre), ret;
+        int inslot = cur->get_in_index(pre), ret;
         branch = NULL;
 
         /* 因为这个计算可计算循环，不需要把节点重新拉出来，所以不加入trace列表 */
@@ -3485,7 +3585,6 @@ b0里面只允许有1-2行代码
 int         funcdata::cond_copy_propagation(varnode *phi)
 {
     pcodeop *p = phi->def;
-    int i;
     flowblock *b0, *b1, *top;
 
     if (!p 
@@ -3497,8 +3596,8 @@ int         funcdata::cond_copy_propagation(varnode *phi)
     b0 = p->parent->get_in(0);
     b1 = p->parent->get_in(1);
 
-    if ((i = b0->get_inslot(b1)) == -1) {
-        if ((i = b1->get_inslot(b0)) == -1)
+    if (!b0->is_in(b1)) {
+        if (!b1->is_in(b0))
             throw LowlevelError("cond_copy_propagation pattern mismatch");
         top = b1;
     }
@@ -7000,7 +7099,7 @@ bool        funcdata::loop_unrolling4(flowblock *h, int vm_caseindex, uint32_t f
 #if 1
         blks.clear();
         collect_blocks_to_node(blks, b, h);
-        inslot = h->get_inslot(blks[0]);
+        inslot = h->get_in_index(blks[0]);
         iv = detect_induct_variable(h, c);
         vn = iv->def->get_in(inslot);
 
@@ -7009,7 +7108,7 @@ bool        funcdata::loop_unrolling4(flowblock *h, int vm_caseindex, uint32_t f
 
         if ((blks.size() > 1) && vn->is_constant()) {
             for (i = 1; i < blks.size(); i++) {
-                inslot = h->get_inslot(blks[i]);
+                inslot = h->get_in_index(blks[i]);
                 vn1 = iv->def->get_in(inslot);
 
                 if (!vn1->is_constant() || (vn1->get_val() != vn->get_val()))
@@ -7139,7 +7238,7 @@ flowblock*       funcdata::loop_unrolling(flowblock *h, flowblock *end, uint32_t
         printf("\tprocess flowblock sub_%llx\n", cur->get_start().getOffset());
 
         it = cur->ops.begin();
-        inslot = cur->get_inslot(prev);
+        inslot = cur->get_in_index(prev);
         assert(inslot >= 0);
 
         for (; it != cur->ops.end(); it++) {
@@ -7413,6 +7512,14 @@ char*       funcdata::print_indent(void)
     buf[i] = 0;
 
     return buf;
+}
+
+bool        funcdata::is_ifthenfi_structure(flowblock *a, flowblock *b, flowblock *c)
+{
+    if (!a->is_cbranch()) return false;
+    if ((b->get_0out() == c) && (b->get_0in() == a)) return true;
+
+    return false;
 }
 
 bool        funcdata::test_strict_alias(pcodeop *load, pcodeop *store)

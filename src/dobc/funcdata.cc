@@ -68,7 +68,7 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
         printf("\tprocess flowblock sub_%llx\n", cur->get_start().getOffset());
 
         it = cur->ops.begin();
-        inslot = cur->get_inslot(prev);
+        inslot = cur->get_in_index(prev);
 
         for (ret = 0; it != cur->ops.end(); it++) {
             p = *it;
@@ -1108,7 +1108,7 @@ int         funcdata::ollvm_detect_propchain2(ollvmhead *oh, flowblock *&from, b
             && (p1 = p->get_in(0)->def)
             && (p1->opcode == CPUI_MULTIEQUAL)
             && p1->all_inrefs_is_constant()
-            && (pre = p1->parent) && (h->get_inslot(pre) >= 0)) {
+            && (pre = p1->parent) && h->is_in(pre)) {
         }
         else
             return -1;
