@@ -13,9 +13,18 @@ msbuild dobc.sln
 
 ## Usage
 
-
+### show help
 ```
 dobc -help
+```
+### de-ollvm one function in one so library
+```
+dobc -d [funcaddr] [soname] -o output.so 
+```
+
+### de-ollvm one so library
+```
+dobc soname -o output.so
 ```
 
 ## APK be de-obfusation
