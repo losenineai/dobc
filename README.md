@@ -11,6 +11,10 @@ cmake ..
 msbuild dobc.sln
 ```
 
+## Usage
+
+>> help
+
 ## APK be de-obfusation
 
 | APK-cn       | ollvm-so      | so-md5  |
