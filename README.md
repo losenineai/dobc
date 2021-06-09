@@ -30,7 +30,7 @@ dobc soname -o output.so
 
 ## APK be de-obfusation
 
-Some APK test by manual, becuase CI/CD hard to work close-source so。
+Some APK test by manual, becuase auto-test hard to work close-source so。
 
 | APK-cn       | ollvm-so      | so-md5  | decode-so | manual | 
 | ------------ |:-------------:| -----:|-----:| -----:| 
