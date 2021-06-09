@@ -3,7 +3,7 @@
 1. dobc now only work success in Windows10 and VS2017.
 2. dobc now only work success in thumb mode so.
 
-## Build And Compile
+## Build
 
 ```
 mkdir build
