@@ -1434,7 +1434,10 @@ int             pcodeop::on_cond_MULTIEQUAL()
                 && (condop->opcode == CPUI_MULTIEQUAL)
                 && (condop->all_inrefs_is_constant())
                 && topb1->have_same_cmp_condition(topb2)
-                && topb1->have_same_cmp_condition(topb)
+                && (vn = topb2->get_false_vn(condop))
+                && topb1->lead_to_false_edge(condop, condop->get_slot(vn))
+                && (vn = topb2->get_true_vn(condop))
+                && topb1->lead_to_true_edge(condop, condop->get_slot(vn))
                 && (vn = topb->get_false_vn(this))
                 && vn->is_constant()
                 && (vn1 = topb1->get_true_vn(topp))
@@ -2859,6 +2862,14 @@ pcodeop*    flowblock::get_cbranch_sub_from_cmp(void)
 
 pcodeop*    flowblock::get_last_oper_zr(void)
 {
+    list<pcodeop *>::iterator it = ops.end();
+    dobc *d = fd->d;
+
+    do {
+        pcodeop *p = *--it;
+        if (p->output && poa(p) == d->zr_addr) return p;
+    } while (it != ops.begin());
+
     return NULL;
 }
 
@@ -2875,23 +2886,125 @@ bool        flowblock::is_stack_check_fail()
 
 int         flowblock::get_cbranch_cond()
 {
-    pcodeop *op = last_op();
+    list<pcodeop *>::iterator it = find_inst_first_op(*--ops.end());
+    dobc *d = fd->d;
+
+    /* 这里要全部重写，这样一个个if pattern识别过去，我会累死的
+    可能会改成公共前缀的某种trie树来做。 */
+    if ((*it)->opcode == CPUI_INT_EQUAL
+        && (*it)->get_in(0)->get_addr() == d->zr_addr
+        && (*it)->get_in(1)->is_constant()
+        && (*it)->get_in(1)->get_val() == 0
+        && (*++it)->opcode == CPUI_BOOL_NEGATE
+        && (*++it)->opcode == CPUI_CBRANCH)
+        return COND_EQ;
 
     return -1;
 }
 
 bool        flowblock::have_same_cmp_condition(flowblock *b)
 {
+    list<pcodeop *>::iterator it1, it2;
+
+    it1 = find_inst_first_op(get_cbranch_sub_from_cmp());
+    it2 = find_inst_first_op(b->get_cbranch_sub_from_cmp());
+
+    for (; it1 != ops.end() && it2 != ops.end(); it1++, it2++) {
+        if (pcodeop_struct_cmp(*it1, *it2)) return false;
+        if ((*it1)->opcode == CPUI_CBRANCH && (*it2)->opcode == CPUI_CBRANCH) return true;
+    }
+
     return false;
+}
+
+int         flowblock::lead_to_edge(pcodeop *phi, int select)
+{
+    list<pcodeop *>::iterator it = phi->basiciter;
+    flowblock *branch = NULL;
+    map<pcodeop *, valuetype, pcodeop_cmp> opmap;
+    map<pcodeop *, valuetype, pcodeop_cmp>::iterator oit;
+    int ret;
+
+    for (; it != ops.end(); it++) {
+        pcodeop *p = *it;
+
+        ret = fd->static_trace(p, select, &branch);
+    }
+
+    fd->static_trace_restore();
+
+    if (ret != ERR_MEET_CALC_BRANCH) return -1;
+
+    return (get_false_edge()->point == branch) ? 0 : 1;
+}
+
+bool        flowblock::lead_to_false_edge(pcodeop *phi, int select)
+{
+    return (lead_to_edge(phi, select) == 0) ? true : false;
+}
+
+bool        flowblock::lead_to_true_edge(pcodeop *phi, int select)
+{
+    return (lead_to_edge(phi, select) == 1) ? true : false;
+}
+
+list<pcodeop*>::iterator    flowblock::find_inst_first_op(pcodeop *p)
+{
+    if (p == NULL) return ops.end();
+
+    list<pcodeop *>::iterator it = p->basiciter;
+    const Address &addr = p->get_addr();
+
+    for (; (*it)->get_addr() == addr; it--) {
+        if (it == ops.begin()) return it;
+    }
+
+    return ++it;
 }
 
 varnode*    flowblock::get_false_vn(pcodeop *phi)
 {
+    if (!is_cbranch()) return NULL;
+
+    flowblock *b = phi->parent;
+
+    for (int i = 0; i < out.size(); i++) {
+        blockedge *e = &out[i];
+
+        if (!(e->label & a_true_edge)) {
+            if (e->point == phi->parent)
+                return phi->get_in(e->reverse_index);
+            else {
+                e = &e->point->out[0];
+                return phi->get_in(e->reverse_index);
+            }
+        }
+    }
+
     return NULL;
 }
 
+/*
+*/
 varnode*    flowblock::get_true_vn(pcodeop *phi)
 {
+    if (!is_cbranch()) return NULL;
+
+    flowblock *b = phi->parent;
+
+    for (int i = 0; i < out.size(); i++) {
+        blockedge *e = &out[i];
+
+        if (e->label & a_true_edge) {
+            if (e->point == phi->parent)
+                return phi->get_in(e->reverse_index);
+            else {
+                e = &e->point->out[0];
+                return phi->get_in(e->reverse_index);
+            }
+        }
+    }
+
     return NULL;
 }
 
@@ -4167,6 +4280,33 @@ int         funcdata::ollvm_deshell()
     dump_exe();
 
     return 0;
+}
+
+int         funcdata::static_trace(pcodeop *op, int inslot, flowblock **branch)
+{
+    op->set_trace();
+    valuemap::iterator it = tracemap.find(op);
+
+    if (it == tracemap.end()) {
+        if (op->output)
+            tracemap[op] = op->output->type;
+    }
+
+    return op->compute(inslot, branch);
+}
+
+void        funcdata::static_trace_restore()
+{
+    valuemap::iterator it = tracemap.begin();
+
+    for (; it != tracemap.end(); it++) {
+        pcodeop *p = it->first;
+
+        p->clear_trace();
+        p->output->type = tracemap[p];
+    }
+
+    tracemap.clear();
 }
 
 int        funcdata::vmp360_deshell()
