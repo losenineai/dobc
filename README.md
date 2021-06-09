@@ -1,6 +1,7 @@
 # dobc
 
-This Project now only test in Winddows10 and VS2017.
+1. dobc now only test in Winddows10 and VS2017.
+2. dobc now only work in thumb mode so.
 
 ## Build And Compile
 
