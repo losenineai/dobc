@@ -40,4 +40,3 @@ Some APK test by manual, becuase CI/CD hard to work close-source so。
 | liblazarus  | [liblazarus](https://github.com/baikaishiuc/dobc/blob/main/data/liblazarus/liblazarus.so)     |       |  [liblazarus.so](https://github.com/baikaishiuc/dobc/blob/main/data/liblazarus/test.so) ||
 
 ## Wiki
-## Sponsor
