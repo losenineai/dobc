@@ -559,9 +559,56 @@ public:
     bool            in_sp_alloc_range(varnode *in);
 
     void            on_MULTIEQUAL();
+    /*
+    识别以下pattern(里面的数可以替换):
+
+    v7 = y_72;
+    if ( y_72 > 9 )
+      v6 = 1;
+    v8 = 1467139458;
+    if ( y_72 > 9 )
+      v8 = -486874641;
+    if ( v6 )
+      v8 = 1467139458;
+
+
+    if ( v8 == 1467139458 ) {
+    }
+
+    转成ssa形式
+
+    =================== after ssa ====================================
+
+    v7.0 = y_72.0;
+    if ( y_72.0 > 9 )
+      v6.0 = 1;
+    v8.0 = 1467139458;
+    if ( y_72.0 > 9 )
+      v8.1 = -486874641;
+    v8.2 = phi(v8.0, v8.1)
+    if ( v6.0 )
+      v8.3 = 1467139458;
+
+    v8.4 = phi(v8.2, v8.3)  ==> v8.4 = 1467139458 
+    if ( v8 == 1467139458 ) {
+    }
+
+    v8必然等于1467139458 ，因为y_72 > 9 和 v6是等价的
+    */
+    int             on_cond_MULTIEQUAL();
     bool            all_inrefs_is_constant(void);
     bool            all_inrefs_is_adj(void);
     bool            all_inrefs_is_top(void);
+    varnode*        get_const_in() {
+        for (int i = 0; i < inrefs.size(); i++)
+            if (inrefs[i]->is_constant()) return inrefs[i];
+        return NULL;
+    }
+    varnode*        get_top_in() {
+        for (int i = 0; i < inrefs.size(); i++)
+            if (inrefs[i]->is_top()) return inrefs[i];
+        return NULL;
+    }
     void            loadram2out(Address &addr);
 };
 
@@ -712,7 +759,26 @@ struct flowblock {
     ~flowblock();
 
     flowblock*  get_out(int i) { return out[i].point;  }
+    flowblock*  get_0out() { return (out.size() == 1) ? get_out(0) : NULL; }
     flowblock*  get_in(int i) { return in[i].point;  }
+    flowblock*  get_0in() { return (in.size() == 1) ? get_in(0) : NULL;  }
+    flowblock*  get_biggest_dfnum_in() {
+        flowblock *biggest = get_in(0);
+
+        for (int i = 1; i < in.size(); i++) {
+            if (in[i].point->dfnum > biggest->dfnum) {
+                biggest = get_in(i);
+            }
+        }
+
+        return biggest;
+    }
+    bool        is_in(flowblock *b) {
+        return get_in_index(b) >= 0;
+    }
+    bool        is_out(flowblock *b) {
+        return get_out_index(b) >= 0;
+    }
     pcodeop*    first_op(void) { return *ops.begin();  }
     pcodeop*    last_op(void) { 
 		return ops.size() ? (*--ops.end()):NULL;  
@@ -767,14 +833,6 @@ struct flowblock {
     void        set_out_edge_flag(int i, uint4 lab);
     void        clear_out_edge_flag(int i, uint4 lab);
 
-    int         get_inslot(flowblock *inblock) {
-        for (int i = 0; i < in.size(); i++) {
-            if (in[i].point == inblock)
-                return i;
-        }
-
-        return -1;
-    }
 
     void        set_dead(void) { flags.f_dead = 1;  }
     int         is_dead(void) { return flags.f_dead;  }
@@ -816,6 +874,8 @@ struct flowblock {
     cmp指令会产生一个sub指令，返回这个sub指令，假如没有，就返回NULL
     */
     pcodeop*    get_cbranch_sub_from_cmp(void);
+    /* 寻找最后一个操作ZR寄存器的指令*/
+    pcodeop*    get_last_oper_zr(void);
     /* FIXME:需要重调整个机制 */
     bool        is_iv_in_normal_loop(pcodeop *op);
     bool        is_eq_cbranch(void);
@@ -824,7 +884,7 @@ struct flowblock {
         return !loopheader && loopnodes.empty() && !flags.f_irreducible;
     }
     bool        is_adjacent(flowblock *adj) {
-        return get_inslot(adj) >= 0;
+        return get_in_index(adj) >= 0;
     }
     bool        is_cbranch() {
         pcodeop *p = last_op();
@@ -846,6 +906,19 @@ struct flowblock {
     bool        is_rel_header() {
         return ((out.size() == 1) && get_out(0)->is_rel_cbranch());
     }
+
+    int         get_cbranch_cond();
+    bool        have_same_cmp_condition(flowblock *b);
+
+    /* 
+        cfgA(vn1)
+        /  \ 
+       vn0 /
+        \ /
+        phi
+    */
+    varnode*    get_false_vn(pcodeop *phi);
+    varnode*    get_true_vn(pcodeop *phi);
 };
 
 class blockgraph {
@@ -953,6 +1026,7 @@ public:
     void        collect_no_cmp_cbranch_block(vector<flowblock *> &blks);
     flowblock*  get_it_end_block(flowblock *b);
     void        collect_sideeffect_ops();
+    bool        blocks_have_same_cmp_condition(flowblock *a, flowblock *b);
 };
 
 typedef struct priority_queue   priority_queue;
@@ -1610,7 +1684,24 @@ public:
     */
     flowblock*  dowhile2ifwhile(vector<flowblock *> &dowhile);
     char*       print_indent();
-    /* 跟严格的别名测试 */
+    /*
+    判断是否是如下类型的结构
+
+        cfgA
+        /  \
+      cfgB  \
+        \   /
+         cfgC
+
+    cfgA -> cfgB
+    cfgA -> cfgC
+    cfgB -> cfgC
+
+    这个函数和判断是否cbranch是不一样的，那个只需要判断cfg节点是否已cbranch结尾，这个需要
+    判断cfg节点出口的2个节点，能否立即在某个点汇合。
+    */
+    bool        is_ifthenfi_structure(flowblock *a, flowblock *b, flowblock *c);
+    /* 更严格的别名测试 */
     bool        test_strict_alias(pcodeop *load, pcodeop *store);
     /* 删除死去的store
 

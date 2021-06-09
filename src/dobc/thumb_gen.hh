@@ -29,6 +29,22 @@ typedef list<pcodeop *>::iterator pit;
 #define CY          18
 #define OV          19
 
+#define COND_EQ         0
+#define COND_NE         1
+#define COND_CS         2
+#define COND_CC         3
+#define COND_MI         4
+#define COND_PL         5
+#define COND_VS         6
+#define COND_VC         7
+#define COND_HI         8
+#define COND_LS         9
+#define COND_GE         10
+#define COND_LT         11
+#define COND_GT         12
+#define COND_LE         13
+#define COND_AL         14
+
 /* A8.8 */
 typedef enum thumb_inst_type {
     THUMB_ADR = 12,
