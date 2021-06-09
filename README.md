@@ -13,7 +13,10 @@ msbuild dobc.sln
 
 ## Usage
 
->> help
+
+```
+dobc -help
+```
 
 ## APK be de-obfusation
 
