@@ -1401,9 +1401,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     else if (isreg(pi1(p)))
                         _cmp_reg(reg2i(pi0a(p)), reg2i(pi1a(p)));
 
-                    advance(it, 2);
-                    while ((tp = *it)->output && (d->is_sreg(poa(tp)) || d->is_tsreg(poa(tp)))) it++;
-                    it--;
+                    it = advance_to_inst_end(it);
                 }
             }
             break;

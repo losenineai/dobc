@@ -408,7 +408,6 @@ void dobc::plugin_ollvm()
     funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x366f5));
 #else
-
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15f09));
     funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x132ed));
 #endif
@@ -1381,6 +1380,8 @@ int             pcodeop::on_cond_MULTIEQUAL()
 {
     funcdata *fd = parent->fd;
 
+    return -1;
+
     if (inrefs.size() != 2) 
         return -1;
 
@@ -1436,9 +1437,9 @@ int             pcodeop::on_cond_MULTIEQUAL()
                 && (condop->all_inrefs_is_constant())
                 && topb1->have_same_cmp_condition(topb2)
                 && (vn = topb2->get_false_vn(condop))
-                && topb1->lead_to_false_edge(condop, condop->get_slot(vn))
+                && topb->lead_to_false_edge(core, condop, vn)
                 && (vn = topb2->get_true_vn(condop))
-                && topb1->lead_to_true_edge(condop, condop->get_slot(vn))
+                && topb->lead_to_true_edge(core, condop, vn)
                 && (vn = topb->get_false_vn(this))
                 && vn->is_constant()
                 && (vn1 = topb1->get_true_vn(topp))
@@ -2918,35 +2919,41 @@ bool        flowblock::have_same_cmp_condition(flowblock *b)
     return false;
 }
 
-int         flowblock::lead_to_edge(pcodeop *phi, int select)
+int         flowblock::lead_to_edge(pcodeop *op, pcodeop *phi, varnode *vn)
 {
-    list<pcodeop *>::iterator it = phi->basiciter;
+    list<pcodeop *>::iterator it = op->basiciter;
     flowblock *branch = NULL;
     map<pcodeop *, valuetype, pcodeop_cmp> opmap;
     map<pcodeop *, valuetype, pcodeop_cmp>::iterator oit;
     int ret;
 
+    valuetype save = phi->output->type;
+
+    phi->output->type = vn->type;
+
     for (; it != ops.end(); it++) {
         pcodeop *p = *it;
 
-        ret = fd->static_trace(p, select, &branch);
+        ret = fd->static_trace(p, -1, &branch);
     }
 
     fd->static_trace_restore();
+
+    phi->output->type = save;
 
     if (ret != ERR_MEET_CALC_BRANCH) return -1;
 
     return (get_false_edge()->point == branch) ? 0 : 1;
 }
 
-bool        flowblock::lead_to_false_edge(pcodeop *phi, int select)
+bool        flowblock::lead_to_false_edge(pcodeop *op, pcodeop *phi, varnode *vn)
 {
-    return (lead_to_edge(phi, select) == 0) ? true : false;
+    return (lead_to_edge(op, phi, vn) == 0) ? true : false;
 }
 
-bool        flowblock::lead_to_true_edge(pcodeop *phi, int select)
+bool        flowblock::lead_to_true_edge(pcodeop *op, pcodeop *phi, varnode *vn)
 {
-    return (lead_to_edge(phi, select) == 1) ? true : false;
+    return (lead_to_edge(op, phi, vn) == 1) ? true : false;
 }
 
 list<pcodeop*>::iterator    flowblock::find_inst_first_op(pcodeop *p)
@@ -4251,7 +4258,7 @@ int         funcdata::ollvm_deshell()
         printf("[%s] loop_unrolling sub_%llx %d times*********************** \n\n", mtime2s(NULL),  h->get_start().getOffset(), i);
         dead_code_elimination(bblocks.blist, RDS_UNROLL0);
 #if defined(DCFG_CASE)
-        dump_cfg(name, _itoa(i, buf, 10), 1);
+        //dump_cfg(name, _itoa(i, buf, 10), 1);
 #endif
     }
 
@@ -4269,7 +4276,7 @@ int         funcdata::ollvm_deshell()
 
     //dead_code_elimination(bblocks.blist, F_REMOVE_DEAD_PHI);
 
-#if 1
+#if 0
     dump_cfg(name, "before_lcts", 1);
     heritage_clear();
     heritage();

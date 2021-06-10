@@ -948,10 +948,10 @@ struct flowblock {
     0: false
     1: true
     */
-    int         lead_to_edge(pcodeop *phi, int select);
-    /* 当某个phi节点的inrefs的第select个节点被选中时，确认这个block，会走向哪一边 */
-    bool        lead_to_false_edge(pcodeop *phi, int select);
-    bool        lead_to_true_edge(pcodeop *phi, int select);
+    int         lead_to_edge(pcodeop *op, pcodeop *phi, varnode *vn);
+    /* 当某个phi节点，被其中的一个val定值时，op节点所在的块，会走向哪一边 */
+    bool        lead_to_false_edge(pcodeop *op, pcodeop *phi, varnode *val);
+    bool        lead_to_true_edge(pcodeop *op, pcodeop *phi, varnode *val);
 
     /* 给定某个pcode，返回同一个地址的第一个pcode */
     list<pcodeop*>::iterator    find_inst_first_op(pcodeop *p);
