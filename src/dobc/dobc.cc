@@ -618,7 +618,11 @@ void        dobc::set_func_alias(const string &sym, const string &alias)
 #define TEST_SO             "../../../data/vmp/360_1/libjiagu.so"
 
 static char help[] = {
-    "dobc [-s .sla filename] [-st (360free|ollvm)] [-i filename] [-stack_check_fail addr]"
+    "dobc [-s .sla filename] [-st (360free|ollvm)] [-i filename] [-stack_check_fail addr]\r\n" 
+    "       -o                  output filename\r\n"
+    "       -d[0-6]             debug info level\r\n"
+    "       -da [hex address]   decode address\r\n"
+    "       -dc                 dump new so to current work directory or so directory\r\n"
 };
 
 #if defined(DOBC)
@@ -644,7 +648,6 @@ int main(int argc, char **argv)
     }
 
     if (!sla || !st || !filename || !stack_check_fail_addr) {
-        printf("argument error\n");
         puts(help);
         return -1;
     }

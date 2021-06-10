@@ -926,7 +926,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
     vector<fix_vldr_item> fix_vldr_list;
     vector<fix_vld1_item> fix_vld1_list;
     list<pcodeop *>::iterator it, it1;
-    pcodeop *p, *p1, *p2, *p3, *p4, *tp;
+    pcodeop *p, *p1, *p2, *p3, *p4;
     uint32_t x, rt, rd, rn, rm, setflags;
     pc_rel_table pc_rel_tab;
     int oind, imm, target_thumb, i;
