@@ -1344,22 +1344,18 @@ void            pcodeop::on_MULTIEQUAL()
             if (vn1->is_constant()) {
                 if (!cn) cn = vn1;
                 else if (vn1->type != cn->type) {
-                    output->set_top();
-                    return;
+                    goto top_label;
                 }
                 continue;
             }
             else if (!p1) {
-                output->set_top();
-                return;
+                goto top_label;
             }
             else if (p1->opcode != CPUI_MULTIEQUAL) {
                 p1 = vn1->search_copy_chain(CPUI_MULTIEQUAL);
 
-                if (!p1) {
-                    output->set_top();
-                    return;
-                }
+                if (!p1)
+                    goto top_label;
             }
 
             if (p1->opcode == CPUI_MULTIEQUAL) {
@@ -1371,9 +1367,13 @@ void            pcodeop::on_MULTIEQUAL()
         }
     }
 
-    if (cn)
+    if (cn) {
         output->type = cn->type;
-    else
+        return;
+    }
+
+top_label:
+    if (on_cond_MULTIEQUAL())
         output->set_top();
 }
 
@@ -1389,7 +1389,7 @@ int             pcodeop::on_cond_MULTIEQUAL()
     pcodeop *topp, *condop;
     flowblock *topb, *constb, *topb1, *topb2, *if2;
 
-    if (!(topp = topvn->def) || !constvn->def || (topp->inrefs.size() != 2) || !topp->all_inrefs_is_constant())
+    if (!(topp = topvn->def) || !constvn || !constvn->def || (topp->inrefs.size() != 2) || !topp->all_inrefs_is_constant())
         return -1;
 
     topb1 = topp->parent;
@@ -1412,9 +1412,10 @@ int             pcodeop::on_cond_MULTIEQUAL()
 
     if (!fd->is_ifthenfi_structure((topb = topp->parent), constb = constvn->def->parent, parent)
         || topb->in.size() != 2
-        || !fd->is_ifthenfi_structure(topb1 = topb->get_biggest_dfnum_in(),  topb1->get_cbranch_xor_out(topb), topb)
+        || !(topb1 = topb->get_min_dfnum_in())
+        || !fd->is_ifthenfi_structure(topb1,  topb1->get_cbranch_xor_out(topb), topb)
         || (topb1->in.size() != 2)
-        || !(topb2 = topb1->get_biggest_dfnum_in())
+        || !(topb2 = topb1->get_min_dfnum_in())
         || !fd->is_ifthenfi_structure(topb2, if2 = topb2->get_cbranch_xor_out(topb1), topb1))
         return -1;
 
@@ -1434,7 +1435,10 @@ int             pcodeop::on_cond_MULTIEQUAL()
                 && (condop->opcode == CPUI_MULTIEQUAL)
                 && (condop->all_inrefs_is_constant())
                 && topb1->have_same_cmp_condition(topb2)
-                && topb1->have_same_cmp_condition(topb)
+                && (vn = topb2->get_false_vn(condop))
+                && topb1->lead_to_false_edge(condop, condop->get_slot(vn))
+                && (vn = topb2->get_true_vn(condop))
+                && topb1->lead_to_true_edge(condop, condop->get_slot(vn))
                 && (vn = topb->get_false_vn(this))
                 && vn->is_constant()
                 && (vn1 = topb1->get_true_vn(topp))
@@ -2859,6 +2863,14 @@ pcodeop*    flowblock::get_cbranch_sub_from_cmp(void)
 
 pcodeop*    flowblock::get_last_oper_zr(void)
 {
+    list<pcodeop *>::iterator it = ops.end();
+    dobc *d = fd->d;
+
+    do {
+        pcodeop *p = *--it;
+        if (p->output && poa(p) == d->zr_addr) return p;
+    } while (it != ops.begin());
+
     return NULL;
 }
 
@@ -2875,23 +2887,125 @@ bool        flowblock::is_stack_check_fail()
 
 int         flowblock::get_cbranch_cond()
 {
-    pcodeop *op = last_op();
+    list<pcodeop *>::iterator it = find_inst_first_op(*--ops.end());
+    dobc *d = fd->d;
+
+    /* 这里要全部重写，这样一个个if pattern识别过去，我会累死的
+    可能会改成公共前缀的某种trie树来做。 */
+    if ((*it)->opcode == CPUI_INT_EQUAL
+        && (*it)->get_in(0)->get_addr() == d->zr_addr
+        && (*it)->get_in(1)->is_constant()
+        && (*it)->get_in(1)->get_val() == 0
+        && (*++it)->opcode == CPUI_BOOL_NEGATE
+        && (*++it)->opcode == CPUI_CBRANCH)
+        return COND_EQ;
 
     return -1;
 }
 
 bool        flowblock::have_same_cmp_condition(flowblock *b)
 {
+    list<pcodeop *>::iterator it1, it2;
+
+    it1 = find_inst_first_op(get_cbranch_sub_from_cmp());
+    it2 = find_inst_first_op(b->get_cbranch_sub_from_cmp());
+
+    for (; it1 != ops.end() && it2 != ops.end(); it1++, it2++) {
+        if ((*it1)->opcode == CPUI_CBRANCH && (*it2)->opcode == CPUI_CBRANCH) return true;
+        if (pcodeop_struct_cmp(*it1, *it2, 1)) return false;
+    }
+
     return false;
+}
+
+int         flowblock::lead_to_edge(pcodeop *phi, int select)
+{
+    list<pcodeop *>::iterator it = phi->basiciter;
+    flowblock *branch = NULL;
+    map<pcodeop *, valuetype, pcodeop_cmp> opmap;
+    map<pcodeop *, valuetype, pcodeop_cmp>::iterator oit;
+    int ret;
+
+    for (; it != ops.end(); it++) {
+        pcodeop *p = *it;
+
+        ret = fd->static_trace(p, select, &branch);
+    }
+
+    fd->static_trace_restore();
+
+    if (ret != ERR_MEET_CALC_BRANCH) return -1;
+
+    return (get_false_edge()->point == branch) ? 0 : 1;
+}
+
+bool        flowblock::lead_to_false_edge(pcodeop *phi, int select)
+{
+    return (lead_to_edge(phi, select) == 0) ? true : false;
+}
+
+bool        flowblock::lead_to_true_edge(pcodeop *phi, int select)
+{
+    return (lead_to_edge(phi, select) == 1) ? true : false;
+}
+
+list<pcodeop*>::iterator    flowblock::find_inst_first_op(pcodeop *p)
+{
+    if (p == NULL) return ops.end();
+
+    list<pcodeop *>::iterator it = p->basiciter;
+    const Address &addr = p->get_addr();
+
+    for (; (*it)->get_addr() == addr; it--) {
+        if (it == ops.begin()) return it;
+    }
+
+    return ++it;
 }
 
 varnode*    flowblock::get_false_vn(pcodeop *phi)
 {
+    if (!is_cbranch()) return NULL;
+
+    flowblock *b = phi->parent;
+
+    for (int i = 0; i < out.size(); i++) {
+        blockedge *e = &out[i];
+
+        if (!(e->label & a_true_edge)) {
+            if (e->point == phi->parent)
+                return phi->get_in(e->reverse_index);
+            else {
+                e = &e->point->out[0];
+                return phi->get_in(e->reverse_index);
+            }
+        }
+    }
+
     return NULL;
 }
 
+/*
+*/
 varnode*    flowblock::get_true_vn(pcodeop *phi)
 {
+    if (!is_cbranch()) return NULL;
+
+    flowblock *b = phi->parent;
+
+    for (int i = 0; i < out.size(); i++) {
+        blockedge *e = &out[i];
+
+        if (e->label & a_true_edge) {
+            if (e->point == phi->parent)
+                return phi->get_in(e->reverse_index);
+            else {
+                e = &e->point->out[0];
+                return phi->get_in(e->reverse_index);
+            }
+        }
+    }
+
     return NULL;
 }
 
@@ -3845,7 +3959,7 @@ int         funcdata::ollvm_combine_lcts(pcodeop *p)
 4. const部分必须一致
 5. 所有output和in的 size必须一致
 */
-int pcodeop_struct_cmp(pcodeop *a, pcodeop *b)
+int pcodeop_struct_cmp(pcodeop *a, pcodeop *b, uint32_t flags)
 {
     int i;
 
@@ -3853,11 +3967,11 @@ int pcodeop_struct_cmp(pcodeop *a, pcodeop *b)
 
     dobc *d = a->parent->fd->d;
 
-    if (a->get_addr() != b->get_addr()) return -1;
+    if (!flags && (a->get_addr() != b->get_addr())) return -1;
     if (a->opcode == CPUI_MULTIEQUAL) return -1;
     if (a->opcode != b->opcode) return -1;
     if (a->output) {
-        if ((d->is_temp(poa(a)) != d->is_temp(poa(b))) || (poa(a) != poa(b))) return -1;
+        if ((d->is_temp(poa(a)) != d->is_temp(poa(b))) || (!d->is_temp(poa(a)) && (poa(a) != poa(b)))) return -1;
     }
 
     /* 不比较load的虚拟节点 */
@@ -3904,7 +4018,7 @@ int         funcdata::combine_lcts(vector<flowblock *> &blks)
         for (i = 1; i < its.size(); i++) {
             p1 = *(its[i]);
 
-            if (pcodeop_struct_cmp(p, p1)) break;
+            if (pcodeop_struct_cmp(p, p1, 0)) break;
         }
 
         if (i == its.size())
@@ -3979,7 +4093,7 @@ int         funcdata::combine_lcts_blk(flowblock *b)
 
         /* 查找是否有相同pcode的blk，找到就退出 */
         for (j = 0; j < blks_list.size(); j++) {
-            if (pcodeop_struct_cmp(blks_list[j][0]->last_op(), lastop) == 0) break;
+            if (pcodeop_struct_cmp(blks_list[j][0]->last_op(), lastop, 0) == 0) break;
         }
 
         if (j == blks_list.size()) {
@@ -4154,7 +4268,12 @@ int         funcdata::ollvm_deshell()
     } while (!cbrlist.empty() || !emptylist.empty());
 
     //dead_code_elimination(bblocks.blist, F_REMOVE_DEAD_PHI);
-    //dump_cfg(name, "before_lcts", 1);
+
+#if 1
+    dump_cfg(name, "before_lcts", 1);
+    heritage_clear();
+    heritage();
+#endif
 
     combine_lcts_all();
 
@@ -4167,6 +4286,33 @@ int         funcdata::ollvm_deshell()
     dump_exe();
 
     return 0;
+}
+
+int         funcdata::static_trace(pcodeop *op, int inslot, flowblock **branch)
+{
+    op->set_trace();
+    valuemap::iterator it = tracemap.find(op);
+
+    if (it == tracemap.end()) {
+        if (op->output)
+            tracemap[op] = op->output->type;
+    }
+
+    return op->compute(inslot, branch);
+}
+
+void        funcdata::static_trace_restore()
+{
+    valuemap::iterator it = tracemap.begin();
+
+    for (; it != tracemap.end(); it++) {
+        pcodeop *p = it->first;
+
+        p->clear_trace();
+        p->output->type = tracemap[p];
+    }
+
+    tracemap.clear();
 }
 
 int        funcdata::vmp360_deshell()

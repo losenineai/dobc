@@ -156,11 +156,19 @@ struct pcodeop_cmp {
     bool operator() ( const pcodeop *a, const pcodeop *b ) const;
 };
 
-typedef set<pcodeop *, pcodeop_cmp> pcodeop_set;
-
 struct varnode_const_cmp {
     bool operator()(const varnode *a, const varnode *b) const;
 };
+
+/*
+
+@flags  1       跳过地址比较
+*/
+int pcodeop_struct_cmp(pcodeop *a, pcodeop *b, uint32_t flags);
+
+typedef map<pcodeop *, valuetype, pcodeop_cmp> valuemap;
+
+typedef set<pcodeop *, pcodeop_cmp> pcodeop_set;
 
 struct coverblock {
 	short	version;
@@ -762,17 +770,29 @@ struct flowblock {
     flowblock*  get_0out() { return (out.size() == 1) ? get_out(0) : NULL; }
     flowblock*  get_in(int i) { return in[i].point;  }
     flowblock*  get_0in() { return (in.size() == 1) ? get_in(0) : NULL;  }
-    flowblock*  get_biggest_dfnum_in() {
-        flowblock *biggest = get_in(0);
+    flowblock*  get_max_dfnum_in() {
+        flowblock *max = get_in(0);
 
         for (int i = 1; i < in.size(); i++) {
-            if (in[i].point->dfnum > biggest->dfnum) {
-                biggest = get_in(i);
+            if (in[i].point->dfnum > max->dfnum) {
+                max = get_in(i);
             }
         }
 
-        return biggest;
+        return max;
     }
+    flowblock*  get_min_dfnum_in() {
+        flowblock *min = get_in(0);
+
+        for (int i = 1; i < in.size(); i++) {
+            if (in[i].point->dfnum < min->dfnum) {
+                min = get_in(i);
+            }
+        }
+
+        return min;
+    }
+
     bool        is_in(flowblock *b) {
         return get_in_index(b) >= 0;
     }
@@ -916,9 +936,25 @@ struct flowblock {
        vn0 /
         \ /
         phi
+    
+    当phi节点，是在一个if then 的交汇处产生时，尝试获取false边的vn
     */
     varnode*    get_false_vn(pcodeop *phi);
     varnode*    get_true_vn(pcodeop *phi);
+
+    /* 对内接口
+    
+    -1: unknown
+    0: false
+    1: true
+    */
+    int         lead_to_edge(pcodeop *phi, int select);
+    /* 当某个phi节点的inrefs的第select个节点被选中时，确认这个block，会走向哪一边 */
+    bool        lead_to_false_edge(pcodeop *phi, int select);
+    bool        lead_to_true_edge(pcodeop *phi, int select);
+
+    /* 给定某个pcode，返回同一个地址的第一个pcode */
+    list<pcodeop*>::iterator    find_inst_first_op(pcodeop *p);
 };
 
 class blockgraph {
@@ -1182,7 +1218,12 @@ public:
     pcodeop_tree     optree;
     funcproto       funcp;
 
-    list<op_edge *>    edgelist;
+    /*
+    静态trace的时候，记录原始的数据值，在执行完毕后，做恢复用
+
+    每次使用之前，必须得执行clear
+    */
+    valuemap   tracemap;
 
     /* jmp table */
     vector<pcodeop *>   tablelist;
@@ -1924,6 +1965,15 @@ public:
     pcodeop*    lastop() { return deadlist.back(); }
 
     int         ollvm_deshell();
+
+    /*
+    静态执行trace
+    */
+    int         static_trace(pcodeop *op, int inslot, flowblock **branch);
+    /*
+    还原静态执行trace，产生的output值变化
+    */
+    void        static_trace_restore();
 };
 
 struct func_call_specs {
