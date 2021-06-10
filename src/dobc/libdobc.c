@@ -1,4 +1,4 @@
-
+﻿
 
 #include "vm.h"
 #include <stdarg.h>
@@ -366,31 +366,10 @@ CString *cstr_copy(CString *dst, CString *src)
     return cstr_cat(dst, src->data, src->size);
 }
 
-char* str_new(char *src, int len)
+char *basename(const char *name)
 {
-    if (!len)
-        len = strlen(src);
-    char *dst = vm_malloc(len + 1);
-
-    strncpy(dst, src, len);
-    dst[len] = 0;
-    return dst;
-}
-
-void str_free(char *s)
-{
-}
-
-void xml_escape_out(FILE *o, const char *str)
-{
-    for (; *str; str++) {
-        if (*str == '<')    fprintf(o, "&lt;");
-        else if (*str == '>')    fprintf(o, "&gt;");
-        else if (*str == '&')    fprintf(o, "&amp;");
-        else if (*str == '"')    fprintf(o, "&quot;");
-        else if (*str == '\'')    fprintf(o, "&apos;");
-        else
-            fputc(*str, o);
-
-    }
+    char *p = strchr((char *)name, 0);
+    while (p > name && !IS_DIRSEP(p[-1]))
+        --p;
+    return p;
 }

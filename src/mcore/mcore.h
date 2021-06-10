@@ -20,7 +20,7 @@ extern "C" {
 #endif
 
 #include "mcore/basic_types.h"
-#include "mcore/merror.h"
+//#include "mcore/merror.h"
 #include "mcore/macro_list.h"
 #include "mcore/mbytes.h"
 #include "mcore/mtime_ex.h"

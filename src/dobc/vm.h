@@ -20,12 +20,25 @@ extern "C" {
 #define lseek       _lseek
 #endif /* _WIN32 */
 
+#ifdef _WIN32
+# define IS_DIRSEP(c) (c == '/' || c == '\\')
+# define IS_ABSPATH(p) (IS_DIRSEP(p[0]) || (p[0] && p[1] == ':' && IS_DIRSEP(p[2])))
+# define PATHCMP stricmp
+# define PATHSEP ";"
+#else
+# define IS_DIRSEP(c) (c == '/')
+# define IS_ABSPATH(p) IS_DIRSEP(p[0])
+# define PATHCMP strcmp
+# define PATHSEP ":"
+#endif
+
+
 #ifndef offsetof
 #define offsetof(type,field)    ((size_t)&((type *)0)->field)
 #endif
 
-#ifndef countof
-#define countof(tab)    (sizeof(tab) / sizeof ((tab)[0]))
+#ifndef count_of_array
+#define count_of_array(tab)    (sizeof(tab) / sizeof ((tab)[0]))
 #endif
 
 #ifdef _MSC_VER
@@ -283,8 +296,7 @@ void                cstr_free(CString *cstr);
 CString*            cstr_new(char *src, int len);
 void                cstr_delete(CString *cstr);
 
-char* str_new(char *src, int len);
-void str_free(char *);
+char*   basename(const char *name);
 
 #endif
 

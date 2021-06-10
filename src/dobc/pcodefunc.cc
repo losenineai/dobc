@@ -1,4 +1,5 @@
 ﻿
+#include "vm.h"
 #include "sleigh.hh"
 #include "pcodefunc.hh"
 
