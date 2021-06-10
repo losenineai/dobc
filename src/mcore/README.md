@@ -1,2 +1,0 @@
-# mcore
-core library
