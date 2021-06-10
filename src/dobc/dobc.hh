@@ -160,7 +160,11 @@ struct varnode_const_cmp {
     bool operator()(const varnode *a, const varnode *b) const;
 };
 
-int pcodeop_struct_cmp(pcodeop *a, pcodeop *b);
+/*
+
+@flags  1       跳过地址比较
+*/
+int pcodeop_struct_cmp(pcodeop *a, pcodeop *b, uint32_t flags);
 
 typedef map<pcodeop *, valuetype, pcodeop_cmp> valuemap;
 
@@ -766,17 +770,29 @@ struct flowblock {
     flowblock*  get_0out() { return (out.size() == 1) ? get_out(0) : NULL; }
     flowblock*  get_in(int i) { return in[i].point;  }
     flowblock*  get_0in() { return (in.size() == 1) ? get_in(0) : NULL;  }
-    flowblock*  get_biggest_dfnum_in() {
-        flowblock *biggest = get_in(0);
+    flowblock*  get_max_dfnum_in() {
+        flowblock *max = get_in(0);
 
         for (int i = 1; i < in.size(); i++) {
-            if (in[i].point->dfnum > biggest->dfnum) {
-                biggest = get_in(i);
+            if (in[i].point->dfnum > max->dfnum) {
+                max = get_in(i);
             }
         }
 
-        return biggest;
+        return max;
     }
+    flowblock*  get_min_dfnum_in() {
+        flowblock *min = get_in(0);
+
+        for (int i = 1; i < in.size(); i++) {
+            if (in[i].point->dfnum < min->dfnum) {
+                min = get_in(i);
+            }
+        }
+
+        return min;
+    }
+
     bool        is_in(flowblock *b) {
         return get_in_index(b) >= 0;
     }

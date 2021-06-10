@@ -1344,22 +1344,18 @@ void            pcodeop::on_MULTIEQUAL()
             if (vn1->is_constant()) {
                 if (!cn) cn = vn1;
                 else if (vn1->type != cn->type) {
-                    output->set_top();
-                    return;
+                    goto top_label;
                 }
                 continue;
             }
             else if (!p1) {
-                output->set_top();
-                return;
+                goto top_label;
             }
             else if (p1->opcode != CPUI_MULTIEQUAL) {
                 p1 = vn1->search_copy_chain(CPUI_MULTIEQUAL);
 
-                if (!p1) {
-                    output->set_top();
-                    return;
-                }
+                if (!p1)
+                    goto top_label;
             }
 
             if (p1->opcode == CPUI_MULTIEQUAL) {
@@ -1371,9 +1367,13 @@ void            pcodeop::on_MULTIEQUAL()
         }
     }
 
-    if (cn)
+    if (cn) {
         output->type = cn->type;
-    else
+        return;
+    }
+
+top_label:
+    if (on_cond_MULTIEQUAL())
         output->set_top();
 }
 
@@ -1389,7 +1389,7 @@ int             pcodeop::on_cond_MULTIEQUAL()
     pcodeop *topp, *condop;
     flowblock *topb, *constb, *topb1, *topb2, *if2;
 
-    if (!(topp = topvn->def) || !constvn->def || (topp->inrefs.size() != 2) || !topp->all_inrefs_is_constant())
+    if (!(topp = topvn->def) || !constvn || !constvn->def || (topp->inrefs.size() != 2) || !topp->all_inrefs_is_constant())
         return -1;
 
     topb1 = topp->parent;
@@ -1412,9 +1412,10 @@ int             pcodeop::on_cond_MULTIEQUAL()
 
     if (!fd->is_ifthenfi_structure((topb = topp->parent), constb = constvn->def->parent, parent)
         || topb->in.size() != 2
-        || !fd->is_ifthenfi_structure(topb1 = topb->get_biggest_dfnum_in(),  topb1->get_cbranch_xor_out(topb), topb)
+        || !(topb1 = topb->get_min_dfnum_in())
+        || !fd->is_ifthenfi_structure(topb1,  topb1->get_cbranch_xor_out(topb), topb)
         || (topb1->in.size() != 2)
-        || !(topb2 = topb1->get_biggest_dfnum_in())
+        || !(topb2 = topb1->get_min_dfnum_in())
         || !fd->is_ifthenfi_structure(topb2, if2 = topb2->get_cbranch_xor_out(topb1), topb1))
         return -1;
 
@@ -2910,8 +2911,8 @@ bool        flowblock::have_same_cmp_condition(flowblock *b)
     it2 = find_inst_first_op(b->get_cbranch_sub_from_cmp());
 
     for (; it1 != ops.end() && it2 != ops.end(); it1++, it2++) {
-        if (pcodeop_struct_cmp(*it1, *it2)) return false;
         if ((*it1)->opcode == CPUI_CBRANCH && (*it2)->opcode == CPUI_CBRANCH) return true;
+        if (pcodeop_struct_cmp(*it1, *it2, 1)) return false;
     }
 
     return false;
@@ -3958,7 +3959,7 @@ int         funcdata::ollvm_combine_lcts(pcodeop *p)
 4. const部分必须一致
 5. 所有output和in的 size必须一致
 */
-int pcodeop_struct_cmp(pcodeop *a, pcodeop *b)
+int pcodeop_struct_cmp(pcodeop *a, pcodeop *b, uint32_t flags)
 {
     int i;
 
@@ -3966,11 +3967,11 @@ int pcodeop_struct_cmp(pcodeop *a, pcodeop *b)
 
     dobc *d = a->parent->fd->d;
 
-    if (a->get_addr() != b->get_addr()) return -1;
+    if (!flags && (a->get_addr() != b->get_addr())) return -1;
     if (a->opcode == CPUI_MULTIEQUAL) return -1;
     if (a->opcode != b->opcode) return -1;
     if (a->output) {
-        if ((d->is_temp(poa(a)) != d->is_temp(poa(b))) || (poa(a) != poa(b))) return -1;
+        if ((d->is_temp(poa(a)) != d->is_temp(poa(b))) || (!d->is_temp(poa(a)) && (poa(a) != poa(b)))) return -1;
     }
 
     /* 不比较load的虚拟节点 */
@@ -4017,7 +4018,7 @@ int         funcdata::combine_lcts(vector<flowblock *> &blks)
         for (i = 1; i < its.size(); i++) {
             p1 = *(its[i]);
 
-            if (pcodeop_struct_cmp(p, p1)) break;
+            if (pcodeop_struct_cmp(p, p1, 0)) break;
         }
 
         if (i == its.size())
@@ -4092,7 +4093,7 @@ int         funcdata::combine_lcts_blk(flowblock *b)
 
         /* 查找是否有相同pcode的blk，找到就退出 */
         for (j = 0; j < blks_list.size(); j++) {
-            if (pcodeop_struct_cmp(blks_list[j][0]->last_op(), lastop) == 0) break;
+            if (pcodeop_struct_cmp(blks_list[j][0]->last_op(), lastop, 0) == 0) break;
         }
 
         if (j == blks_list.size()) {
@@ -4267,7 +4268,12 @@ int         funcdata::ollvm_deshell()
     } while (!cbrlist.empty() || !emptylist.empty());
 
     //dead_code_elimination(bblocks.blist, F_REMOVE_DEAD_PHI);
-    //dump_cfg(name, "before_lcts", 1);
+
+#if 1
+    dump_cfg(name, "before_lcts", 1);
+    heritage_clear();
+    heritage();
+#endif
 
     combine_lcts_all();
 
