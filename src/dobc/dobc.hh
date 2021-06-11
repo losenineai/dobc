@@ -1998,6 +1998,11 @@ public:
     string fullpath;
     string filename;
 
+    /* 输出目录，一般是输出到文件所在的目录，假如开启dc选项，则是开启到 */
+    string out_dir;
+    /* 输出文件名，默认是 xxx.decode.so */
+    string out_filename;
+
     ContextDatabase *context = NULL;
     Translate *trans = NULL;
 

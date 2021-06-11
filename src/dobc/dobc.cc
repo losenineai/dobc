@@ -401,11 +401,11 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 
 void dobc::plugin_ollvm()
 {
-#if 0
-    //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
+#if 1
+    funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
-    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
+    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x366f5));
 #else
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15f09));
@@ -418,7 +418,7 @@ void dobc::plugin_ollvm()
     fd_main->ollvm_deshell();
 #endif
 
-    loader->saveFile("test.so");
+    loader->saveFile(out_dir + out_filename);
 }
 
 void dobc::plugin_dvmp360()
@@ -541,13 +541,15 @@ void dobc::gen_sh(void)
 }
 
 dobc::dobc(const char *sla, const char *bin) 
-    : fullpath(bin)
+    : fullpath(bin),
+        out_filename(basename(bin))
 {
     g_dobc = this;
 
     slafilename.assign(sla);
     filename.assign(basename(bin));
 
+    out_filename += ".decode";
     loader = new ElfLoadImage(bin);
     loader1 = new ElfLoadImage(bin);
     context = new ContextInternal();
@@ -622,15 +624,15 @@ static char help[] = {
     "       -o                  output filename\r\n"
     "       -d[0-6]             debug info level\r\n"
     "       -da [hex address]   decode address\r\n"
-    "       -dc                 dump new so to current work directory or so directory\r\n"
+    "       -sd                 dump new so to so directory or current directory\r\n"
 };
 
-#if defined(DOBC)
 int main(int argc, char **argv)
 {
     int i;
     char *sla = NULL, *filename = NULL, *st = NULL;
-    intb stack_check_fail_addr = 0;
+    intb stack_check_fail_addr = 0, sd = 0;
+    char *out_filename = NULL;
 
     for (i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "-s")) {
@@ -641,6 +643,12 @@ int main(int argc, char **argv)
         }
         else if (!strcmp(argv[i], "-i")) {
             filename = argv[++i];
+        }
+        else if (!strcmp(argv[i], "-o")) {
+            out_filename = argv[++i];
+        }
+        else if (!strcmp(argv[i], "-sd")) {
+            sd = 1;
         }
         else if (!strcmp(argv[i], "-stack_check_fail")) {
             stack_check_fail_addr = strtol(argv[++i], NULL, 16);
@@ -657,14 +665,17 @@ int main(int argc, char **argv)
     d.set_shelltype(st);
     d.stack_check_fail_addr = stack_check_fail_addr;
 
+    if (out_filename)
+        d.out_filename.assign(out_filename, strlen(out_filename));
+
+    if (sd)
+        d.out_dir.assign(filename, basename(filename) - filename);
 
     d.init();
     d.run();
 
     return 0;
 }
-
-#endif
 
 varnode::varnode(int s, const Address &m)
     : loc(m)

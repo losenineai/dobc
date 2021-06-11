@@ -139,9 +139,9 @@ int ElfLoadImage::addSymbol(const Address &addr, int size)
     return 0;
 }
 
-void ElfLoadImage::saveFile(const char *filename)
+void ElfLoadImage::saveFile(const string &filename)
 {
-    file_save(filename, (char *)filedata, filelen);
+    file_save(filename.c_str(), (char *)filedata, filelen);
 }
 
 intb    ElfLoadImage::read_val(intb addr, int siz)

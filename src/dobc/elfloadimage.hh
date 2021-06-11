@@ -38,7 +38,7 @@ public:
     int getSymbol(const string &name, LoadImageFunc &record);
     int saveSymbol(const char *symname, int size);
     int addSymbol(const Address &addr, int size);
-    void saveFile(const char *filename);
+    void saveFile(const string &filename);
     addrtab::iterator   beginSymbol() { return addrtab.begin();  }
     addrtab::iterator   endSymbol() { return addrtab.end();  }
 
