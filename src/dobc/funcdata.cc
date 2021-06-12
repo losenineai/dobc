@@ -1001,23 +1001,34 @@ int         funcdata::ollvm_detect_frameworkinfo()
 
     printf("search maybe safezone alias start...\n");
     /* FIXME:后面要改成递归收集所有的load */
+    set<pcodeop *, pcodeop_cmp> poss_set;
     vector<pcodeop *> poss;
     for (i = 0; i < ollvm.heads.size(); i++) {
         ollvmhead *head = ollvm.heads[i];
-        pcodeop *p = head->h->find_pcode_def(head->st1), *p1, *p2;
+        pcodeop *p = head->h->find_pcode_def(head->st1), *p1, *p2, *p3;
         for (j = 0; j < head->h->in.size(); j++) {
             varnode *v = p->get_in(j);
 
             if (NULL == (p1 = v->def)) continue;
 
-            if ((p1->opcode == CPUI_LOAD)) 
-                poss.push_back(p1->get_in(1)->def);
+            if ((p1->opcode == CPUI_LOAD)) {
+                p3 = p1->get_in(1)->def;
+                if (poss_set.find(p3) == poss_set.end()) {
+                    poss_set.insert(p3);
+                    poss.push_back(p3);
+                }
+            }
             else if (p1->opcode == CPUI_MULTIEQUAL) {
                 for (k = 0; k < p1->inrefs.size(); k++) {
                     v = p1->get_in(k);
                     if (!(p2 = v->def)) continue;
-                    if ((p2->opcode == CPUI_LOAD)) 
-                        poss.push_back(p2->get_in(1)->def);
+                    if ((p2->opcode == CPUI_LOAD)) {
+                        p3 = p2->get_in(1)->def;
+                        if (poss_set.find(p3) == poss_set.end()) {
+                            poss_set.insert(p3);
+                            poss.push_back(p3);
+                        }
+                    }
                 }
             }
         }
@@ -1030,7 +1041,12 @@ int         funcdata::ollvm_detect_frameworkinfo()
         if (p->output->is_sp_constant())
             set_safezone(p->output->get_val(), p->output->get_size());
     }
+
+    /* 假如有安全区域，需要全部关联起来，但是不需要rename */
+    if (poss.size()) 
+        constant_propagation3();
     printf("search maybe safezone alias end...\n");
+
 
     ollvm_copy_expand_all_vmhead();
 
@@ -1336,7 +1352,8 @@ int         funcdata::ollvm_detect_fsm(ollvmhead *oh)
                     }
                 }
 
-                throw LowlevelError("ollvm_detect_fsm not support two state");
+                return -1;
+                //throw LowlevelError("ollvm_detect_fsm not support two state");
             }
 
             in = in0->is_constant() ? in1 : in0;
