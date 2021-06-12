@@ -892,6 +892,7 @@ int thumb_gen::run()
     /* 针对每一个Block生成代码，但是不处理末尾的jmp */
     for (i = 0; i < blist.size(); i++) {
         flowblock *b = blist[i];
+        //printf("index = %d, index = %d, b = %p, this = %p, dead = %d\n", i, ind, b, this, b->flags.f_dead);
         run_block(b, i);
 
         if (b->is_rel_branch()) {

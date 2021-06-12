@@ -1665,7 +1665,6 @@ public:
     int         ollvm_detect_propchain2(ollvmhead *oh, flowblock *&from, blockedge *&outedge, uint32_t flags);
     int         ollvm_detect_propchain3(flowblock *&from, blockedge *&outedge);
     int         ollvm_detect_propchains2(flowblock *&from, blockedge *&outedge);
-    int         ollvm_detect_fsm(ollvmhead *oh);
     int         ollvm_detect_fsm2(ollvmhead *oh);
     int         ollvm_check_fsm(pcodeop *op);
 

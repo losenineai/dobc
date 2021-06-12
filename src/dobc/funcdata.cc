@@ -978,7 +978,7 @@ int         funcdata::ollvm_detect_frameworkinfo()
         */
         if (t > 0 && !b->is_rel_cbranch()) {
             head = new ollvmhead(bblocks.get_block(i));
-            if (!ollvm_detect_fsm(head)) {
+            if (!ollvm_detect_fsm2(head)) {
                 ollvm.heads.push_back(head);
                 head->h->mark_unsplice();
             }
@@ -1323,71 +1323,6 @@ int         funcdata::ollvm_copy_expand_vmhead_phi(ollvmhead *oh)
     return -1;
 }
 
-int         funcdata::ollvm_detect_fsm(ollvmhead *oh)
-{
-    flowblock *h = oh->h;
-    list<pcodeop *>::reverse_iterator it;
-    varnode *in0, *in1, *in, *vn;
-    pcodeop *store;
-    int dfnum;
-
-    for (it = h->ops.rbegin(); it != h->ops.rend(); it++) {
-        pcodeop *p = *it;
-
-        /* 这个地方有点硬编码了，直接扫描sub指令，这个是因为当前的测试用例中的核心VM，用了cmp指令以后
-        生成了sub，这个地方可能更好的方式是匹配更复杂的pattern */
-        if (p->opcode == CPUI_INT_SUB) {
-            in0 = p->get_in(0);
-            in1 = p->get_in(1);
-
-            if (!in0->is_constant() && !in1->is_constant()) {
-                vector<varnode *> defs;
-
-                if (in0->def && (in0->def->opcode == CPUI_MULTIEQUAL)) {
-                    collect_all_const_defs(in0->def, defs, dfnum);
-
-                    if (defs.size() > 1) {
-                        oh->st1 = in0->get_addr();
-                        oh->st1_size = in0->get_size();
-                        return 0;
-                    }
-                }
-
-                return -1;
-                //throw LowlevelError("ollvm_detect_fsm not support two state");
-            }
-
-            in = in0->is_constant() ? in1 : in0;
-
-            Address s = in->get_addr();
-
-            for (++it; it != h->ops.rend(); it++) {
-                p = *it;
-                /* FIXME:这一段是计算传播的，可以优化 */
-                if ((p->opcode == CPUI_COPY) && p->output->get_addr() == s) {
-                    oh->st1 = p->get_in(0)->get_addr();
-                    oh->st1_size = p->get_in(0)->get_size();
-                    return 0;
-                }
-                else if ((p->opcode == CPUI_LOAD) && (poa(p) == s) && p->get_virtualnode() && ((store = p->get_virtualnode()->def)->parent == h)) {
-                    vn = store->get_in(2);
-                    if (ollvm_check_fsm(vn->def)) return -1;
-
-                    oh->st1 = vn->get_addr();
-                    oh->st1_size = vn->get_size();
-                    return 0;
-                }
-            }
-
-            oh->st1 = in0->is_constant() ? in1->get_addr() : in0->get_addr();
-            oh->st1_size = in0->is_constant() ? in1->get_size() : in0->get_size();
-            return 0;
-        }
-    }
-
-    return -1;
-}
-
 int         funcdata::ollvm_detect_fsm2(ollvmhead *oh)
 {
     flowblock *h = oh->h;
@@ -1424,7 +1359,7 @@ int         funcdata::ollvm_detect_fsm2(ollvmhead *oh)
 
     p1 = in->search_copy_chain(CPUI_MULTIEQUAL);
     if (p1->opcode != CPUI_MULTIEQUAL) {
-        return -1;
+        throw LowlevelError("detect fsm not support ");
     }
 
     if (ollvm_check_fsm(p1)) return -1;
