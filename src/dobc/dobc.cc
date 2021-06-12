@@ -401,12 +401,12 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 
 void dobc::plugin_ollvm()
 {
-#if 0 // 斗鱼
-    funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
+#if 1 // 斗鱼
+    //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
-    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x366f5));
+    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x366f5));
 #endif
 
 #if 0 // liblazarus
@@ -414,7 +414,7 @@ void dobc::plugin_ollvm()
     funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x132ed));
 #endif
 
-#if 1 // 快手
+#if 0 // 快手
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15f09));
     funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0xcb59));
 #endif
@@ -910,7 +910,9 @@ pcodeop*        varnode::search_copy_chain(OpCode until)
             break;
         }
 
-        p = (vn && vn->def) ? vn->def : NULL;
+        if (!vn || !vn->def) return p;
+
+        p = vn->def;
     }
 
     return (p && (p->opcode == until)) ? p : NULL;
@@ -1316,7 +1318,7 @@ void            pcodeop::on_MULTIEQUAL()
         else if (p->opcode != CPUI_MULTIEQUAL) {
             p = vn->search_copy_chain(CPUI_MULTIEQUAL);
 
-            if (!p) {
+            if (!p || (p->opcode != CPUI_MULTIEQUAL)) {
                 output->set_top();
                 return;
             }
@@ -1374,7 +1376,7 @@ void            pcodeop::on_MULTIEQUAL()
             else if (p1->opcode != CPUI_MULTIEQUAL) {
                 p1 = vn1->search_copy_chain(CPUI_MULTIEQUAL);
 
-                if (!p1)
+                if (!p1 || (p1->opcode != CPUI_MULTIEQUAL))
                     goto top_label;
             }
 
@@ -4268,8 +4270,6 @@ int         funcdata::ollvm_deshell()
 #endif
 
     //dump_djgraph("1", 0);
-
-    dump_cfg(name, "orig0", 1);
 
     ollvm_detect_frameworkinfo();
 

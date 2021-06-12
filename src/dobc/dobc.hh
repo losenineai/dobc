@@ -367,6 +367,16 @@ public:
 	void			add_ref_point_simple(pcodeop *p);
 	void			clear_cover_simple();
 
+    /* 给定一个varnode，搜索拷贝链，到某个OpCode类型为止，现在只搜索3种类型:
+
+    1. copy
+    2. load
+    3. store
+
+    @return NULL                失败
+            ->opcode == until   成功
+            ->opcode != until   失败，返回最后赋值的pcode
+    */
     pcodeop*        search_copy_chain(OpCode until);
     /*
 
@@ -1656,8 +1666,8 @@ public:
     int         ollvm_detect_propchain3(flowblock *&from, blockedge *&outedge);
     int         ollvm_detect_propchains2(flowblock *&from, blockedge *&outedge);
     int         ollvm_detect_fsm(ollvmhead *oh);
-    int         ollvm_check_fsm(varnode *vn);
-    int         ollvm_combine_propchain(ollvmhead *oh);
+    int         ollvm_detect_fsm2(ollvmhead *oh);
+    int         ollvm_check_fsm(pcodeop *op);
 
     bool        use_outside(varnode *vn);
     void        use2undef(varnode *vn);
@@ -2078,6 +2088,21 @@ public:
 
 #define strprefix(m1,c)     (strncmp(m1.c_str(), c, strlen(c)) == 0)
     bool        is_simd(const Address &addr) { return context->getVariable("simd", addr);  }
+
+    /* 当我们重新生成了新的obj文件以后，原始的context里面还遗留了以前的context信息，比如it block的信息，像
+    
+    condit
+    itmod
+    cond_full
+    cond_base
+    cond_true
+    cond_shft
+    cond_mask
+    我们会清掉一部分，否则重新写下去的代码，解析不正确
+    */
+    void        clear_it_info(const Address &addr) {
+        context->setVariable("condit", addr, 0);
+    }
     bool        is_adr(const Address &addr) { 
         string &m = get_inst_mnem(addr.getOffset());
         return strprefix(m, "adr");

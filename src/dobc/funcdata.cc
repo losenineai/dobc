@@ -1033,6 +1033,7 @@ int         funcdata::ollvm_detect_frameworkinfo()
             }
         }
     }
+    /* FIXME:这里我们需要校验安全区域之间是否overlap */
     for (i = 0; i < poss.size(); i++) {
         pcodeop *p = poss[i];
         char buf[128];
@@ -1370,7 +1371,7 @@ int         funcdata::ollvm_detect_fsm(ollvmhead *oh)
                 }
                 else if ((p->opcode == CPUI_LOAD) && (poa(p) == s) && p->get_virtualnode() && ((store = p->get_virtualnode()->def)->parent == h)) {
                     vn = store->get_in(2);
-                    if (ollvm_check_fsm(vn)) return -1;
+                    if (ollvm_check_fsm(vn->def)) return -1;
 
                     oh->st1 = vn->get_addr();
                     oh->st1_size = vn->get_size();
@@ -1387,10 +1388,55 @@ int         funcdata::ollvm_detect_fsm(ollvmhead *oh)
     return -1;
 }
 
-int         funcdata::ollvm_check_fsm(varnode *vn)
+int         funcdata::ollvm_detect_fsm2(ollvmhead *oh)
 {
-    pcodeop *p = vn->def;
+    flowblock *h = oh->h;
+    varnode *in0, *in1, *in;
+    pcodeop *p, *p1;
+    int dfnum;
 
+    p = h->get_cbranch_sub_from_cmp();
+
+    if (!p) return -1;
+
+    in0 = p->get_in(0);
+    in1 = p->get_in(1);
+
+    if (!in0->is_constant() && !in1->is_constant()) {
+        vector<varnode *> defs;
+
+        if (in0->def && (in0->def->opcode == CPUI_MULTIEQUAL)) {
+            collect_all_const_defs(in0->def, defs, dfnum);
+
+            if (defs.size() > 1) {
+                oh->st1 = in0->get_addr();
+                oh->st1_size = in0->get_size();
+                return 0;
+            }
+        }
+
+        return -1;
+    }
+
+    in = in0->is_constant() ? in1 : in0;
+
+    Address s = in->get_addr();
+
+    p1 = in->search_copy_chain(CPUI_MULTIEQUAL);
+    if (p1->opcode != CPUI_MULTIEQUAL) {
+        return -1;
+    }
+
+    if (ollvm_check_fsm(p1)) return -1;
+
+    oh->st1 = p1->output->get_addr();
+    oh->st1_size = p1->output->get_size();
+
+    return 0;
+}
+
+int         funcdata::ollvm_check_fsm(pcodeop *p)
+{
     if (!p || (p->opcode != CPUI_MULTIEQUAL)) return -1;
 
     vector<intb>    consts;
