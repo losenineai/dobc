@@ -158,8 +158,13 @@ static void ot(uint16_t i)
 
 static void ott(uint32_t i)
 {
+    dobc *d = g_cg->d;
+
+    d->clear_it_info(Address(d->get_code_space(), g_cg->ind));
+
     write_thumb2(i, g_cg->data + g_cg->ind);
     g_cg->ind += 4;
+
 }
 
 static void ob(uint8_t *buf, int siz)
