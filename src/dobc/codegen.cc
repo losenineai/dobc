@@ -11,7 +11,7 @@ void codegen::sort_blocks(vector<flowblock *> &blks)
     int i, j;
     vector<flowblock *> &exitlist = fd->bblocks.exitlist;
     vector<flowblock *> q;
-    flowblock *b, *tmpb, *outb;
+    flowblock *b, *tmpb = NULL, *outb;
 
     blks.resize(fd->bblocks.get_size());
 
