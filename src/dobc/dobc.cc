@@ -405,8 +405,8 @@ void dobc::plugin_ollvm()
     //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
-    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
-    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x366f5));
+    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
+    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x366f5));
 #endif
 
 #if 0 // liblazarus
