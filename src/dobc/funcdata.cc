@@ -971,6 +971,7 @@ int         funcdata::ollvm_detect_frameworkinfo()
     */
     rewrite_no_sub_cbranch_blks(blks);
 
+    /* 检测循环中，哪些循环可能有ollvm */
     for (i = 0; i < bblocks.blist.size(); i++) {
         b = bblocks.blist[i];
         t = b->get_back_edge_count();
@@ -1360,6 +1361,10 @@ int         funcdata::ollvm_detect_fsm2(ollvmhead *oh)
     p1 = in->search_copy_chain(CPUI_MULTIEQUAL);
     if (p1->opcode != CPUI_MULTIEQUAL) {
         throw LowlevelError("detect fsm not support ");
+
+        if (p1->opcode == CPUI_LOAD) {
+            set_safezone(poa(p1).getOffset(), p1->output->get_size());
+        }
     }
 
     if (ollvm_check_fsm(p1)) return -1;

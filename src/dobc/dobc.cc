@@ -409,12 +409,12 @@ void dobc::plugin_ollvm()
     funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x366f5));
 #endif
 
-#if 1 // liblazarus
+#if 0 // liblazarus
     funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15f09));
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x132ed));
 #endif
 
-#if 0 // 快手
+#if 1 // 快手
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15f09));
     funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0xcb59));
 #endif
@@ -6971,137 +6971,6 @@ pcodeop*    funcdata::trace_store_query(pcodeop *load)
     return store_query(NULL, p->parent, vn, &maystore);
 }
 
-#if 0
-pcodeop*    funcdata::store_query(pcodeop *load, flowblock *b, varnode *pos, pcodeop **maystore)
-{
-    list<pcodeop *>::reverse_iterator it1;
-    list<pcodeop *>::iterator it;
-
-    flowblock *bb;
-    pcodeop *p, *tmpstore;
-
-    if (load) {
-        it = load->basiciter;
-        b = load->parent;
-    }
-    else {
-        it = b->ops.end();
-    }
-
-    while (1) {
-       while (it != b->ops.begin()) {
-            it--;
-            p = *it;
-
-            if (!p->flags.inlined && b->fd->have_side_effect(p, pos)) {
-                return NULL;
-            }
-            if (p->in_sp_alloc_range(pos)) return p;
-            if (p->opcode != CPUI_STORE) continue;
-			if (p->flags.uncalculated_store) continue;
-
-            varnode *a = p->get_in(1);
-
-            if (a->type.height == a_top) {
-                if (b->fd == this) *maystore = p;
-                return NULL;
-            }
-
-            if (a->type == pos->type)
-                return p;
-        }
-
-        if (b->is_entry_point()) {
-            if (b->fd->caller) {
-                pcodeop *p1 = b->fd->callop;
-                b =  p1->parent;
-                it = p1->basiciter;
-                // skip , FIXME:没有处理当这个op已经为第一个的情况
-            }
-            else
-                break;
-        }
-        else if (b->in.size() > 1){
-            flowblock *dom = b->immed_dom;
-            vector<flowblock *> stack;
-            vector<int> visited;
-
-            visited.clear();
-            visited.resize(b->fd->bblocks.get_size());
-
-            tmpstore = NULL;
-            for (int i = 0; i < b->in.size(); i++) {
-                if (b->get_in(i) == dom) continue;
-                stack.push_back(b->get_in(i));
-            }
-
-            while (!stack.empty()) {
-                b = stack.front();
-                stack.erase(stack.begin());
-
-                if (visited[b->dfnum])
-                    continue;
-
-                visited[b->dfnum] = 1;
-
-                for (it1 = b->sideeffect_ops.rbegin(); it1 != b->sideeffect_ops.rend(); it1++) {
-                    p = *it1;
-
-                    if (have_side_effect(p, pos))
-                        return NULL;
-
-                    if (p->opcode == CPUI_STORE) {
-                        varnode *a = p->get_in(1);
-
-                        /* 在分支中找到了store节点，假如是第一个就保存起来，
-                        假如不是第一个，则比较是否相等，不是的话返回NULL */
-                        if (a->is_top()) {
-#if 0
-                            if (load && load->output->maystore_from_this(p))
-                                continue;
-#endif
-
-                            *maystore = p;
-                            return NULL;
-                        }
-
-                        if (a->type == pos->type) {
-#if 0
-                            if (NULL == tmpstore)
-                                tmpstore = p;
-                            else if (tmpstore->get_in(2) != p->get_in(2))
-                                return NULL;
-#else
-                            return NULL;
-#endif
-                        }
-                    }
-                }
-
-                for (int i = 0; i < b->in.size(); i++) {
-                    bb = b->get_in(i);
-                    if (bb == dom)
-                        continue;
-
-                    stack.push_back(bb);
-                }
-            }
-
-            if (tmpstore)
-                return tmpstore;
-
-            b = dom;
-            it = b->ops.end();
-       }
-        else {
-            b = b->get_in(0);
-            it = b->ops.end();
-        }
-    }
-
-    return NULL;
-}
-#else
 pcodeop*    funcdata::store_query(pcodeop *load, flowblock *b, varnode *pos, pcodeop **maystore)
 {
     list<pcodeop *>::reverse_iterator it;
@@ -7237,7 +7106,6 @@ pcodeop*    funcdata::store_query(pcodeop *load, flowblock *b, varnode *pos, pco
 
     return NULL;
 }
-#endif
 
 bool        funcdata::loop_unrolling4(flowblock *h, int vm_caseindex, uint32_t flags)
 {
@@ -7602,7 +7470,6 @@ void        funcdata::alias_clear(void)
     for (it = w.begin(); it != w.end(); it++) {
         pcodeop *op = *it;
 
-#if 1
         if ((op->opcode != CPUI_STORE) && (op->opcode != CPUI_LOAD)) continue;
 
         vn = (op->opcode == CPUI_STORE) ? op->output : op->get_virtualnode();
@@ -7612,11 +7479,6 @@ void        funcdata::alias_clear(void)
 
         if ((op->opcode == CPUI_LOAD) && (op->num_input() == 3) && !op->get_in(2))
             op->remove_input(2);
-#else
-        if (op->opcode != CPUI_LOAD) continue;
-        if (vn = op->get_virtualnode())
-            destroy_varnode(vn);
-#endif
     }
 
     safe_aliaslist.clear();

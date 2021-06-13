@@ -1304,6 +1304,7 @@ public:
 
     LocationMap     disjoint;
     LocationMap     globaldisjoint;
+
     /* 这个以前是Ghidra里面用来多次做heritage的，因为普通的ssa和mem-ssa必须要分开做 */
     int pass = 0;
 
@@ -1568,6 +1569,43 @@ public:
     */
     void        split_pieces(const vector<varnode *> &vnlist, pcodeop *insertop, const Address &addr, int size, varnode *startvn);
     int         constant_propagation3();
+    /* 重构新的常量传播算法，尝试解决版本3遗留的几个问题
+
+    1. 别名搜索效率过低，它针对每个load都会
+    1.1 搜索自己的所有前驱
+    1.2 假如自己的前驱有多个节点，找到自己的支配节点，搜索自己的到支配节点的所有路径
+        (1) 假如中途碰到任意一个call节点
+        (2) 假如中途碰到任意一个top store节点
+        (3) 碰到任意一个store节点，valuetype和自己相等
+        立即停止
+    1.3 一直到头为止
+    2. 没有支持mem-phi
+
+    同时标准的mem-phi最大的问题，插入了太多的may def, may use节点，维护ssa的开销其实也挺大
+
+    我们在新版本中，尝试解决部分问题
+
+    1. mem-phi:不插入may def和may use
+    2. mem-phi:只对非常少部分的mem节点，插入phi，往往是基于某些特殊需求
+    3. 常量传播版本3: 
+
+    术语:因为我把格的术语和编译器的混在了一起，所以 top store和 may store 是等价的。 
+
+    具体:
+    1. 关于效率的问题，我们新的改造如下
+    1.1 正常进行常量传播，但是先关闭以前的store_query
+    1.2 常量传播结束
+        (1) 开始 mem rename(我们没有普通的ssa的 phi-place的过程，之所以没有，是因为我个人觉的这个时候你做的phi-place的插入很可能是错的，因为你不清楚算不清的top store，是不是真的算不清)
+        (2) 维护一个 stack_addr_map<stack_addr, varnode>，它的key是stack地址，后面会考虑支持非stack地址，但是现在不管。
+        (3) 扫描一个块
+            [1]. 碰到may store，对整个stack_addr_map加一个may store层
+            [2]. 碰到了must store，直接加入到 stack_addr_map[store] = pcode
+            [3]. 碰到一个load，检查是否 top load，是的话跳过。不是的话，假如碰到了may store层，直接跳过，假如没有，查找stack_addr_map[load.addr],找到的话，进行rename.
+            [4]. 记录所有livein 的must load
+            [5]. 记录所有liveout 的must store
+        (4) 递归扫描整个dom树，和普通的rename过程一致
+    */
+    int         constant_propagation4();
     int         cond_constant_propagation();
     int         in_cbrlist(pcodeop *op) {
         for (int i = 0; i < cbrlist.size(); i++) {
