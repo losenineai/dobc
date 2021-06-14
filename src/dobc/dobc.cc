@@ -156,8 +156,13 @@ int print_varnode(Translate *trans, char *buf, varnode *data)
     else if (name == "") {
         if (addr.getSpace()->getIndex() == IPTR_CONSTANT)
             return sprintf(buf, "(%c%llx:%d)", addr.getSpace()->getShortcut(), addr.getOffset(), data->size);
-        else
-            return sprintf(buf, "(%c%llx:%d)", addr.getSpace()->getShortcut(), addr.getOffset(), data->size);
+        else {
+            intb x = addr.getOffset();
+            if (x > 0)
+                return sprintf(buf, "(%c%llx:%d)", addr.getSpace()->getShortcut(), addr.getOffset(), data->size);
+            else
+                return sprintf(buf, "(%c-%llx:%d)", addr.getSpace()->getShortcut(), abs(x), data->size);
+        }
     }
     else
         return sprintf(buf, "(%c%s.%d:%d)", addr.getSpace()->getShortcut(), name.c_str(), data->version, data->size);
@@ -326,12 +331,12 @@ funcdata *dobc::add_func(const Address &a)
     if ((fd = find_func(a))) return fd;
 
     if (a.getSpace() == ram_spc) {
-        Address addr(trans->getDefaultCodeSpace(), a.getOffset());
+        Address addr(getDefaultCodeSpace(), a.getOffset());
 
         sprintf(buf, "sub_%llx", a.getOffset());
         fd = new funcdata(buf, addr, 0, this);
     }
-    else if (a.getSpace() == trans->getDefaultCodeSpace()) {
+    else if (a.getSpace() == getDefaultCodeSpace()) {
         sprintf(buf, "sub_%llx", a.getOffset());
         fd = new funcdata(buf, a, 0, this);
     }
@@ -348,7 +353,7 @@ void dobc::init_plt()
         for (i = 0; i < count_of_array(pltlist); i++) {
             struct pltentry *entry = &pltlist[i];
 
-            Address addr(trans->getDefaultCodeSpace(), entry->addr);
+            Address addr(getDefaultCodeSpace(), entry->addr);
             fd = new funcdata(entry->name, addr, 0, this);
             fd->set_exit(entry->exit);
             fd->funcp.set_side_effect(entry->side_effect);
@@ -358,7 +363,7 @@ void dobc::init_plt()
         }
     }
     else {
-        Address addr(trans->getDefaultCodeSpace(), stack_check_fail_addr);
+        Address addr(getDefaultCodeSpace(), stack_check_fail_addr);
         fd = new funcdata("__stack_check_fail", addr, 0, this);
         fd->set_exit(1);
         addrtab[addr] = fd;
@@ -386,9 +391,9 @@ const string& dobc::get_abbrev(const string &name)
 void dobc::add_space_base(AddrSpace *basespace, 
     const string &nm, const VarnodeData &ptrdata, int trunsize, bool isreversejustified, bool stackGrowth)
 {
-    int ind = trans->numSpaces();
+    int ind = numSpaces();
 
-    SpacebaseSpace *spc = new SpacebaseSpace(trans, trans, nm, ind, trunsize, basespace, ptrdata.space->getDelay()+1);
+    SpacebaseSpace *spc = new SpacebaseSpace(this, trans, nm, ind, trunsize, basespace, ptrdata.space->getDelay()+1);
 
     insertSpace(spc);
     addSpacebasePointer(spc, ptrdata, trunsize, stackGrowth);
@@ -413,10 +418,10 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 void dobc::plugin_ollvm()
 {
 #if 1 // 斗鱼
-    funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
+    //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
-    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
+    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x366f5));
 #endif
 
@@ -1490,7 +1495,7 @@ int             pcodeop::compute(int inslot, flowblock **branch)
         }
 
         if (in0->get_addr().getSpace() == d->ram_spc)
-            loadram2out(Address(d->trans->getDefaultCodeSpace(), in0->get_addr().getOffset()));
+            loadram2out(Address(d->getDefaultCodeSpace(), in0->get_addr().getOffset()));
         else if (in0->is_constant()) {
             if ((in0->size == 16) && in0->get_val()) {
                 //vm_error("pcode in size == 16, pcode(p%d)\n", start.getTime());
@@ -1547,7 +1552,7 @@ int             pcodeop::compute(int inslot, flowblock **branch)
         in1 = get_in(1);
         in2 = (inrefs.size() == 3) ? get_in(2):NULL;
         if (fd->is_code(in0, in1) && (in1->is_constant() || in1->is_pc_constant())) {
-            loadram2out(Address(d->trans->getDefaultCodeSpace(), in1->type.v));
+            loadram2out(Address(d->getDefaultCodeSpace(), in1->type.v));
             //printf("addr=%llx, pcode=%d, load ram, pos = %llx, val = %llx\n", get_dis_addr().getOffset(), start.getTime(), in1->type.v, out->get_val());
         }
         else if (in2) { // 别名分析过
@@ -2592,7 +2597,7 @@ blockbasic* blockgraph::new_block_basic(intb offset)
 {
     flowblock *b = new_block_basic();
 
-    Address addr(fd->d->trans->getDefaultCodeSpace(), offset);
+    Address addr(fd->d->getDefaultCodeSpace(), offset);
     b->set_initial_range(addr, addr);
 
     return b;
@@ -4118,7 +4123,7 @@ int         funcdata::ollvm_deshell()
         printf("[%s] loop_unrolling sub_%llx %d times*********************** \n\n", mtime2s(NULL),  h->get_start().getOffset(), i);
         dead_code_elimination(bblocks.blist, RDS_UNROLL0);
 #if defined(DCFG_CASE)
-        //dump_cfg(name, _itoa(i, buf, 10), 1);
+        dump_cfg(name, _itoa(i, buf, 10), 1);
 #endif
     }
 
@@ -4640,7 +4645,7 @@ varnode*    funcdata::create_def_unique(int s, pcodeop *op)
 
 varnode*    funcdata::create_constant_vn(intb val, int size)
 {
-    Address addr(d->trans->getConstantSpace(), val);
+    Address addr(d->getConstantSpace(), val);
 
     return create_vn(size, addr);
 }
@@ -5047,7 +5052,7 @@ varnode_loc_set::const_iterator     funcdata::end_loc(const Address &addr)
 {
     if (addr.getOffset() == addr.getSpace()->getHighest()) {
         AddrSpace *space = addr.getSpace();
-        searchvn.loc = Address(d->trans->getNextSpaceInOrder(space), 0);
+        searchvn.loc = Address(d->getNextSpaceInOrder(space), 0);
     }
     else
         searchvn.loc = addr + 1;
@@ -5063,7 +5068,7 @@ varnode_loc_set::const_iterator     funcdata::begin_loc(AddrSpace *spaceid)
 
 varnode_loc_set::const_iterator     funcdata::end_loc(AddrSpace *spaceid)
 {
-    searchvn.loc = Address(d->trans->getNextSpaceInOrder(spaceid), 0);
+    searchvn.loc = Address(d->getNextSpaceInOrder(spaceid), 0);
     return loc_tree.lower_bound(&searchvn);
 }
 
@@ -5180,7 +5185,7 @@ branch指令打上call_branch标记
 
         case CPUI_BRANCHIND:
             if (op->get_in(0)->is_constant()) {
-                Address destaddr(d->trans->getConstantSpace(), op->get_in(0)->get_val());
+                Address destaddr(d->getConstantSpace(), op->get_in(0)->get_val());
                 new_address(op, destaddr);
             }
             else
@@ -5791,8 +5796,8 @@ void        funcdata::dump_pcode(const char *postfix)
 
     assememit.set_fp(fp);
 
-    for (int i = 0; i < d->trans->numSpaces(); i++) {
-        AddrSpace *spc = d->trans->getSpace(i);
+    for (int i = 0; i < d->numSpaces(); i++) {
+        AddrSpace *spc = d->getSpace(i);
         fprintf(fp, "Space[%s, type:%d, 0x%llx, %c]\n", spc->getName().c_str(), spc->getType(), spc->getHighest(), spc->getShortcut());
     }
     fprintf(fp, "ma = mult_addr\n");
@@ -6174,7 +6179,7 @@ varnode*    funcdata::new_unique_out(int s, pcodeop *op)
 
 varnode*    funcdata::new_mem(AddrSpace *spc, int offset, int s)
 {
-    Address addr(d->trans->getStackSpace(), offset);
+    Address addr(spc, offset);
 
     return create_vn(s, addr);
 }

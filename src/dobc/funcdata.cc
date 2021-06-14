@@ -2092,7 +2092,11 @@ cp_label1:
                 op_set_input(load, store->output, 2);
             }
             else {
-                Address oaddr(d->getUniqueSpace(), virtualbase += in->size);
+                if (!store->get_in(1)->is_sp_constant())
+                    throw LowlevelError("only support sp constant");
+
+                //Address oaddr(d->getUniqueSpace(), virtualbase += in->size);
+                Address oaddr(d->getStackBaseSpace(), pi1(store)->get_val());
                 out = new_varnode_out(in->size, oaddr, store);
 
                 op_resize(load, 3);
