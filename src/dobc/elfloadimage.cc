@@ -30,9 +30,9 @@ void ElfLoadImage::init()
     }
 }
  
-ElfLoadImage::ElfLoadImage(const char *filename):LoadImageB(filename)
+ElfLoadImage::ElfLoadImage(const string &filename):LoadImageB(filename)
 {
-    filedata = (unsigned char *)file_load(filename, (int *)&filelen);
+    filedata = (unsigned char *)file_load(filename.c_str(), (int *)&filelen);
 
     if (!filedata) 
         vm_error("ElfLoadImage() failed open [%s]", filename);

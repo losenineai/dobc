@@ -20,7 +20,7 @@ public:
     unsigned char*  filedata;
     int				filelen;
 
-    ElfLoadImage(const char *filename);
+    ElfLoadImage(const string &filename);
     virtual ~ElfLoadImage();
     void        init();
 

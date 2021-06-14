@@ -2142,6 +2142,46 @@ cp_label1:
     return ret;
 }
 
+int         funcdata::pure_constant_propagation(pcodeop_set &set)
+{
+    list<pcodeop *>::const_iterator iter;
+    list<pcodeop *>::const_iterator iter1;
+    pcodeop_set::iterator it;
+	pcodeop_set maystore_set;
+    pcodeop_set visit;
+    pcodeop *op;
+	int ret = 0, changed = 0;
+    flowblock *b;
+    varnode *out;
+
+    while (!set.empty()) {
+        it = set.begin();
+        op = *it;
+        set.erase(it);
+
+        if (op->flags.dead) continue;
+
+        op->compute(-1, &b);
+        if (!flags.disable_to_const)
+            op->to_constant1();
+
+        out = op->output;
+
+        if (!out) continue;
+
+        if (out->is_constant() || out->is_sp_constant()) {
+            if (visit.find(op) != visit.end()) continue;
+            visit.insert(op);
+
+            for (iter1 = out->uses.begin(); iter1 != out->uses.end(); ++iter1) {
+                set.insert(*iter1);
+            }
+        }
+    }
+
+    return ret;
+}
+
 
 int         funcdata::cond_constant_propagation()
 {

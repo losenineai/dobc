@@ -383,6 +383,13 @@ const string& dobc::get_abbrev(const string &name)
     return (iter != abbrev.end()) ? (*iter).second : name;
 }
 
+void dobc::add_space_base(AddrSpace *basespace, const string &nm, const VarnodeData &ptrdata, int trunsize, bool stackGrowth)
+{
+    int ind = trans->numSpaces();
+
+    SpacebaseSpace *spc = new SpacebaseSpace(trans, trans, nm, ind, trunsize, basespace, ptrdata.space->getDelay()+1);
+}
+
 funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 {
     int i;
@@ -401,12 +408,12 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 
 void dobc::plugin_ollvm()
 {
-#if 0 // 斗鱼
-    //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
+#if 1 // 斗鱼
+    funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
-    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x366f5));
+    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x366f5));
 #endif
 
 #if 0 // liblazarus
@@ -414,7 +421,7 @@ void dobc::plugin_ollvm()
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x132ed));
 #endif
 
-#if 1 // 快手
+#if 0 // 快手
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15f09));
     funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0xcb59));
 #endif
@@ -512,33 +519,6 @@ void dobc::init_regs()
     }
 }
 
-void dobc::build_instructions()
-{
-}
-
-void dobc::init()
-{
-    init_spcs();
-    init_regs();
-    init_abbrev();
-    init_plt();
-    build_instructions();
-
-    addrtab::iterator it;
-    LoadImageFunc *sym;
-    funcdata *fd;
-
-    for (it = loader->beginSymbol(); it != loader->endSymbol(); it++) {
-        sym = it->second;
-
-        if (NULL == (fd  = find_func(sym->address)))
-            fd = new funcdata(sym->name.c_str(), sym->address, sym->size, this);
-
-        addrtab[sym->address] = fd;
-        nametab[sym->name] = fd;
-    }
-}
-
 void dobc::gen_sh(void)
 {
     char buf[260];
@@ -547,142 +527,6 @@ void dobc::gen_sh(void)
     file_save(buf, GEN_SH, strlen(GEN_SH));
 }
 
-dobc::dobc(const char *sla, const char *bin) 
-    : fullpath(bin),
-        out_filename(basename(bin))
-{
-    g_dobc = this;
-
-    slafilename.assign(sla);
-    filename.assign(basename(bin));
-
-    out_filename += ".decode";
-    loader = new ElfLoadImage(bin);
-    loader1 = new ElfLoadImage(bin);
-    context = new ContextInternal();
-    trans = new Sleigh(loader, context);
-
-    DocumentStorage docstorage;
-    Element *sleighroot = docstorage.openDocument(slafilename)->getRoot();
-    docstorage.registerTag(sleighroot);
-    trans->initialize(docstorage); // Initialize the translator
-    // 开启这一行，会导致it指令的上下切换出错
-    //trans->allowContextSet(false); 
-    trans->setContextDefault("TMode", 1);
-    //trans->setContextDefault("LRset", 0);
-
-    loader->setCodeSpace(trans->getDefaultCodeSpace());
-    loader->init();
-
-    mdir_make(filename.c_str());
-    gen_sh();
-
-    sp_addr = trans->getRegister("sp").getAddr();
-    lr_addr = trans->getRegister("lr").getAddr();
-    r0_addr = trans->getRegister("r0").getAddr();
-    r1_addr = trans->getRegister("r1").getAddr();
-    r2_addr = trans->getRegister("r2").getAddr();
-    r3_addr = trans->getRegister("r3").getAddr();
-    r4_addr = trans->getRegister("r4").getAddr();
-    r5_addr = trans->getRegister("r5").getAddr();
-    r6_addr = trans->getRegister("r6").getAddr();
-    r7_addr = trans->getRegister("r7").getAddr();
-    r8_addr = trans->getRegister("r8").getAddr();
-    r9_addr = trans->getRegister("r9").getAddr();
-    r10_addr = trans->getRegister("r10").getAddr();
-    r11_addr = trans->getRegister("r11").getAddr();
-    ma_addr = trans->getRegister("mult_addr").getAddr();
-
-    zr_addr = trans->getRegister("ZR").getAddr();
-    cy_addr = trans->getRegister("CY").getAddr();
-    pc_addr = trans->getRegister("pc").getAddr();
-
-    argument_regs.push_back(&r0_addr);
-    argument_regs.push_back(&r1_addr);
-    argument_regs.push_back(&r2_addr);
-    argument_regs.push_back(&r3_addr);
-
-    trans->getUserOpNames(useroplist);
-}
-
-dobc*    dobc::singleton()
-{
-    return g_dobc;
-}
-
-dobc::~dobc()
-{
-}
-
-void        dobc::set_func_alias(const string &sym, const string &alias)
-{
-    funcdata *fd = find_func(sym);
-
-    fd->set_alias(alias);
-}
-
-#define SLA_FILE            "../../../Processors/ARM/data/languages/ARM8_le.sla"
-#define PSPEC_FILE          "../../../Processors/ARM/data/languages/ARMCortex.pspec"
-#define CSPEC_FILE          "../../../Processors/ARM/data/languages/ARM.cspec"
-#define TEST_SO             "../../../data/vmp/360_1/libjiagu.so"
-
-static char help[] = {
-    "dobc [-s .sla filename] [-st (360free|ollvm)] [-i filename] [-stack_check_fail addr]\r\n" 
-    "       -o                  output filename\r\n"
-    "       -d[0-6]             debug info level\r\n"
-    "       -da [hex address]   decode address\r\n"
-    "       -sd                 dump new so to so directory or current directory\r\n"
-};
-
-int main(int argc, char **argv)
-{
-    int i;
-    char *sla = NULL, *filename = NULL, *st = NULL;
-    intb stack_check_fail_addr = 0, sd = 0;
-    char *out_filename = NULL;
-
-    for (i = 1; i < argc; i++) {
-        if (!strcmp(argv[i], "-s")) {
-            sla = argv[++i];
-        }
-        else if (!strcmp(argv[i], "-st")) {
-            st = argv[++i];
-        }
-        else if (!strcmp(argv[i], "-i")) {
-            filename = argv[++i];
-        }
-        else if (!strcmp(argv[i], "-o")) {
-            out_filename = argv[++i];
-        }
-        else if (!strcmp(argv[i], "-sd")) {
-            sd = 1;
-        }
-        else if (!strcmp(argv[i], "-stack_check_fail")) {
-            stack_check_fail_addr = strtol(argv[++i], NULL, 16);
-        }
-    }
-
-    if (!sla || !st || !filename || !stack_check_fail_addr) {
-        puts(help);
-        return -1;
-    }
-
-    dobc d(sla, filename);
-
-    d.set_shelltype(st);
-    d.stack_check_fail_addr = stack_check_fail_addr;
-
-    if (out_filename)
-        d.out_filename.assign(out_filename, strlen(out_filename));
-
-    if (sd)
-        d.out_dir.assign(filename, basename(filename) - filename);
-
-    d.init();
-    d.run();
-
-    return 0;
-}
 
 varnode::varnode(int s, const Address &m)
     : loc(m)
@@ -1782,19 +1626,6 @@ int             pcodeop::compute(int inslot, flowblock **branch)
         if (output) {
             output->type = in2->type;
         }
-
-        /*
-        a = mem[x];
-        mem[x] = a;
-        消减掉这种形式的代码
-        */
-#if 0
-        if ((op = in2->def) && (op->opcode == CPUI_LOAD) && (in2->uses.size() == 1) && (in1->type == op->get_in(1)->type)) {
-            fd->op_destroy(op);
-            fd->op_destroy(this);
-            return ERR_FREE_SELF;
-        }
-#endif
 
         break;
 
@@ -6284,6 +6115,64 @@ varnode*    funcdata::new_unique_out(int s, pcodeop *op)
     return vn;
 }
 
+/*
+    对于load, store节点，根据需要生成额外的 mem节点
+
+1.   temp0 = r0 + 4
+2.   store ram[temp0] r1
+3.   temp1 = r0 + 4
+4.   r2 = load ram[temp1]
+
+    temp0和temp1的地址其实是等价的，但是指令2，和指令4，没有关联起来，我们生成一个新的mem节点，把代码重写如下:
+
+1.   temp0 = r0 + 4
+2.   store ram[temp0] r1 mem0
+3.   temp1 = r0 + 4
+4.   r2 = load ram[temp1] mem0
+
+    temp0或者temp1实际上就是取mem0的地址:
+
+    temp0 = &mem0
+
+
+    但是这里有个问题，是如何设计mem节点的数据结构。传统的Ghidra使用了一种叫StackBaseSpace的方法，来表现大部分的load, store访问，
+    我讲下我对这一块的理解（不保证理解的绝对正确性）:
+
+    1. translate.hh:170 的注释，SpaceBaseSpace这个结构的需求是来自于大部分的程序分析需要分析局部变量，
+       而局部变量都可以表示成相对于sp的偏移，所以他们设计了一种虚拟space。
+    2. 每个SpaceBaseSpace必须关联一个base register
+
+    我这里没搞懂的是，假如我有2个virtual space的需求，生成了2个SpaceBaseSpace，它们的base register都是一样的，在Ghidra的框架设计
+    中应该如何区分，比如以下代码:
+
+1.    r0 = malloc(128);
+2.    store [r0+4], r1
+3.    store [sp-4], r0
+
+4.    r0 = malloc(128);
+5.    store [r0 + 4], r2
+6.    store [sp-8], r0
+
+    inst 1和4处的r0其实代表不同的虚拟地址空间，但是Ghidra只用了最基本的VarnodeData的数据结构去描述这个baseSpace之间的区别？那面对2个
+    一样的baseRegister该如何处理，它们内在的语义已经完全发生了区别.
+
+    搜了下代码，architecture.hh:177, getSpaceBySpaceBase() 是根据loc, size来区分的
+
+    既然Ghidra这里确实只处理了最基本的Stack的虚拟空间的问题，那么我们可能需要重新调整它的设计以适应更多的虚拟地址空间的问题。怎么改？
+
+    我们这里先使用默认的StackBaseSpace，因为我现在也暂时只用到了Stack virtual space. 后面但我们有更多的virtual space时，对整个系统插入
+    更多的virtual space来却分，
+
+    每个virtual space可能要关联的是pcode，而不是varnode
+*/
+
+varnode*    funcdata::new_mem(AddrSpace *spc, int offset, int s)
+{
+    Address addr(d->trans->getStackSpace(), offset);
+
+    return create_vn(s, addr);
+}
+
 varnode*    funcdata::clone_varnode(const varnode *vn)
 {
     varnode *newvn = new_varnode(vn->size, vn->loc);
@@ -7824,3 +7713,124 @@ void        dobc::get_scratch_regs(vector<int> &regs)
     regs.push_back(R2);
     regs.push_back(R3);
 }
+
+void        dobc::build_loader(DocumentStorage &store)
+{
+    loader = new ElfLoadImage(fullpath);
+    loader1 = new ElfLoadImage(fullpath);
+}
+
+void        dobc::build_context()
+{
+    context = new ContextInternal();
+}
+
+Translate*  dobc::build_translator(DocumentStorage &store)
+{
+    Translate *sleigh = new Sleigh(loader, context);
+
+    return sleigh;
+}
+
+void dobc::restore_from_spec(DocumentStorage &store)
+{
+    Translate *newtrans = build_translator(store);
+    newtrans->initialize(store);
+    trans = newtrans;
+    copySpaces(newtrans);
+    trans->getUserOpNames(useroplist);
+
+    trans->setContextDefault("TMode", 1);
+
+    loader->setCodeSpace(getDefaultCodeSpace());
+    loader->init();
+}
+
+dobc::dobc(const char *sla, const char *bin) 
+    : fullpath(bin),
+        out_filename(basename(bin))
+{
+    g_dobc = this;
+
+    slafilename.assign(sla);
+    filename.assign(basename(bin));
+
+    out_filename += ".decode";
+
+    mdir_make(filename.c_str());
+    gen_sh();
+}
+
+void        dobc::build_arm()
+{
+    sp_addr = trans->getRegister("sp").getAddr();
+    lr_addr = trans->getRegister("lr").getAddr();
+    r0_addr = trans->getRegister("r0").getAddr();
+    r1_addr = trans->getRegister("r1").getAddr();
+    r2_addr = trans->getRegister("r2").getAddr();
+    r3_addr = trans->getRegister("r3").getAddr();
+    r4_addr = trans->getRegister("r4").getAddr();
+    r5_addr = trans->getRegister("r5").getAddr();
+    r6_addr = trans->getRegister("r6").getAddr();
+    r7_addr = trans->getRegister("r7").getAddr();
+    r8_addr = trans->getRegister("r8").getAddr();
+    r9_addr = trans->getRegister("r9").getAddr();
+    r10_addr = trans->getRegister("r10").getAddr();
+    r11_addr = trans->getRegister("r11").getAddr();
+    ma_addr = trans->getRegister("mult_addr").getAddr();
+
+    zr_addr = trans->getRegister("ZR").getAddr();
+    cy_addr = trans->getRegister("CY").getAddr();
+    pc_addr = trans->getRegister("pc").getAddr();
+
+    argument_regs.push_back(&r0_addr);
+    argument_regs.push_back(&r1_addr);
+    argument_regs.push_back(&r2_addr);
+    argument_regs.push_back(&r3_addr);
+}
+
+dobc*    dobc::singleton()
+{
+    return g_dobc;
+}
+
+dobc::~dobc()
+{
+}
+
+void        dobc::set_func_alias(const string &sym, const string &alias)
+{
+    funcdata *fd = find_func(sym);
+
+    fd->set_alias(alias);
+}
+
+void dobc::init(DocumentStorage &store)
+{
+    build_loader(store);
+    build_context();
+    
+    restore_from_spec(store);
+
+    build_arm();
+
+    init_spcs();
+    init_regs();
+    init_abbrev();
+    init_plt();
+
+    addrtab::iterator it;
+    LoadImageFunc *sym;
+    funcdata *fd;
+
+    for (it = loader->beginSymbol(); it != loader->endSymbol(); it++) {
+        sym = it->second;
+
+        if (NULL == (fd  = find_func(sym->address)))
+            fd = new funcdata(sym->name.c_str(), sym->address, sym->size, this);
+
+        addrtab[sym->address] = fd;
+        nametab[sym->name] = fd;
+    }
+}
+

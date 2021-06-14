@@ -272,7 +272,8 @@ public:
         unsigned    outlive : 1;
     } flags = { 0 };
 
-    int size = 0;
+    short size = 0;
+    short baseindex = 0;
     int create_index = 0;
     Address loc;
 
@@ -1396,6 +1397,7 @@ public:
     varnode*    new_coderef(const Address &m);
     varnode*    new_unique(int s);
     varnode*    new_unique_out(int s, pcodeop *op);
+    varnode*    new_mem(AddrSpace *spc, int offset, int s);
 
     varnode*    clone_varnode(const varnode *vn);
     void        destroy_varnode(varnode *vn);
@@ -1606,6 +1608,7 @@ public:
         (4) 递归扫描整个dom树，和普通的rename过程一致
     */
     int         constant_propagation4();
+    int         pure_constant_propagation(pcodeop_set &set);
     int         cond_constant_propagation();
     int         in_cbrlist(pcodeop *op) {
         for (int i = 0; i < cbrlist.size(); i++) {
@@ -2034,8 +2037,10 @@ struct func_call_specs {
     const Address &get_addr() { return fd->get_addr(); }
 };
 
-class dobc {
+class dobc:public AddrSpaceManager {
 public:
+    string  archid;
+
     /* 代码生成以后需要被覆盖的loader */
     ElfLoadImage *loader;
     /* 原始加载的elf文件 */
@@ -2110,12 +2115,11 @@ public:
     ~dobc();
     static dobc*    singleton();
 
+    void init(DocumentStorage &store);
     void init_regs();
-    void init();
     void init_spcs();
     /* 初始化位置位置无关代码，主要时分析原型 */
     void init_plt(void);
-    void build_instructions();
 
     void        add_inst_mnem(const Address &addr, const string &mnem);
     string&     get_inst_mnem(intb addr);
@@ -2190,6 +2194,16 @@ public:
     void gen_sh(void);
     void init_abbrev();
     const string &get_abbrev(const string &name);
+
+    void add_space_base(AddrSpace *basespace, const string &nm, const VarnodeData &ptrdata, 
+        int trunsize, bool stackGrowth);
+
+    void        build_loader(DocumentStorage &store);
+    void        build_context();
+    Translate*  build_translator(DocumentStorage &store);
+    void        build_arm();
+
+    void restore_from_spec(DocumentStorage &storage);
 };
 
 
