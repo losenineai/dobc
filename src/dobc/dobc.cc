@@ -383,11 +383,15 @@ const string& dobc::get_abbrev(const string &name)
     return (iter != abbrev.end()) ? (*iter).second : name;
 }
 
-void dobc::add_space_base(AddrSpace *basespace, const string &nm, const VarnodeData &ptrdata, int trunsize, bool stackGrowth)
+void dobc::add_space_base(AddrSpace *basespace, 
+    const string &nm, const VarnodeData &ptrdata, int trunsize, bool isreversejustified, bool stackGrowth)
 {
     int ind = trans->numSpaces();
 
     SpacebaseSpace *spc = new SpacebaseSpace(trans, trans, nm, ind, trunsize, basespace, ptrdata.space->getDelay()+1);
+
+    insertSpace(spc);
+    addSpacebasePointer(spc, ptrdata, trunsize, stackGrowth);
 }
 
 funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
@@ -398,7 +402,7 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
         pltentry *e = pltlist + i;
         if ((e->addr == addr) && strstr(e->name, "vmp360")) {
             uintb uaddr = (uintb)addr;
-            Address addr(d->get_code_space(), uaddr);
+            Address addr(d->getDefaultCodeSpace(), uaddr);
             return d->find_func(addr);
         }
     }
@@ -495,12 +499,14 @@ funcdata* dobc::find_func(const string &s)
 
 void dobc::init_spcs()
 {
-    for (int i = 0; i < trans->numSpaces(); i++) {
-        AddrSpace *spc = trans->getSpace(i);
+    for (int i = 0; i < numSpaces(); i++) {
+        AddrSpace *spc = getSpace(i);
         if (spc->getName() == "ram")
             ram_spc = spc;
         else if (spc->getName() == "register")
             reg_spc = spc;
+
+        printf("Space[%s, type:%d, size:%llu, shortcut:%c\n", spc->getName().c_str(), spc->getType(), spc->getHighest(), spc->getShortcut());
     }
 }
 
@@ -1664,7 +1670,7 @@ int             pcodeop::compute(int inslot, flowblock **branch)
 
     case CPUI_BRANCHIND:
         if (in0->is_constant()) {
-            Address addr(d->get_code_space(), in0->get_val());
+            Address addr(d->getDefaultCodeSpace(), in0->get_val());
 
             if (!(op = fd->find_op(addr))) {
                 printf("we found a new address[%llx] to analaysis\n", addr.getOffset());
@@ -3904,7 +3910,7 @@ int         funcdata::combine_lcts(vector<flowblock *> &blks)
 
         for (i = 0; i < ops.size(); i++) {
             pcodeop *p1 = ops[i];
-            Address addr2(d->get_code_space(), p1->get_addr().getOffset());
+            Address addr2(d->getDefaultCodeSpace(), p1->get_addr().getOffset());
             const SeqNum sq(addr2, op_uniqid++);
             p = cloneop(p1, sq);
             op_insert_end(p, b);
@@ -4255,12 +4261,12 @@ Address    flowblock::get_return_addr()
     dobc *d = parent->fd->d;
 
     if ((p->opcode == CPUI_RETURN))
-        return Address(d->get_code_space(), p->get_in(0)->get_val());
+        return Address(d->getDefaultCodeSpace(), p->get_in(0)->get_val());
 
     if (p->output->get_addr() != d->pc_addr)
         throw LowlevelError("inline block last op output must be pc address");
 
-    return Address(d->get_code_space(), p->output->get_val());
+    return Address(d->getDefaultCodeSpace(), p->output->get_val());
 }
 
 void        blockgraph::clear_all_unsplice()
@@ -5523,7 +5529,7 @@ void        funcdata::collect_edges()
 
         case CPUI_BRANCHIND:
             if (op->get_in(0)->is_constant()) {
-                Address addr(d->get_code_space(), op->get_in(0)->get_val());
+                Address addr(d->getDefaultCodeSpace(), op->get_in(0)->get_val());
 
                 target_op = find_op(addr);
                 if (!target_op)
@@ -6099,7 +6105,7 @@ varnode*    funcdata::new_coderef(const Address &m)
 
 varnode*    funcdata::new_unique(int s)
 {
-    Address addr(d->get_uniq_space(), vbank.uniqid);
+    Address addr(d->getUniqueSpace(), vbank.uniqid);
 
     vbank.uniqid += s;
 
@@ -6565,7 +6571,7 @@ flowblock*      funcdata::argument_inline(funcdata *inlinefd, pcodeop *callop)
 
 			if (p->opcode == CPUI_RETURN) break;
 
-			Address addr2(d->get_code_space(), user_offset + p->get_addr().getOffset());
+			Address addr2(d->getDefaultCodeSpace(), user_offset + p->get_addr().getOffset());
 			SeqNum seq(addr2, op_uniqid++);
 			op = cloneop(p, seq);
 
@@ -6758,8 +6764,8 @@ void        funcdata::follow_flow(void)
     sprintf(buf, "%s/%s", d->filename.c_str(), name.c_str());
     mdir_make(buf);
 
-    Address baddr(d->get_code_space(), 0);
-    Address eaddr(d->get_code_space(), ~((uintb)0));
+    Address baddr(d->getDefaultCodeSpace(), 0);
+    Address eaddr(d->getDefaultCodeSpace(), ~((uintb)0));
     set_range(baddr, eaddr);
 
     generate_ops_start();
@@ -7217,7 +7223,7 @@ flowblock*       funcdata::loop_unrolling(flowblock *h, flowblock *end, uint32_t
     }
 
     user_offset += user_step;
-    Address addr(d->get_code_space(), user_offset);
+    Address addr(d->getDefaultCodeSpace(), user_offset);
     /* 进入节点抛弃 */
     for (i = 0; trace[i]->parent == start; i++);
     /* 从主循环开始 */
@@ -7226,7 +7232,7 @@ flowblock*       funcdata::loop_unrolling(flowblock *h, flowblock *end, uint32_t
         p = trace[i];
 
         if ((p->opcode == CPUI_CALLIND) && p->get_in(0)->is_constant()) {
-            Address addr(d->get_code_space(), p->get_in(0)->get_val());
+            Address addr(d->getDefaultCodeSpace(), p->get_in(0)->get_val());
             callfd = d->find_func(addr);
         }
 
@@ -7240,7 +7246,7 @@ flowblock*       funcdata::loop_unrolling(flowblock *h, flowblock *end, uint32_t
             continue;
         }
 
-        Address addr2(d->get_code_space(), user_offset + p->get_addr().getOffset());
+        Address addr2(d->getDefaultCodeSpace(), user_offset + p->get_addr().getOffset());
         const SeqNum sq(addr2, op_uniqid++);
         op = cloneop(p, sq);
         op_insert(op, cur, cur->ops.end());
@@ -7322,7 +7328,7 @@ flowblock*  funcdata::clone_block(flowblock *f, u4 flags)
         if (op->opcode == CPUI_MULTIEQUAL) continue;
         if ((flags & F_OMIT_RETURN) && (op->opcode == CPUI_RETURN)) break;
 
-        Address addr2(d->get_code_space(), op->get_addr().getOffset());
+        Address addr2(d->getDefaultCodeSpace(), op->get_addr().getOffset());
         SeqNum seq(addr2, op_uniqid++);
         p = cloneop(op, seq);
 
@@ -7740,6 +7746,8 @@ void dobc::restore_from_spec(DocumentStorage &store)
     copySpaces(newtrans);
     trans->getUserOpNames(useroplist);
 
+    parseCompilerConfig(store);
+
     trans->setContextDefault("TMode", 1);
 
     loader->setCodeSpace(getDefaultCodeSpace());
@@ -7834,3 +7842,42 @@ void dobc::init(DocumentStorage &store)
     }
 }
 
+
+void dobc::parse_stack_pointer(const Element *el)
+{
+    AddrSpace *basespace = getSpaceByName("ram");
+    bool stackGrowth = true;
+    bool isreversejustify = false;
+
+    VarnodeData point = trans->getRegister("sp");
+    int truncsize = point.size;
+    if (basespace->isTruncated() && (point.size > basespace->getAddrSize()))
+        truncsize = basespace->getAddrSize();
+
+    add_space_base(basespace, "stack", point,  truncsize, false, stackGrowth);
+}
+
+void dobc::parseCompilerConfig(DocumentStorage &store)
+{
+    parse_stack_pointer(NULL);
+}
+
+AddrSpace *dobc::getSpaceBySpacebase(const Address &loc, int4 size) const
+{
+    AddrSpace *id;
+    int4 sz = numSpaces();
+    for (int4 i = 0; i < sz; ++i) {
+        id = getSpace(i);
+        if (id == (AddrSpace *)0) continue;
+        int4 numspace = id->numSpacebase();
+        for (int4 j = 0; j < numspace; ++j) {
+            const VarnodeData &point(id->getSpacebase(j));
+            if (point.size != size) continue;
+            if (point.space != loc.getSpace()) continue;
+            if (point.offset != loc.getOffset()) continue;
+            return id;
+        }
+    }
+    throw LowlevelError("Unable to find entry for spacebase register");
+    return (AddrSpace *)0;
+}

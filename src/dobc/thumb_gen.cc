@@ -160,7 +160,7 @@ static void ott(uint32_t i)
 {
     dobc *d = g_cg->d;
 
-    d->clear_it_info(Address(d->get_code_space(), g_cg->ind));
+    d->clear_it_info(Address(d->getDefaultCodeSpace(), g_cg->ind));
 
     write_thumb2(i, g_cg->data + g_cg->ind);
     g_cg->ind += 4;
@@ -1689,7 +1689,7 @@ void thumb_gen::fix_vldr(fix_vldr_item &vldr)
         offset += 2;
     }
 
-    d->loader1->loadFill(fillbuf, siz, Address(d->get_code_space(), vldr.end->get_in(1)->get_val()));
+    d->loader1->loadFill(fillbuf, siz, Address(d->getDefaultCodeSpace(), vldr.end->get_in(1)->get_val()));
 
     memcpy(data + ind, fillbuf, siz);
     ind += siz;
@@ -1709,7 +1709,7 @@ void thumb_gen::fix_vld1(fix_vld1_item &item, pc_rel_table &tab)
     uint1 fillbuf[32];
     int oind = ind, offset;
 
-    d->loader1->loadFill(fillbuf, item.loadsiz, Address(d->get_code_space(), item.loadaddr));
+    d->loader1->loadFill(fillbuf, item.loadsiz, Address(d->getDefaultCodeSpace(), item.loadaddr));
 
     memcpy(data + ind, fillbuf, item.loadsiz);
     ind += item.loadsiz;

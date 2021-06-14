@@ -2164,8 +2164,6 @@ public:
     void        set_test_cond_inline_fn(test_cond_inline_fn fn1) { test_cond_inline = fn1;  }
     funcdata*   find_func(const string &s);
     funcdata*   find_func(const Address &addr);
-    AddrSpace *get_code_space() { return trans->getDefaultCodeSpace();  }
-    AddrSpace *get_uniq_space() { return trans->getUniqueSpace();  }
     bool        is_liveout_regs(const Address &addr) {
         return is_greg(addr) || is_vreg(addr);
     }
@@ -2195,8 +2193,8 @@ public:
     void init_abbrev();
     const string &get_abbrev(const string &name);
 
-    void add_space_base(AddrSpace *basespace, const string &nm, const VarnodeData &ptrdata, 
-        int trunsize, bool stackGrowth);
+    void add_space_base(AddrSpace *basespace,
+        const string &nm, const VarnodeData &ptrdata, int trunsize, bool isreversejustified, bool stackGrowth);
 
     void        build_loader(DocumentStorage &store);
     void        build_context();
@@ -2204,6 +2202,13 @@ public:
     void        build_arm();
 
     void restore_from_spec(DocumentStorage &storage);
+    void parse_stack_pointer(const Element *el);
+
+    void parseCompilerConfig(DocumentStorage &store);
+    AddrSpace *getStackBaseSpace(void) {
+        return getSpaceByName("stack");
+    }
+    AddrSpace *getSpaceBySpacebase(const Address &loc,int4 size) const; ///< Get space associated with a \e spacebase register
 };
 
 

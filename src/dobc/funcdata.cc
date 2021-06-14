@@ -156,7 +156,7 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
     cur = bblocks.new_block_basic();
 
     user_offset += user_step;
-    Address addr(d->get_code_space(), user_offset);
+    Address addr(d->getDefaultCodeSpace(), user_offset);
     /* 进入节点抛弃 */
     for (i = 0; trace[i]->parent == from; i++);
 
@@ -179,7 +179,7 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
         p = trace[i];
 
         if ((p->opcode == CPUI_CALLIND) && p->get_in(0)->is_constant()) {
-            Address addr(d->get_code_space(), p->get_in(0)->get_val());
+            Address addr(d->getDefaultCodeSpace(), p->get_in(0)->get_val());
             callfd = d->find_func(addr);
         }
 
@@ -187,7 +187,7 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
         if (((p->opcode == CPUI_BRANCH) || (p->opcode == CPUI_CBRANCH) || (p->opcode == CPUI_INDIRECT) || (p->opcode == CPUI_MULTIEQUAL) || (p->opcode == CPUI_BRANCHIND)))
             continue;
 
-        Address addr2(d->get_code_space(), p->get_addr().getOffset());
+        Address addr2(d->getDefaultCodeSpace(), p->get_addr().getOffset());
         const SeqNum sq(addr2, op_uniqid++);
         op = cloneop(p, sq);
         op_insert(op, cur, cur->ops.end());
@@ -2092,7 +2092,7 @@ cp_label1:
                 op_set_input(load, store->output, 2);
             }
             else {
-                Address oaddr(d->get_uniq_space(), virtualbase += in->size);
+                Address oaddr(d->getUniqueSpace(), virtualbase += in->size);
                 out = new_varnode_out(in->size, oaddr, store);
 
                 op_resize(load, 3);
