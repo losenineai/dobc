@@ -542,7 +542,8 @@ void        funcdata::place_multiequal(void)
 void        funcdata::rename()
 {
     variable_stack varstack;
-    version_map vermap;
+
+    vermap.clear();
 
     rename_recurse(bblocks.get_block(0), varstack, vermap);
 
@@ -2076,7 +2077,6 @@ cp_label1:
                 continue;
             }
 
-            safe_aliaslist.push_back(load);
             set.insert(load);
             if (store->parent->fd != this) {
                 load->output->type = store->get_in(2)->type;
@@ -2085,7 +2085,6 @@ cp_label1:
             }
 
             varnode *in = store->get_in(1);
-            safe_aliaslist.push_back(store);
 
             /* 假如这个store已经被分析过，直接把store的版本设置过来 */
             if (store->output) {
@@ -2142,6 +2141,170 @@ cp_label1:
 			goto cp_label1;
 		}
 	}
+
+    return ret;
+}
+
+int         funcdata::constant_propagation4()
+{
+    list<pcodeop *>::const_iterator iter;
+    list<pcodeop *>::const_iterator iter1;
+	vector<pcodeop *> topstorelist;
+    pcodeop_set::iterator it;
+    pcodeop_set set;
+    pcodeop_set visit;
+	pcodeop_set maystore_set;
+    pcodeop *op, *use, *load, *store, *maystore;
+	int ret = 0, r, changed = 0;
+    flowblock *b;
+    varnode *out;
+
+    bblocks.collect_sideeffect_ops();
+
+    for (iter = deadlist.begin(); iter != deadlist.end(); iter++) {
+        op = *iter;
+        if (op->flags.dead) continue;
+        set.insert(op);
+    }
+
+    pure_constant_propagation(set);
+
+    vector<flowblock *> q;
+
+    q.push_back(bblocks.get_entry_point());
+
+    while (!q.empty()) {
+        b = q.front();
+        q.erase(q.begin());
+
+        ret = b->calc_memflow();
+        /* 确认自己的memflow是否有发生变化，假如有的话，把自己的后继节点全部加入跟新列表中 */
+        if (ret) {
+            for (int i = 0; i < b->out.size(); i++) 
+                q.push_back(b->get_out(i));
+        }
+    }
+
+cp_label1:
+    while (!set.empty()) {
+        it = set.begin();
+        op = *it;
+        set.erase(it);
+
+        if (op->flags.dead) continue;
+
+        if ((op->opcode == CPUI_STORE) && (op->get_in(1)->type.height != a_top)) {
+            for (iter1 = op->mayuses.begin(); iter1 != op->mayuses.end(); ++iter1) {
+                use = *iter1;
+                set.insert(use);
+            }
+            op->mayuses.clear();
+        }
+
+        r = op->compute(-1, &b);
+        if (!flags.disable_to_const)
+            op->to_constant1();
+        if (r == ERR_FREE_SELF) continue;
+        ret |= r;
+
+        out = op->output;
+
+        if (!out) continue;
+
+        if (out->is_constant() || out->is_sp_constant()) {
+            if (visit.find(op) != visit.end()) continue;
+            visit.insert(op);
+
+            for (iter1 = out->uses.begin(); iter1 != out->uses.end(); ++iter1) {
+                set.insert(*iter1);
+            }
+        }
+        else if ((op->opcode == CPUI_LOAD) && !op->get_virtualnode() && !op->flags.input) {
+            load = op;
+            maystore = NULL;
+            store = store_query(load, NULL, load->get_in(1), &maystore);
+
+            if (!store) {
+                if (maystore) {
+                    maystore->add_mayuse(load);
+					maystore_set.insert(maystore);
+                }
+                continue;
+            }
+
+            if (store->opcode != CPUI_STORE) {
+                load->output->set_val(0);
+                load->flags.val_from_sp_alloc = 1;
+                continue;
+            }
+
+            set.insert(load);
+            if (store->parent->fd != this) {
+                load->output->type = store->get_in(2)->type;
+                load->flags.input = 1;
+                continue;
+            }
+
+            varnode *in = store->get_in(1);
+
+            /* 假如这个store已经被分析过，直接把store的版本设置过来 */
+            if (store->output) {
+                op_set_input(load, store->output, 2);
+            }
+            else {
+                if (!store->get_in(1)->is_sp_constant())
+                    throw LowlevelError("only support sp constant");
+
+                //Address oaddr(d->getUniqueSpace(), virtualbase += in->size);
+                Address oaddr(d->getStackBaseSpace(), pi1(store)->get_val());
+                out = new_varnode_out(in->size, oaddr, store);
+
+                op_resize(load, 3);
+                op_set_input(load, out, 2);
+                set.insert(store);
+            }
+        }
+    }
+
+	topstorelist.clear();
+	while (!maystore_set.empty()) {
+        it = maystore_set.begin();
+        op = *it;
+        maystore_set.erase(it);
+
+		if (op->flags.dead) continue;
+
+		op->mayuses.clear();
+		if (op->get_in(1)->type.height == a_top)
+			topstorelist.push_back(op);
+	}
+
+	if (flags.enable_topstore_mark && !topstorelist.empty()) {
+		sort(topstorelist.begin(), topstorelist.end(), pcodeop_domdepth_cmp());
+
+		op = topstorelist[0];
+		flowblock *b = op->parent;
+		while (b) {
+			if (b->in.size() > 1) break;
+
+			b = b->in.size() ? b->get_in(0):NULL;
+		}
+
+		if (!b) {
+			changed = 1;
+			op->flags.uncalculated_store = 1;
+			for (iter1 = op->mayuses.begin(); iter1 != op->mayuses.end(); iter1++) {
+				set.insert(*iter1);
+			}
+
+			op->mayuses.clear();
+
+			goto cp_label1;
+		}
+	}
+
+    if (d->shelltype == SHELL_OLLVM) {
+    }
 
     return ret;
 }

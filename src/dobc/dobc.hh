@@ -683,7 +683,6 @@ struct mem_stack {
     int     pop(int size);
 };
 
-
 struct flowblock {
     enum block_type     type;
 
@@ -773,6 +772,16 @@ struct flowblock {
         /* 自己的block生成的代码对应的具体位置 */
         unsigned char *data = NULL;
     }cg;
+
+    struct {
+        /* 这个block快中，是否有call指令 */
+        int             have_call;
+        /* 这个block快中，是否有maystore */
+        int             have_may_store;
+        /* 这里的liveout和livein，都是mem相关*/
+        set<varnode *>  liveout;
+        set<varnode *>  livein;
+    } memflow;
 
     flowblock(funcdata *fd);
     ~flowblock();
@@ -966,6 +975,12 @@ struct flowblock {
 
     /* 给定某个pcode，返回同一个地址的第一个pcode */
     list<pcodeop*>::iterator    find_inst_first_op(pcodeop *p);
+
+    /*
+    return  1       changed
+            0       no changed
+    */
+    int             calc_memflow();
 };
 
 class blockgraph {
@@ -1073,7 +1088,6 @@ public:
     void        collect_no_cmp_cbranch_block(vector<flowblock *> &blks);
     flowblock*  get_it_end_block(flowblock *b);
     void        collect_sideeffect_ops();
-    bool        blocks_have_same_cmp_condition(flowblock *a, flowblock *b);
 };
 
 typedef struct priority_queue   priority_queue;
@@ -1236,6 +1250,9 @@ public:
     */
     valuemap   tracemap;
 
+    /* 记录地址和版本号的,SSA时用到 */
+    version_map vermap;
+
     /* jmp table */
     vector<pcodeop *>   tablelist;
     vector<jmptable *>  jmpvec;
@@ -1250,8 +1267,6 @@ public:
     list<pcodeop *>     useroplist;
     list<pcodeop *>     deadandgone;
     list<pcodeop *>     philist;
-    /* 安全的别名信息，可以传播用 */
-    list<pcodeop *>     safe_aliaslist;
 
     vector<blockedge *>   propchains;
 
@@ -1544,7 +1559,14 @@ public:
     void        visit_incr(flowblock *qnode, flowblock *vnode);
     void        place_multiequal(void);
     void        rename();
+    /*
+    @vermap 用来标注版本号的一个map，一般的SSA算法里面携带的版本号，其实最大的意义是用来标识2个同名var是否一样，本身版本号
+            的大小是无意义的，Ghidra意识到了这一点，所以它的varnode本身不带版本号，所有的同版本varnode，就是同一个vn的指针。
+            但是这个不方便我们调试，所以我加了一个vermap，硬给每个vn加了一个版本。
+    */
     void        rename_recurse(blockbasic *bl, variable_stack &varstack, version_map &vermap);
+    /* 建立活跃链，这个活跃链非常耗时，有个 build_liverange_simple，比这个快100倍以上，假如你知道simple和这个的区别，就根据自己需要
+       来使用不同的版本，假如不知道就用这个，这个就是标准的活跃链建立算法 */
 	void		build_liverange();
     void        build_liverange_recurse(blockbasic *bl, variable_stack &varstack);
 
@@ -1609,6 +1631,27 @@ public:
     */
     int         constant_propagation4();
     int         pure_constant_propagation(pcodeop_set &set);
+    /*
+    1. 根据第一次heritage的结果，对所有有地址的load, store，生成sp-mem 节点
+
+    2. 生成variable_stack_map，记录当前这个深度的所有活地址，然后开始rename
+
+    3. 假如block的输入边是back-edge，加入mask-layer，所有的地址无效
+
+    4. 进入block内，假如是sp-load，扫描是否当前有活的sp-store，有的话，rename
+    4.1 这样关联以后，sp-load的out指向的变量值可能会变为 !top，假如是 !top ，假如到扫描列表，送入 pure_constant_propagation
+
+    5. 假如是sp-store，送入 variable_stack_map
+
+    6. 碰到函数，加入 mask-layer，所有地址无效（假如你精确的算出了函数的参数则例外，比如函数add，就送了r0, r1进去）
+
+    7. 碰到may store，加入mask-layer，所有地址无效
+
+    8. 走到block出口，统计 {bool_may_store, bool_call, liveout_store_list}
+    */
+    int         mem_rename();
+    void        mem_rename_recurse(blockbasic *bl, variable_stack &varstack, version_map &vermap);
+
     int         cond_constant_propagation();
     int         in_cbrlist(pcodeop *op) {
         for (int i = 0; i < cbrlist.size(); i++) {
