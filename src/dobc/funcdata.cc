@@ -445,6 +445,12 @@ void        funcdata::place_multiequal(void)
         writevars.clear();
         inputvars.clear();
         max = collect(addr, size, readvars, writevars, inputvars, flags);
+
+        /* 只有在安全区域内的stack变量，才会插入phi */
+        if ((addr.getSpace() == d->getStackBaseSpace()) && !in_safezone(addr.getOffset(), max)) {
+            continue;
+        }
+
         /* FIXME:Ghidra这里的判断和我差别很大，后期必须得重新调试，深入分析下Ghidra逻辑 */
         if (!BIT0(flags)) {
 #if 1
@@ -513,19 +519,6 @@ void        funcdata::place_multiequal(void)
                 j = 0;
             }
             else {
-#if 1
-                /* 假如已经有个从phi节点转成的copy节点，删除它的输入节点 */
-                if (multiop->opcode == CPUI_COPY) {
-                    throw LowlevelError("meet copy ");
-                    while (multiop->num_input() > 0)
-                        op_remove_input(multiop, 0);
-
-                    op_set_opcode(multiop, CPUI_MULTIEQUAL);
-                    multiop->flags.copy_from_phi = 0;
-                }
-#else
-#endif
-
                 j = multiop->num_input();
             }
 
@@ -583,7 +576,11 @@ void        funcdata::rename_recurse(blockbasic *bl, variable_stack &varstack, v
                     //vnnew = new_varnode(vnin->size, vnin->get_addr());
                     vnnew = clone_varnode(vnin);
                     vnnew = set_input_varnode(vnnew);
-                    vnnew->version = vermap[vnin->get_addr()];
+
+                    if (vnin->is_sp_vn())
+                        vnnew->version = -1;
+                    else
+                        vnnew->version = vermap[vnin->get_addr()];
                     stack.push_back(vnnew);
                 }
                 else 
@@ -607,7 +604,13 @@ void        funcdata::rename_recurse(blockbasic *bl, variable_stack &varstack, v
 			vnnew = stack.back();
 			vnnew->add_ref_point_simple(op);
 		}
-        stack.push_back(vnout);
+
+        if (vnout->is_sp_vn()) {
+            if (is_safe_vn(vnout))
+                stack.push_back(vnout);
+        }
+        else
+            stack.push_back(vnout);
         writelist.push_back(vnout);
 
 		vnout->add_def_point_simple();
@@ -677,6 +680,8 @@ void        funcdata::rename_recurse(blockbasic *bl, variable_stack &varstack, v
         vnout = writelist[i];
 
         vector<varnode *> &stack(varstack[vnout->get_addr()]);
+        /* stackbase的vn的stack，可能是空的 */
+        if (!stack.size()) continue;
         varnode *v = stack.back();
         stack.pop_back();
     }
@@ -1995,7 +2000,7 @@ void    funcdata::heritage_clear()
     phiflags.clear();
     domdepth.clear();
     merge.clear();
-    alias_clear();
+    //alias_clear();
     propchains.clear();
 
     maxdepth = -1;
@@ -2004,6 +2009,8 @@ void    funcdata::heritage_clear()
 
 int         funcdata::constant_propagation3()
 {
+    return constant_propagation4();
+
     list<pcodeop *>::const_iterator iter;
     list<pcodeop *>::const_iterator iter1;
 	vector<pcodeop *> topstorelist;
@@ -2167,24 +2174,6 @@ int         funcdata::constant_propagation4()
         set.insert(op);
     }
 
-    pure_constant_propagation(set);
-
-    vector<flowblock *> q;
-
-    q.push_back(bblocks.get_entry_point());
-
-    while (!q.empty()) {
-        b = q.front();
-        q.erase(q.begin());
-
-        ret = b->calc_memflow();
-        /* 确认自己的memflow是否有发生变化，假如有的话，把自己的后继节点全部加入跟新列表中 */
-        if (ret) {
-            for (int i = 0; i < b->out.size(); i++) 
-                q.push_back(b->get_out(i));
-        }
-    }
-
 cp_label1:
     while (!set.empty()) {
         it = set.begin();
@@ -2193,33 +2182,36 @@ cp_label1:
 
         if (op->flags.dead) continue;
 
-        if ((op->opcode == CPUI_STORE) && (op->get_in(1)->type.height != a_top)) {
+        if ((op->opcode == CPUI_STORE) && !op->get_in(1)->is_top()) {
             for (iter1 = op->mayuses.begin(); iter1 != op->mayuses.end(); ++iter1) {
                 use = *iter1;
                 set.insert(use);
             }
+
             op->mayuses.clear();
         }
+
+        if ((op->opcode == CPUI_LOAD) || (op->opcode == CPUI_STORE)) op->create_stack_virtual_vn();
 
         r = op->compute(-1, &b);
         if (!flags.disable_to_const)
             op->to_constant1();
-        if (r == ERR_FREE_SELF) continue;
-        ret |= r;
 
         out = op->output;
 
         if (!out) continue;
 
+        int find = (visit.find(op) != visit.end());
+
         if (out->is_constant() || out->is_sp_constant()) {
-            if (visit.find(op) != visit.end()) continue;
+            if (find) continue;
             visit.insert(op);
 
             for (iter1 = out->uses.begin(); iter1 != out->uses.end(); ++iter1) {
                 set.insert(*iter1);
             }
         }
-        else if ((op->opcode == CPUI_LOAD) && !op->get_virtualnode() && !op->flags.input) {
+        else if ((op->opcode == CPUI_LOAD) &&  !op->flags.input && !find) {
             load = op;
             maystore = NULL;
             store = store_query(load, NULL, load->get_in(1), &maystore);
@@ -2232,6 +2224,14 @@ cp_label1:
                 continue;
             }
 
+            /* 某些load的值，并不是来源于store，而是来自于sp的分配
+            
+            在堆栈自底向上增长时，sp的减小，意味着stack alloc memory的行为
+
+            sp = sp - 0x100
+
+            我们这里假设这个alloc出来的值都为0
+            */
             if (store->opcode != CPUI_STORE) {
                 load->output->set_val(0);
                 load->flags.val_from_sp_alloc = 1;
@@ -2239,6 +2239,9 @@ cp_label1:
             }
 
             set.insert(load);
+            visit.insert(load);
+
+            /* 这个调用子函数时，进入的流程，需要判断store的fd，是否等于当前fd*/
             if (store->parent->fd != this) {
                 load->output->type = store->get_in(2)->type;
                 load->flags.input = 1;
@@ -2248,21 +2251,10 @@ cp_label1:
             varnode *in = store->get_in(1);
 
             /* 假如这个store已经被分析过，直接把store的版本设置过来 */
-            if (store->output) {
-                op_set_input(load, store->output, 2);
-            }
-            else {
-                if (!store->get_in(1)->is_sp_constant())
-                    throw LowlevelError("only support sp constant");
+            if (!store->output)
+                throw LowlevelError("store output empty");
 
-                //Address oaddr(d->getUniqueSpace(), virtualbase += in->size);
-                Address oaddr(d->getStackBaseSpace(), pi1(store)->get_val());
-                out = new_varnode_out(in->size, oaddr, store);
-
-                op_resize(load, 3);
-                op_set_input(load, out, 2);
-                set.insert(store);
-            }
+            op_set_input(load, store->output, 2);
         }
     }
 
@@ -2302,9 +2294,6 @@ cp_label1:
 			goto cp_label1;
 		}
 	}
-
-    if (d->shelltype == SHELL_OLLVM) {
-    }
 
     return ret;
 }

@@ -159,9 +159,9 @@ int print_varnode(Translate *trans, char *buf, varnode *data)
         else {
             intb x = addr.getOffset();
             if (x > 0)
-                return sprintf(buf, "(%c%llx:%d)", addr.getSpace()->getShortcut(), addr.getOffset(), data->size);
+                return sprintf(buf, "(%c%llx.%d:%d)", addr.getSpace()->getShortcut(), addr.getOffset(), data->version, data->size);
             else
-                return sprintf(buf, "(%c-%llx:%d)", addr.getSpace()->getShortcut(), abs(x), data->size);
+                return sprintf(buf, "(%c-%llx.%d:%d)", addr.getSpace()->getShortcut(), abs(x), data->version, data->size);
         }
     }
     else
@@ -417,20 +417,20 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 
 void dobc::plugin_ollvm()
 {
-#if 1 // 斗鱼
+#if 0 // 斗鱼
     //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
-    funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
+    //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x366f5));
 #endif
 
 #if 0 // liblazarus
-    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15f09));
-    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x132ed));
+    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15f09));
+    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x132ed));
 #endif
 
-#if 0 // 快手
+#if 1 // 快手
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15f09));
     funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0xcb59));
 #endif
@@ -797,6 +797,11 @@ bool            varnode::maystore_from_this(pcodeop *p)
     }
 
     return false;
+}
+
+bool            varnode::is_sp_vn() 
+{ 
+    return (dobc::singleton()->getStackBaseSpace()) == get_addr().getSpace();  
 }
 
 intb            varnode::get_val(void) const
@@ -1357,6 +1362,30 @@ void            pcodeop::loadram2out(Address &addr)
         out->set_val(*(intb *)buf);
 }
 
+void            pcodeop::create_stack_virtual_vn()
+{
+    funcdata *fd = parent->fd;
+    dobc *d = parent->fd->d;
+    varnode *vn;
+    if ((opcode != CPUI_LOAD) && (opcode != CPUI_STORE)) return;
+
+    if ((opcode == CPUI_LOAD) && !get_virtualnode()) {
+        if (!get_virtualnode() && get_in(1)->is_sp_constant()) {
+            Address addr(d->getStackBaseSpace(),  get_in(1)->get_val());
+            vn = fd->create_vn(output->size, addr);
+            fd->op_set_input(this, vn, 2);
+        }
+    }
+    else {
+        if (!output) {
+            Address addr(d->getStackBaseSpace(),  get_in(1)->get_val());
+            vn = fd->create_vn(get_in(2)->size, addr);
+            vn->version = ++fd->vermap[addr];
+            fd->op_set_output(this, vn);
+        }
+    }
+}
+
 bool            pcodeop::all_inrefs_is_constant(void)
 {
     int i;
@@ -1555,7 +1584,7 @@ int             pcodeop::compute(int inslot, flowblock **branch)
             loadram2out(Address(d->getDefaultCodeSpace(), in1->type.v));
             //printf("addr=%llx, pcode=%d, load ram, pos = %llx, val = %llx\n", get_dis_addr().getOffset(), start.getTime(), in1->type.v, out->get_val());
         }
-        else if (in2) { // 别名分析过
+        else if (in2 && in2->def) { // 别名分析过
             output->type = in2->type;
             op = in2->def;
             varnode *_in2 = op->get_in(2);
@@ -1602,29 +1631,6 @@ int             pcodeop::compute(int inslot, flowblock **branch)
         /* 假如这个值确认来自于外部，不要跟新他 */
         else if (!flags.input && !flags.val_from_sp_alloc)
             out->type.height = a_top;
-
-        if (out->is_constant()) {
-        }
-        else if (in2) {
-            varnode* _in2 = in2->def->get_in(2);
-
-            /*
-            mem[x] = a1;
-            a2 = mem[x];
-
-            转换成
-            a2 = a1
-            */
-#if 0
-            if ((output->get_addr() == _in2->get_addr()) && (output->version == (_in2->version + 1))) {
-                while (num_input() > 0)
-                    fd->op_remove_input(this, 0);
-
-                fd->op_set_opcode(this, CPUI_COPY);
-                fd->op_set_input(this, _in2, 0);
-            }
-#endif
-        }
 
         break;
 
@@ -4186,6 +4192,8 @@ int         funcdata::ollvm_deshell()
 
     //dump_djgraph("1", 0);
 
+    dump_cfg(name, "orig0", 1);
+
     ollvm_detect_frameworkinfo();
 
     dump_cfg(name, "orig", 1);
@@ -4258,6 +4266,11 @@ void        funcdata::static_trace_restore()
     }
 
     tracemap.clear();
+}
+
+bool        funcdata::is_safe_vn(varnode *vn) 
+{
+    return (vn->get_addr().getSpace() == d->getStackBaseSpace()) && (in_safezone(vn->get_addr().getOffset(), vn->size));
 }
 
 int        funcdata::vmp360_deshell()
@@ -6297,7 +6310,8 @@ void        funcdata::destroy_varnode(varnode *vn)
 void        funcdata::delete_varnode(varnode *vn)
 {
     if (vn->def) {
-        printf("warn:try to remove varnode have def[%d] forbidden. %s:%d\n", vn->def->start.getTime(), __FILE__,__LINE__);
+        if (!vn->is_sp_vn())
+            printf("warn:try to remove varnode have def[%d] forbidden. %s:%d\n", vn->def->start.getTime(), __FILE__,__LINE__);
         return;
     }
 

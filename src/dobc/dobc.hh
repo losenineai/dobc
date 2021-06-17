@@ -345,6 +345,7 @@ public:
             set_val(l - r);
     }
     bool            is_sp_constant(void) { return type.height == a_sp_constant; }
+    bool            is_sp_vn();
     bool            is_input(void) { return flags.input; }
     void            set_sp_constant(int v) { type.height = a_sp_constant; type.v = v;  }
     void            set_pc_constant(intb v) { type.height = a_pc_constant; type.v = v; }
@@ -629,6 +630,7 @@ public:
         return NULL;
     }
     void            loadram2out(Address &addr);
+    void            create_stack_virtual_vn();
 };
 
 typedef struct blockedge            blockedge;
@@ -2067,6 +2069,7 @@ public:
     还原静态执行trace，产生的output值变化
     */
     void        static_trace_restore();
+    bool        is_safe_vn(varnode *vn);
 };
 
 struct func_call_specs {
