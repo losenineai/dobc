@@ -158,8 +158,11 @@ int print_varnode(Translate *trans, char *buf, varnode *data)
             return sprintf(buf, "(%c%llx:%d)", addr.getSpace()->getShortcut(), addr.getOffset(), data->size);
         else {
             intb x = addr.getOffset();
+            if (data->is_sp_vn())
+                x -= STACK_BASE;
+
             if (x > 0)
-                return sprintf(buf, "(%c%llx.%d:%d)", addr.getSpace()->getShortcut(), addr.getOffset(), data->version, data->size);
+                return sprintf(buf, "(%c%llx.%d:%d)", addr.getSpace()->getShortcut(), x, data->version, data->size);
             else
                 return sprintf(buf, "(%c-%llx.%d:%d)", addr.getSpace()->getShortcut(), abs(x), data->version, data->size);
         }
@@ -1371,14 +1374,14 @@ void            pcodeop::create_stack_virtual_vn()
 
     if ((opcode == CPUI_LOAD) && !get_virtualnode()) {
         if (!get_virtualnode() && get_in(1)->is_sp_constant()) {
-            Address addr(d->getStackBaseSpace(),  get_in(1)->get_val());
+            Address addr(d->getStackBaseSpace(),  get_in(1)->get_val() + STACK_BASE);
             vn = fd->create_vn(output->size, addr);
             fd->op_set_input(this, vn, 2);
         }
     }
     else {
         if (!output) {
-            Address addr(d->getStackBaseSpace(),  get_in(1)->get_val());
+            Address addr(d->getStackBaseSpace(),  get_in(1)->get_val() + STACK_BASE);
             vn = fd->create_vn(get_in(2)->size, addr);
             vn->version = ++fd->vermap[addr];
             fd->op_set_output(this, vn);
@@ -4268,7 +4271,7 @@ void        funcdata::static_trace_restore()
     tracemap.clear();
 }
 
-bool        funcdata::is_safe_vn(varnode *vn) 
+bool        funcdata::is_safe_sp_vn(varnode *vn) 
 {
     return (vn->get_addr().getSpace() == d->getStackBaseSpace()) && (in_safezone(vn->get_addr().getOffset(), vn->size));
 }

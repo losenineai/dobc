@@ -435,7 +435,7 @@ void        funcdata::place_multiequal(void)
     pcodeop *multiop, *p;
     varnode *vnin;
     blockbasic *bl;
-    int max, i, j, flags;
+    int max, i, j, flags, safevn;
 
     for (iter = disjoint.begin(); iter != disjoint.end(); ++iter) {
         Address addr = (*iter).first;
@@ -444,12 +444,18 @@ void        funcdata::place_multiequal(void)
         readvars.clear();
         writevars.clear();
         inputvars.clear();
-        max = collect(addr, size, readvars, writevars, inputvars, flags);
 
         /* 只有在安全区域内的stack变量，才会插入phi */
-        if ((addr.getSpace() == d->getStackBaseSpace()) && !in_safezone(addr.getOffset(), max)) {
-            continue;
+        safevn = 0;
+        if ((addr.getSpace() == d->getStackBaseSpace())) {
+            if (!in_safezone(addr.getOffset(), 4))
+                continue;
+
+            safevn = 1;
         }
+
+        max = collect(addr, size, readvars, writevars, inputvars, flags);
+
 
         /* FIXME:Ghidra这里的判断和我差别很大，后期必须得重新调试，深入分析下Ghidra逻辑 */
         if (!BIT0(flags)) {
@@ -469,10 +475,10 @@ void        funcdata::place_multiequal(void)
         if (readvars.empty() && (addr.getSpace()->getType() == IPTR_INTERNAL))
             continue;
 
-        if (readvars.empty() && writevars.empty())
+        if (readvars.empty() && writevars.empty() )
             continue;
 
-        if (!d->is_cpu_reg(addr) && !BIT1(flags)) {
+        if (!d->is_cpu_reg(addr) && !BIT1(flags) && !safevn) {
             continue;
         }
 
@@ -606,7 +612,7 @@ void        funcdata::rename_recurse(blockbasic *bl, variable_stack &varstack, v
 		}
 
         if (vnout->is_sp_vn()) {
-            if (is_safe_vn(vnout))
+            if (is_safe_sp_vn(vnout))
                 stack.push_back(vnout);
         }
         else
@@ -1366,11 +1372,16 @@ int         funcdata::ollvm_detect_fsm2(ollvmhead *oh)
 
     p1 = in->search_copy_chain(CPUI_MULTIEQUAL);
     if (p1->opcode != CPUI_MULTIEQUAL) {
-        throw LowlevelError("detect fsm not support ");
-
         if (p1->opcode == CPUI_LOAD) {
-            set_safezone(poa(p1).getOffset(), p1->output->get_size());
+            //set_safezone(poa(p1).getOffset(), p1->output->get_size());
+            set_safezone(pi2(p1)->get_addr().getOffset(), pi2(p1)->get_size());
+            heritage_clear();
+            heritage();
+            dump_cfg(name, "orig1", 1);
         }
+
+
+        throw LowlevelError("detect fsm not support ");
     }
 
     if (ollvm_check_fsm(p1)) return -1;
@@ -1946,8 +1957,8 @@ void        funcdata::heritage(void)
         build_adt();
 
     long start = clock();
-    for (i = 0; i < d->trans->numSpaces(); i++) {
-        AddrSpace *spc = d->trans->getSpace(i);
+    for (i = 0; i < d->numSpaces(); i++) {
+        AddrSpace *spc = d->getSpace(i);
 
         if (!spc->isHeritaged())
             continue;
@@ -1969,6 +1980,11 @@ void        funcdata::heritage(void)
             else
                 printf("%s\n", buf);
 #endif
+
+            if (vn->is_sp_vn()) {
+                if (!is_safe_sp_vn(vn))
+                    continue;
+            }
 
             int prev = 0;
             LocationMap::iterator iter = globaldisjoint.add(vn->get_addr(), vn->size, pass, prev);

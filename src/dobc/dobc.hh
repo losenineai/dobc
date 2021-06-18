@@ -65,6 +65,8 @@ class valuetype;
 #define BITN(b,n)           ((b) & (1 << n)) 
 #define BIT_TEST(b,n)       ((b) & n)
 
+/* 这里是因为Ghidra用Stackbase做 Space，offset都是负数，加了size以后，值被处理过以后不正确了 */
+#define STACK_BASE          0x10000
 
 class blockgraph;
 
@@ -2069,7 +2071,7 @@ public:
     还原静态执行trace，产生的output值变化
     */
     void        static_trace_restore();
-    bool        is_safe_vn(varnode *vn);
+    bool        is_safe_sp_vn(varnode *vn);
 };
 
 struct func_call_specs {
