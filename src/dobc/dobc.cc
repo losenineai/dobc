@@ -1587,10 +1587,8 @@ int             pcodeop::compute(int inslot, flowblock **branch)
             loadram2out(Address(d->getDefaultCodeSpace(), in1->type.v));
             //printf("addr=%llx, pcode=%d, load ram, pos = %llx, val = %llx\n", get_dis_addr().getOffset(), start.getTime(), in1->type.v, out->get_val());
         }
-        else if (in2 && in2->def) { // 别名分析过
+        else if (in2 && (op = in2->def)) { // 别名分析过
             output->type = in2->type;
-            op = in2->def;
-            varnode *_in2 = op->get_in(2);
 
             /* 
             mem[x] = r0(0)
@@ -1598,25 +1596,18 @@ int             pcodeop::compute(int inslot, flowblock **branch)
             r0(1) = mem[x]
             修改第2条指令会 cpy r0(1), r0(0)
             */
-#if 1
-            if (!is_trace() && 
-				(((_in2->get_addr() == out->get_addr()) && (_in2->version + 1) == (out->version))
-					|| _in2->in_liverange_simple(this))) {
-                while (num_input())
-                    fd->op_remove_input(this, 0);
+            if (op->opcode == CPUI_STORE) {
+                varnode *_in2 = op->get_in(2);
+                if (!is_trace() && 
+                    (((_in2->get_addr() == out->get_addr()) && (_in2->version + 1) == (out->version))
+                        || _in2->in_liverange_simple(this))) {
+                    while (num_input())
+                        fd->op_remove_input(this, 0);
 
-                fd->op_set_opcode(this, CPUI_COPY);
-                fd->op_set_input(this, _in2, 0);
+                    fd->op_set_opcode(this, CPUI_COPY);
+                    fd->op_set_input(this, _in2, 0);
+                }
             }
-#else
-            if (!is_trace() && _in2->in_liverange_simple(this)) {
-                while (num_input())
-                    fd->op_remove_input(this, 0);
-
-                fd->op_set_opcode(this, CPUI_COPY);
-                fd->op_set_input(this, _in2, 0);
-            }
-#endif
         }
         else if ((inslot >= 0)) { // trace流中
             pcodeop *maystoer = NULL;
@@ -2917,6 +2908,7 @@ int         flowblock::calc_memflow()
     return 1;
 }
 
+
 varnode*    flowblock::get_false_vn(pcodeop *phi)
 {
     if (!is_cbranch()) return NULL;
@@ -4205,6 +4197,8 @@ int         funcdata::ollvm_deshell()
     for (i = 0; loop_dfa_connect(0) >= 0; i++)
     {
         printf("[%s] loop_unrolling sub_%llx %d times*********************** \n\n", mtime2s(NULL),  h->get_start().getOffset(), i);
+        //dump_cfg(name, "check", 1);
+
         dead_code_elimination(bblocks.blist, RDS_UNROLL0);
 #if defined(DCFG_CASE)
         dump_cfg(name, _itoa(i, buf, 10), 1);
@@ -4429,14 +4423,13 @@ void        funcdata::remove_dead_store(flowblock *b)
 
                 /* 假如发现要被删除的store，还有被使用的use，直接报错 */
                 if (back->output && !back->output->has_no_use()) {
-                    assert(0);
+                    throw LowlevelError("dont remove store have use");
                 }
                 op_destroy(back, 1);
             }
 
             stack.push_back(p);
         }
-
 
         b = ((b->out.size() == 1) && (b->get_out(0)->in.size() == 1)) ? b->get_out(0) : NULL;
     }
@@ -6352,9 +6345,7 @@ pcodeop*    funcdata::cloneop(pcodeop *op, const SeqNum &seq)
     newop1->flags.startinst = op->flags.startinst;
     newop1->flags.startblock = op->flags.startblock;
 	newop1->flags.uncalculated_store = op->flags.uncalculated_store;
-    /* 我们有时候会给store分配一个虚拟的varnode节点，不要拷贝它 */
-    if (op->output && (op->opcode != CPUI_STORE))
-        op_set_output(newop1, clone_varnode(op->output));
+    op_set_output(newop1, clone_varnode(op->output));
     
     for (i = 0; i < sz; i++)
         op_set_input(newop1, clone_varnode(op->get_in(i)), i);

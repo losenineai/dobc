@@ -985,6 +985,8 @@ struct flowblock {
             0       no changed
     */
     int             calc_memflow();
+    /* 把自己的输入节点，按dfnum排序 */
+    void           get_inlist_on_dfsort(vector<blockedge *> &inlist);
 };
 
 class blockgraph {

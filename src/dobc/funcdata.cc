@@ -1123,15 +1123,29 @@ int block_dfnum_cmp(blockedge *l, blockedge *r)
     return l->point->dfnum < r->point->dfnum;
 }
 
+void        flowblock::get_inlist_on_dfsort(vector<blockedge *> &invec)
+{
+    blockedge *e;
+
+    for (int i = 0; i < in.size(); i++) {
+        e = & in[i];
+        e->index = i;
+        invec.push_back(&in[i]);
+    }
+
+    std::sort(invec.begin(), invec.end(), block_dfnum_cmp);
+}
+
+
 int         funcdata::ollvm_detect_propchain2(ollvmhead *oh, flowblock *&from, blockedge *&outedge, uint32_t flags)
 {
     if (oh->h->flags.f_dead) return -1;
 
     flowblock *h = oh->h, *pre, *pre1, *cur, *cur1, *h1;
     int i, j, k, top, dfnum;
-    pcodeop *p = h->find_pcode_def(oh->st1), *p1, *p2;
+    pcodeop *p = h->find_pcode_def(oh->st1), *p1, *p2, *p3;
     varnode *vn;
-    blockedge *e;
+    blockedge *e, *e1;
     vector<blockedge *> invec;
     if (!p) {
         if ((p = h->get_cbranch_sub_from_cmp())
@@ -1146,13 +1160,7 @@ int         funcdata::ollvm_detect_propchain2(ollvmhead *oh, flowblock *&from, b
     else if (p->opcode != CPUI_MULTIEQUAL)
         return -1;
 
-    for (i = 0; i < h->in.size(); i++) {
-        e = & h->in[i];
-        e->index = i;
-        invec.push_back(&h->in[i]);
-    }
-
-    std::sort(invec.begin(), invec.end(), block_dfnum_cmp);
+    h->get_inlist_on_dfsort(invec);
 
     /* 调试用 */
     static int trace = 0;
@@ -1178,15 +1186,30 @@ int         funcdata::ollvm_detect_propchain2(ollvmhead *oh, flowblock *&from, b
             return 0;
         }
 
+        if (p1->opcode != CPUI_MULTIEQUAL) {
+            /* 搜索常量传播节点时，必须搜索拷贝链，拷贝链上的节点都是等价的 */
+            p3 = vn->search_copy_chain(CPUI_MULTIEQUAL);
+
+            if ((p3->parent != p1->parent) || (p3->opcode != CPUI_MULTIEQUAL))
+                continue;
+
+            p1 = p3;
+        }
+
         if ((p1->opcode == CPUI_MULTIEQUAL)) {
             /* 假如某个in节点是phi节点
             1. 刚好邻接vmhead，那么尝试搜索它
             2. 这个phi节点的out节点(只有一个)，邻接vmhead
             */
             if ((h->is_adjacent(h1)) || ((h1->out.size() == 1) && h->is_adjacent(h1->get_out(0)))) {
-                for (j = 0; j < h1->in.size(); j++) {
-                    vn = p1->get_in(j);
-                    pre1 = p1->parent->get_in(j);
+                vector<blockedge *> invec2;
+
+                h1->get_inlist_on_dfsort(invec2);
+
+                for (j = 0; j < invec2.size(); j++) {
+                    e1 = invec2[j];
+                    vn = p1->get_in(e1->index);
+                    pre1 = p1->parent->get_in(e1->index);
                     cur1 = p1->parent;
 
                     if (vn->is_constant()) {
@@ -1197,19 +1220,22 @@ int         funcdata::ollvm_detect_propchain2(ollvmhead *oh, flowblock *&from, b
                         outedge = e;
                         return 0;
                     }
-                    else if ((p2 = vn->def) && (vn->def->opcode == CPUI_MULTIEQUAL)) {
-                        for (k = 0; k < p2->inrefs.size(); k++) {
-                            vn = p2->get_in(k);
-                            pre1 = p2->parent->get_in(k);
-                            cur1 = p2->parent;
+                    else {
+                        p2 = vn->def;
+                        if (p2 && (p2->opcode == CPUI_MULTIEQUAL)) {
+                            for (k = 0; k < p2->inrefs.size(); k++) {
+                                vn = p2->get_in(k);
+                                pre1 = p2->parent->get_in(k);
+                                cur1 = p2->parent;
 
-                            if (vn->is_constant()) {
-                                from = pre1;
-                                e = &pre1->out[pre1->get_out_index(cur1)];
-                                /* 假如已经被标记过，不可计算了 */
-                                if (e->is(a_unpropchain)) continue;
-                                outedge = e;
-                                return 0;
+                                if (vn->is_constant()) {
+                                    from = pre1;
+                                    e = &pre1->out[pre1->get_out_index(cur1)];
+                                    /* 假如已经被标记过，不可计算了 */
+                                    if (e->is(a_unpropchain)) continue;
+                                    outedge = e;
+                                    return 0;
+                                }
                             }
                         }
                     }
@@ -1372,16 +1398,18 @@ int         funcdata::ollvm_detect_fsm2(ollvmhead *oh)
 
     p1 = in->search_copy_chain(CPUI_MULTIEQUAL);
     if (p1->opcode != CPUI_MULTIEQUAL) {
-        if (p1->opcode == CPUI_LOAD) {
-            //set_safezone(poa(p1).getOffset(), p1->output->get_size());
-            set_safezone(pi2(p1)->get_addr().getOffset(), pi2(p1)->get_size());
-            heritage_clear();
-            heritage();
-            dump_cfg(name, "orig1", 1);
+        if (p1->opcode != CPUI_LOAD) {
+            throw LowlevelError("only support load");
         }
 
+        //set_safezone(poa(p1).getOffset(), p1->output->get_size());
+        set_safezone(pi2(p1)->get_addr().getOffset(), pi2(p1)->get_size());
+        heritage_clear();
+        heritage();
 
-        throw LowlevelError("detect fsm not support ");
+        p1 = p1->get_virtualnode()->def;
+        if (p1->opcode != CPUI_MULTIEQUAL)
+            throw LowlevelError("load not alias success");
     }
 
     if (ollvm_check_fsm(p1)) return -1;
