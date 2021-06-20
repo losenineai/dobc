@@ -1680,7 +1680,7 @@ void        funcdata::dump_store_info(const char *postfix)
     for (it = storelist.begin(); it != storelist.end(); it++) {
         op = *it;
         if (op->is_dead()) {
-            printf("op store[%d] is dead, %d\n", op->start.getTime(), ++i);
+            //printf("op store[%d] is dead, %d\n", op->start.getTime(), ++i);
             continue;
         }
         vn = op->get_in(1);
@@ -1699,6 +1699,71 @@ void        funcdata::dump_store_info(const char *postfix)
 
 void        funcdata::dump_load_info(const char *postfix)
 {
+}
+
+void        funcdata::dump_alias_info(FILE *fp)
+{
+    list<pcodeop *>::iterator it;
+
+    struct {
+        struct {
+            int     sp_count;
+            int     argument_count;
+            int     top_count;
+            int     text_count;
+            int     bss_count;
+            list<pcodeop *> toplist;
+        } load;
+
+        struct {
+            int     sp_count;
+            int     argument_count;
+            int     top_count;
+            int     text_count;
+            int     bss_count;
+            list<pcodeop *> toplist;
+        } store;
+    } stat = { 0 };
+
+    for (it = loadlist.begin(); it != loadlist.end(); it++) {
+        pcodeop *p = *it;
+
+        varnode *in1 = p->get_in(1);
+
+        if (p->get_in(1)->is_constant())
+            stat.load.text_count++;
+        else if (p->get_in(1)->is_sp_constant())
+            stat.load.sp_count++;
+        else {
+            stat.load.top_count++;
+            stat.load.toplist.push_back(p);
+        }
+    }
+
+    for (it = storelist.begin(); it != storelist.end(); it++) {
+        pcodeop *p = *it;
+
+        varnode *in1 = p->get_in(1);
+
+        if (p->get_in(1)->is_constant())
+            stat.store.text_count++;
+        else if (p->get_in(1)->is_sp_constant())
+            stat.store.sp_count++;
+        else {
+            stat.store.top_count++;
+            stat.store.toplist.push_back(p);
+        }
+    }
+
+    fprintf(fp, "load alias info:\n");
+    fprintf(fp, "   sp_count:%d     \n", stat.load.sp_count);
+    fprintf(fp, "   text_count:%d   \n", stat.load.text_count);
+    fprintf(fp, "   top_count:%d    \n", stat.load.toplist.size());
+
+    fprintf(fp, "store alias info:\n");
+    fprintf(fp, "   sp_count:%d     \n", stat.store.sp_count);
+    fprintf(fp, "   text_count:%d   \n", stat.store.text_count);
+    fprintf(fp, "   top_count:%d    \n", stat.store.toplist.size());
 }
 
 flowblock*  funcdata::split_block(flowblock *f, list<pcodeop *>::iterator it)

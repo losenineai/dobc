@@ -1771,6 +1771,7 @@ public:
     void        redundbranch_apply();
     void        dump_store_info(const char *postfix);
     void        dump_load_info(const char *postfix);
+    void        dump_alias_info(FILE *fp);
 
     /* 循环展开时用，从start节点开始，搜索start可以到的所有节点到 end为止，全部复制出来
     最后的web包含start，不包含end */

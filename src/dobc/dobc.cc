@@ -3806,8 +3806,7 @@ int         funcdata::collect_all_const_defs(pcodeop *start, vector<varnode *> &
                 cad_push_def(in);
             }
         }
-        else if ((p->opcode == CPUI_LOAD) && (p->have_virtualnode())) {
-            in = p->get_virtualnode();
+        else if ((p->opcode == CPUI_LOAD) && (in = p->get_virtualnode())) {
             in = in->def->get_in(2);
             cad_push_def(in);
         }
@@ -4192,6 +4191,8 @@ int         funcdata::ollvm_deshell()
     ollvm_detect_frameworkinfo();
 
     dump_cfg(name, "orig", 1);
+
+    //dump_alias_info(stdout);
 
     h = ollvm_get_head();
     for (i = 0; loop_dfa_connect(0) >= 0; i++)
