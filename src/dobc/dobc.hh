@@ -497,8 +497,11 @@ public:
     list<pcodeop *>::iterator basiciter;
     /* deadlist 里的 */
     list<pcodeop *>::iterator insertiter;
-    /* 特殊操作类型里的，比如 store ,load, */
+    /* 特殊操作类型里的，比如 store ,load, call */
     list<pcodeop *>::iterator codeiter;
+
+    /* sideeffect_ops中的迭代器 */
+    list<pcodeop *>::iterator sideiter;
     list<pcodeop *> mayuses;
 
     pcodeop(int s, const SeqNum &sq);
@@ -1272,6 +1275,7 @@ public:
     list<pcodeop *>     loadlist;
     list<pcodeop *>     useroplist;
     list<pcodeop *>     deadandgone;
+    list<pcodeop *>     calllist;
     list<pcodeop *>     philist;
 
     vector<blockedge *>   propchains;

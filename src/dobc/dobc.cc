@@ -420,20 +420,20 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 
 void dobc::plugin_ollvm()
 {
-#if 0 // 斗鱼
+#if 1 // 斗鱼
     //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
-    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x366f5));
+    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x366f5));
 #endif
 
 #if 0 // liblazarus
-    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15f09));
-    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x132ed));
+    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15f09));
+    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x132ed));
 #endif
 
-#if 1 // 快手
+#if 0 // 快手
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15f09));
     funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0xcb59));
 #endif
@@ -4186,7 +4186,7 @@ int         funcdata::ollvm_deshell()
 
     //dump_djgraph("1", 0);
 
-    dump_cfg(name, "orig0", 1);
+    //dump_cfg(name, "orig0", 1);
 
     ollvm_detect_frameworkinfo();
 
@@ -5923,23 +5923,23 @@ void        funcdata::dump_block(FILE *fp, blockbasic *b, int flag)
     // 把指令都以html.table的方式打印，dot直接segment fault了，懒的调dot了，不再用png, jpg改用svg
     if (b->vm_byteindex >= 0) {
         fprintf(fp, "loc_%x [style=\"filled\" fillcolor=%s label=<<table bgcolor=\"white\" align=\"left\" border=\"0\">"
-            "<tr><td><font color=\"green\">sub_%llx(%d,%d, h:%d, vbi:%d, vci:%d)</font></td></tr>",
+            "<tr><td><font color=\"green\">sub_%llx(%d,%d, h:%d, vbi:%d, vci:%d, os:%d)</font></td></tr>",
             b->sub_id(),
             block_color(b),
             b->get_start().getOffset(),
             b->dfnum,
             b->index, domdepth.size() ? domdepth[b->index]:0,
             b->vm_byteindex,
-            b->vm_caseindex);
+            b->vm_caseindex, b->ops.size());
     }
     else {
         fprintf(fp, "loc_%x [style=\"filled\" fillcolor=%s label=<<table bgcolor=\"white\" align=\"left\" border=\"0\">"
-                    "<tr><td><font color=\"red\">sub_%llx(df:%d, ind:%d, domh:%d, outl:%d, looph_df:%d)</font></td></tr>",
+                    "<tr><td><font color=\"red\">sub_%llx(df:%d, ind:%d, domh:%d, outl:%d, looph_df:%d, os:%d)</font></td></tr>",
             b->sub_id(),
             block_color(b),
             b->get_start().getOffset(),
             b->dfnum,
-            b->index, domdepth.size() ?  domdepth[b->index]:0, b->is_out_loop(), b->loopheader ? b->loopheader->dfnum:0);
+            b->index, domdepth.size() ?  domdepth[b->index]:0, b->is_out_loop(), b->loopheader ? b->loopheader->dfnum:0, b->ops.size());
     }
 
     iter = b->ops.begin();
@@ -6346,7 +6346,8 @@ pcodeop*    funcdata::cloneop(pcodeop *op, const SeqNum &seq)
     newop1->flags.startinst = op->flags.startinst;
     newop1->flags.startblock = op->flags.startblock;
 	newop1->flags.uncalculated_store = op->flags.uncalculated_store;
-    op_set_output(newop1, clone_varnode(op->output));
+    if (op->output)
+        op_set_output(newop1, clone_varnode(op->output));
     
     for (i = 0; i < sz; i++)
         op_set_input(newop1, clone_varnode(op->get_in(i)), i);
@@ -6400,6 +6401,10 @@ void        funcdata::op_destroy(pcodeop *op)
 
 void		funcdata::op_destroy(pcodeop *op, int remove)
 {
+    /* 这个删除必须在op_destroy前面，因为 op_destroy会把op从它的parent block list中取出 */
+    if ((op->opcode == CPUI_STORE) && op->parent->sideeffect_ops.size())
+        op->parent->sideeffect_ops.erase(op->sideiter);
+
 	op_destroy(op);
 	if (remove)
 		op_destroy_raw(op);

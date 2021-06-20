@@ -335,7 +335,8 @@ void        funcdata::dead_code_elimination(vector<flowblock *> &blks, uint32_t 
     list<pcodeop *>::iterator it;
     list<pcodeop *> worklist;
     vector<flowblock *> marks;
-    pcodeop *op;
+    varnode *vn, *vn1;
+    pcodeop *op, *load, *store;
     int i;
 
     marks.clear();
@@ -368,31 +369,47 @@ void        funcdata::dead_code_elimination(vector<flowblock *> &blks, uint32_t 
         if (!op->output->has_no_use()) continue;
 
         /*
-        FIXME:暂时不允许删除store命令
+        store等于variable的write，但是它的删除规则和普通的var不一样
 
-        store在某些情况下被赋予了 virtual节点以后，会和load关联起来
-        并生成了一个虚拟out节点，当这个节点没人使用时，也不允许删除
-        store只有一种情况下可以删除，就是
+        1. 不能因为没有use就删除，因为它可能被may load使用，而mayload是算不清的
+        2. 可以被重复store删除，重复store包括2种情况
+            情况1:
+                *p = a;
+                *p = b;
+            上面的一条store可以被删除
 
-        1. mem[x] = 1;
-        2. mem[x] = 2;
-
-        对同一地址的写入会导致上一个写入失效，这中间不能有上一个地址的访问
+            情况2:
+                a = *p1;
+                *p2 = a;
+                a = *p2;
+                *p1 = a;
+            其实就是同一个值拷来拷去
         */
 
-        if (op->opcode == CPUI_STORE) continue;
-        /* 有些函数是有副作用的，它的def即使没有use也是不能删除的 */
-        if (op->is_call()) continue;
+        if (op->opcode == CPUI_STORE) {
 
-
-#if 0
-        pcodeop_def_set::iterator it1 = topname.find(op);
-        if ((it1 != topname.end()) && (*it1 == op))
-            continue;
-#else
-        if (is_out_live(op)) continue;
+#if 1
+            vn = op->get_in(2);
+            if (op->output && vn->def 
+                && ((load = vn->def)->opcode == CPUI_LOAD)
+                && (vn1 = load->get_virtualnode())
+                && (store = vn1->def)
+                && (store->opcode == CPUI_STORE)
+                && (vn1 = store->get_in(2))
+                && (load = vn1->def) && (load->opcode == CPUI_LOAD)
+                && (vn1 = load->get_virtualnode())
+                && (vn1->get_addr() == op->output->get_addr())) {
+                goto dce_label;
+            }
 #endif
 
+            continue;
+        }
+        /* 有些函数是有副作用的，它的def即使没有use也是不能删除的 */
+        if (op->is_call()) continue;
+        if (is_out_live(op)) continue;
+
+dce_label:
         for (int i = 0; i < op->num_input(); i++) {
             varnode *in = op->get_in(i);
             /* 有些varnode节点是常量传播出来得常量，有些天然常量 */
@@ -1186,6 +1203,7 @@ int         funcdata::ollvm_detect_propchain2(ollvmhead *oh, flowblock *&from, b
             return 0;
         }
 
+#if 0
         if (p1->opcode != CPUI_MULTIEQUAL) {
             /* 搜索常量传播节点时，必须搜索拷贝链，拷贝链上的节点都是等价的 */
             p3 = vn->search_copy_chain(CPUI_MULTIEQUAL);
@@ -1195,6 +1213,7 @@ int         funcdata::ollvm_detect_propchain2(ollvmhead *oh, flowblock *&from, b
 
             p1 = p3;
         }
+#endif
 
         if ((p1->opcode == CPUI_MULTIEQUAL)) {
             /* 假如某个in节点是phi节点
@@ -1707,23 +1726,25 @@ void        funcdata::dump_alias_info(FILE *fp)
 
     struct {
         struct {
-            int     sp_count;
-            int     argument_count;
-            int     top_count;
-            int     text_count;
-            int     bss_count;
+            set<Address> sp_set;
+            int     sp_count = 0;
+            int     argument_count = 0;
+            int     top_count = 0;
+            int     text_count = 0;
+            int     bss_count = 0;
             list<pcodeop *> toplist;
         } load;
 
         struct {
-            int     sp_count;
-            int     argument_count;
-            int     top_count;
-            int     text_count;
-            int     bss_count;
+            set<Address> sp_set;
+            int     sp_count = 0;
+            int     argument_count = 0;
+            int     top_count = 0;
+            int     text_count = 0;
+            int     bss_count = 0;
             list<pcodeop *> toplist;
         } store;
-    } stat = { 0 };
+    } stat;
 
     for (it = loadlist.begin(); it != loadlist.end(); it++) {
         pcodeop *p = *it;
@@ -1732,8 +1753,10 @@ void        funcdata::dump_alias_info(FILE *fp)
 
         if (p->get_in(1)->is_constant())
             stat.load.text_count++;
-        else if (p->get_in(1)->is_sp_constant())
+        else if (p->get_in(1)->is_sp_constant()) {
+            stat.load.sp_set.insert(p->get_in(2)->get_addr());
             stat.load.sp_count++;
+        }
         else {
             stat.load.top_count++;
             stat.load.toplist.push_back(p);
@@ -1747,23 +1770,32 @@ void        funcdata::dump_alias_info(FILE *fp)
 
         if (p->get_in(1)->is_constant())
             stat.store.text_count++;
-        else if (p->get_in(1)->is_sp_constant())
+        else if (p->get_in(1)->is_sp_constant()) {
+            stat.store.sp_set.insert(p->output->get_addr());
             stat.store.sp_count++;
+        }
         else {
             stat.store.top_count++;
             stat.store.toplist.push_back(p);
         }
     }
 
+    fprintf(fp, "stat info =====================================================================\n");
     fprintf(fp, "load alias info:\n");
+    fprintf(fp, "   sp_set_count:%d \n", stat.load.sp_set.size());
     fprintf(fp, "   sp_count:%d     \n", stat.load.sp_count);
     fprintf(fp, "   text_count:%d   \n", stat.load.text_count);
     fprintf(fp, "   top_count:%d    \n", stat.load.toplist.size());
 
     fprintf(fp, "store alias info:\n");
+    fprintf(fp, "   sp_set_count:%d \n", stat.store.sp_set.size());
     fprintf(fp, "   sp_count:%d     \n", stat.store.sp_count);
     fprintf(fp, "   text_count:%d   \n", stat.store.text_count);
     fprintf(fp, "   top_count:%d    \n", stat.store.toplist.size());
+
+    fprintf(fp, "call info:\n");
+    fprintf(fp, "   count: %d\n", calllist.size());
+    fprintf(fp, "stat info end********************************************************************\n\n");
 }
 
 flowblock*  funcdata::split_block(flowblock *f, list<pcodeop *>::iterator it)
@@ -2576,6 +2608,11 @@ void        funcdata::add_to_codelist(pcodeop *op)
         op->codeiter = loadlist.insert(loadlist.end(), op);
         break;
 
+    case CPUI_CALL:
+    case CPUI_CALLIND:
+        op->codeiter = calllist.insert(calllist.end(), op);
+        break;
+
     default:break;
     }
 }
@@ -2590,6 +2627,11 @@ void        funcdata::remove_from_codelist(pcodeop *op)
     case CPUI_STORE:
         storelist.erase(op->codeiter);
 		break;
+
+    case CPUI_CALLIND:
+    case CPUI_CALL:
+        calllist.erase(op->codeiter);
+        break;
     }
 }
 

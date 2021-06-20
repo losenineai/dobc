@@ -53,8 +53,9 @@ void        blockgraph::collect_sideeffect_ops()
         for (it = b->ops.begin(); it != b->ops.end(); it++) {
             pcodeop *p = *it;
 
-            if ((p->opcode == CPUI_STORE) || (p->opcode == CPUI_CALL) || (p->opcode == CPUI_CALLIND))
-                b->sideeffect_ops.push_back(p);
+            if ((p->opcode == CPUI_STORE) || (p->opcode == CPUI_CALL) || (p->opcode == CPUI_CALLIND)) {
+                p->sideiter = b->sideeffect_ops.insert(b->sideeffect_ops.end(), p);
+            }
         }
     }
 }
