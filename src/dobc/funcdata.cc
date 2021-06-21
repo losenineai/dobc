@@ -1203,8 +1203,9 @@ int         funcdata::ollvm_detect_propchain2(ollvmhead *oh, flowblock *&from, b
             return 0;
         }
 
-#if 0
-        if (p1->opcode != CPUI_MULTIEQUAL) {
+#if 1
+        if ((p1->opcode != CPUI_MULTIEQUAL) && !b_is_flag(flags,F_OPEN_COPY)) {
+            
             /* 搜索常量传播节点时，必须搜索拷贝链，拷贝链上的节点都是等价的 */
             p3 = vn->search_copy_chain(CPUI_MULTIEQUAL);
 

@@ -1923,6 +1923,10 @@ pit thumb_gen::g_push(flowblock *b, pit pit)
         if ((p->opcode == CPUI_INT_SUB) && (p1->opcode == CPUI_STORE) && (pi1a(p1) == ama)) {
             reglist |= 1 << reg2i(pi2a(p1));
         }
+        else if ((p->opcode == CPUI_INT_SUB) && (p1->opcode == CPUI_INT_ADD) && (pi0a(p1) == ama) && (poa(p1) == asp)) {
+            p = p1;
+            continue;
+        }
         else throw LowlevelError("not support");
 
         p = *pit;
