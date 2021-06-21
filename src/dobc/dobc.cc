@@ -421,9 +421,9 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 void dobc::plugin_ollvm()
 {
 #if 1 // 斗鱼
-    //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
+    funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
-    funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
+    //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x366f5));
 #endif
@@ -750,12 +750,13 @@ void			varnode::clear_cover_simple()
 	simple_cover.end = -1;
 }
 
-pcodeop*        varnode::search_copy_chain(OpCode until)
+pcodeop*        varnode::search_copy_chain(OpCode until, flowblock *until_blk)
 {
     pcodeop *p = def;
     varnode *vn = NULL;
 
     while (p && (p->opcode != until)) {
+
         vn = NULL;
         switch (p->opcode) {
         case CPUI_STORE:
@@ -769,6 +770,7 @@ pcodeop*        varnode::search_copy_chain(OpCode until)
         }
 
         if (!vn || !vn->def) return p;
+        if (until_blk && (vn->def->parent != until_blk)) return p;
 
         p = vn->def;
     }
@@ -1179,7 +1181,7 @@ void            pcodeop::on_MULTIEQUAL()
             return;
         }
         else if (p->opcode != CPUI_MULTIEQUAL) {
-            p = vn->search_copy_chain(CPUI_MULTIEQUAL);
+            p = vn->search_copy_chain(CPUI_MULTIEQUAL, NULL);
 
             if (!p || (p->opcode != CPUI_MULTIEQUAL)) {
                 output->set_top();
@@ -1237,7 +1239,7 @@ void            pcodeop::on_MULTIEQUAL()
                 goto top_label;
             }
             else if (p1->opcode != CPUI_MULTIEQUAL) {
-                p1 = vn1->search_copy_chain(CPUI_MULTIEQUAL);
+                p1 = vn1->search_copy_chain(CPUI_MULTIEQUAL, NULL);
 
                 if (!p1 || (p1->opcode != CPUI_MULTIEQUAL))
                     goto top_label;

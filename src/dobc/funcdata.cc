@@ -1128,7 +1128,7 @@ int         funcdata::ollvm_detect_propchains2(flowblock *&from, blockedge *&out
 success_label:
     oh->times++;
 
-    printf("vmhead progchain[%llx, times:%d] \n", oh->h->get_start().getOffset(), oh->times);
+    printf("vmhead progchain[%llx, times:%d, in:%d] \n", oh->h->get_start().getOffset(), oh->times, oh->h->in.size());
     from->dump();
     outedge->point->dump();
 
@@ -1207,7 +1207,7 @@ int         funcdata::ollvm_detect_propchain2(ollvmhead *oh, flowblock *&from, b
         if ((p1->opcode != CPUI_MULTIEQUAL) && !b_is_flag(flags,F_OPEN_COPY)) {
             
             /* 搜索常量传播节点时，必须搜索拷贝链，拷贝链上的节点都是等价的 */
-            p3 = vn->search_copy_chain(CPUI_MULTIEQUAL);
+            p3 = vn->search_copy_chain(CPUI_MULTIEQUAL, NULL);
 
             if ((p3->parent != p1->parent) || (p3->opcode != CPUI_MULTIEQUAL))
                 continue;
@@ -1304,6 +1304,164 @@ int         funcdata::ollvm_detect_propchain2(ollvmhead *oh, flowblock *&from, b
     }
 
     return -1;
+}
+
+int         funcdata::ollvm_detect_propchain4(ollvmhead *oh, flowblock *&from, blockedge *&outedge, uint32_t flags)
+{
+    if (oh->h->flags.f_dead) return -1;
+
+    flowblock *h = oh->h, *pre, *cur, *h1;
+    int i,  top, dfnum;
+    pcodeop *p = h->find_pcode_def(oh->st1), *p1;
+    varnode *vn;
+    blockedge *e;
+    vector<blockedge *> invec;
+    if (!p) {
+        if ((p = h->get_cbranch_sub_from_cmp())
+            && (p1 = p->get_in(0)->def)
+            && (p1->opcode == CPUI_MULTIEQUAL)
+            && p1->all_inrefs_is_constant()
+            && (pre = p1->parent) && h->is_in(pre)) {
+        }
+        else
+            return -1;
+    }
+    else if (p->opcode != CPUI_MULTIEQUAL)
+        return -1;
+
+    h->get_inlist_on_dfsort(invec);
+
+    /* 调试用 */
+    static int trace = 0;
+    trace++;
+
+    pcodeop_set visit;
+
+    if (ollvm_find_first_const_def(p, -1, from, outedge, visit)) {
+        return 0;
+    }
+
+    p1 = p;
+    for (i = 0; i < invec.size(); i++) {
+        e = invec[i];
+        pre = e->point;
+        cur = h;
+        vn = p->get_in(e->index);
+
+        p1 = vn->def;
+        h1 = p1->parent;
+
+        if (!p1->flags.mark_cond_copy_prop 
+            && b_is_flag(flags,F_OPEN_COPY)
+            && ((p1->opcode == CPUI_COPY) || (p1->opcode == CPUI_LOAD) || (p1->opcode == CPUI_MULTIEQUAL))) {
+            vector<varnode *> defs;
+
+            if ((p1->opcode == CPUI_LOAD) && !p1->have_virtualnode())
+                throw LowlevelError("alias analysis error");
+
+            if (p1->opcode == CPUI_COPY) {
+                if (ollvm_combine_lcts(p1)) {
+                    printf("ollvm detect propchains do lcts\n");
+                    heritage_clear();
+                    heritage();
+                    dump_cfg(name, "lcts", 1);
+                    return 2;
+                }
+            }
+
+            if ((p1->opcode == CPUI_MULTIEQUAL) && p1->all_inrefs_is_top() && p1->parent->is_empty(1)) {
+                remove_empty_block(p1->parent);
+                structure_reset();
+                heritage_clear();
+                heritage();
+                return 2;
+            }
+
+            top = collect_all_const_defs(p1, defs, dfnum);
+            p1->flags.mark_cond_copy_prop = 1;
+
+            if (defs.size() > 1) {
+                cond_copy_expand(p1, pre, pre->get_out_index(cur));
+                printf("ollvm detect propchains do copy_expand\n");
+                heritage_clear();
+                heritage();
+                dump_cfg(name, "cond_copy_expand", 1);
+                return 1;
+            }
+        }
+    }
+
+    return -1;
+}
+
+bool        funcdata::ollvm_find_first_const_def(pcodeop *p, int outslot, flowblock *&from, blockedge *&outedge, pcodeop_set visit)
+{
+    pcodeop *op;
+    vector<blockedge *> invec;
+    flowblock *b = p->parent, *pre;
+    varnode *vn;
+
+    if (visit.find(p) != visit.end()) return false;
+    visit.insert(p);
+
+    //printf("find first pocde const def:%d\n", p->start.getTime());
+
+    if (p->opcode != CPUI_MULTIEQUAL) {
+        op = p->output->search_copy_chain(CPUI_MULTIEQUAL, p->parent);
+
+        switch (op->opcode) {
+        case CPUI_COPY:
+            if (op->get_in(0)->is_constant()) {
+                from = op->parent;
+                outedge = &from->out[outslot];
+                return true;
+            }
+            else
+                throw LowlevelError("unknown error");
+            break;
+
+        case CPUI_LOAD:
+            return false;
+        }
+    }
+
+    b->get_inlist_on_dfsort(invec);
+
+    for (int i = 0; i < invec.size(); i++) {
+        blockedge *e = invec[i];
+        vn = p->get_in(e->index);
+        op = vn->def;
+
+        pre = e->point;
+
+        /* 假如状态节点的某个phi节点输入就是常数，直接开始遍历 */
+        if (vn->is_constant()) {
+            from = pre;
+            e = &pre->out[pre->get_out_index(b)];
+            /* 假如已经被标记过，不可计算了 */
+            if (e->is(a_unpropchain)) continue;
+            outedge = e;
+            return true;
+        }
+    }
+
+    for (int i = 0; i < invec.size(); i++) {
+        blockedge *e = invec[i];
+        vn = p->get_in(e->index);
+        op = vn->def;
+
+        pre = e->point;
+
+        /* 假如状态节点的某个phi节点输入就是常数，直接开始遍历 */
+        if (!vn->is_constant()) {
+            if (ollvm_find_first_const_def(op, e->reverse_index, from, outedge, visit))
+                return true;
+        }
+
+    }
+
+
+    return false;
 }
 
 int         funcdata::ollvm_detect_propchain3(flowblock *&from, blockedge *&outedge)
@@ -1416,7 +1574,7 @@ int         funcdata::ollvm_detect_fsm2(ollvmhead *oh)
 
     Address s = in->get_addr();
 
-    p1 = in->search_copy_chain(CPUI_MULTIEQUAL);
+    p1 = in->search_copy_chain(CPUI_MULTIEQUAL, NULL);
     if (p1->opcode != CPUI_MULTIEQUAL) {
         if (p1->opcode != CPUI_LOAD) {
             throw LowlevelError("only support load");
@@ -1657,7 +1815,7 @@ void        funcdata::redundbranch_apply()
         2. 输出节点都为1
         3. 不是被vm标记过的节点 
         */
-        if (bb->is_empty_delete()) {
+        if (bb->is_empty_delete() || bb->is_11_branch()) {
             if ((bb->vm_byteindex != -1) || (bb->vm_caseindex)) {
                 remove_empty_block(bb);
                 i -= 1;

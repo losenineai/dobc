@@ -381,7 +381,7 @@ public:
             ->opcode == until   成功
             ->opcode != until   失败，返回最后赋值的pcode
     */
-    pcodeop*        search_copy_chain(OpCode until);
+    pcodeop*        search_copy_chain(OpCode until, flowblock *until_blk);
     /*
 
     *ptr = 0;
@@ -990,6 +990,9 @@ struct flowblock {
     int             calc_memflow();
     /* 把自己的输入节点，按dfnum排序 */
     void           get_inlist_on_dfsort(vector<blockedge *> &inlist);
+    bool            is_11_branch() {
+        return ((ops.size() == 1) && (last_op()->opcode == CPUI_BRANCH) && (in.size() == 1) && (out.size() == 1));
+    }
 };
 
 class blockgraph {
@@ -1758,6 +1761,16 @@ public:
 #define F_OPEN_PHI              0x02
     int         ollvm_detect_propchain2(ollvmhead *oh, flowblock *&from, blockedge *&outedge, uint32_t flags);
     int         ollvm_detect_propchain3(flowblock *&from, blockedge *&outedge);
+    int         ollvm_detect_propchain4(ollvmhead *oh, flowblock *&from, blockedge *&outedge, uint32_t flags);
+
+    /*
+    找寻某个p节点的，第一个const_def，当有多个in节点时，按dfnum排序
+
+    @return     true    找到
+                false   未找到
+    */
+    bool        ollvm_find_first_const_def(pcodeop *p, int outslot, flowblock *&from, blockedge *&edge, pcodeop_set visit);
+
     int         ollvm_detect_propchains2(flowblock *&from, blockedge *&outedge);
     int         ollvm_detect_fsm2(ollvmhead *oh);
     int         ollvm_check_fsm(pcodeop *op);
