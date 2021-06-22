@@ -64,6 +64,8 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
 
     trace_push(prev->last_op());
 
+#define TEST_STATIC_TRACE       1
+
     do {
         printf("\tprocess flowblock sub_%llx\n", cur->get_start().getOffset());
 
@@ -74,8 +76,12 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
             p = *it;
 
             br = NULL;
+#if TEST_STATIC_TRACE
+            ret = static_trace(p, inslot, &br);
+#else
             p->set_trace();
             ret = p->compute(inslot, &br);
+#endif
 
 #if 0
             //if (flags & _DUMP_PCODE) 
@@ -118,6 +124,9 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
                 printf("warn: only one block, forbidden this edge\n");
                 chain->set_flag(a_unpropchain);
 
+#if TEST_STATIC_TRACE
+                static_trace_restore();
+#else
                 for (i = 0; i < trace.size(); i++) {
                     p = trace[i];
                     p->clear_trace();
@@ -126,6 +135,7 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
 
                 heritage_clear();
                 heritage();
+#endif
 
                 return 1;
             }
@@ -198,11 +208,15 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
         }
     }
 
+#if TEST_STATIC_TRACE
+    static_trace_restore();
+#else
     for (i = 0; i < trace.size(); i++) {
         pcodeop *p = trace[i];
         p->clear_trace();
         p->set_top();
     }
+#endif
 
     cur->set_initial_range(addr, addr);
     trace_clear();

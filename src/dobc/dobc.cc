@@ -420,17 +420,17 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 
 void dobc::plugin_ollvm()
 {
-#if 1 // 斗鱼
-    funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
+#if 0 // 斗鱼
+    //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
-    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x366f5));
+    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x366f5));
 #endif
 
-#if 0 // liblazarus
-    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15f09));
-    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x132ed));
+#if 1 // liblazarus
+    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15f09));
+    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x132ed));
 #endif
 
 #if 0 // 快手
@@ -4204,7 +4204,7 @@ int         funcdata::ollvm_deshell()
 
         dead_code_elimination(bblocks.blist, RDS_UNROLL0);
 #if defined(DCFG_CASE)
-        dump_cfg(name, _itoa(i, buf, 10), 1);
+        //dump_cfg(name, _itoa(i, buf, 10), 1);
 #endif
     }
 
@@ -4245,10 +4245,13 @@ int         funcdata::static_trace(pcodeop *op, int inslot, flowblock **branch)
 {
     op->set_trace();
     valuemap::iterator it = tracemap.find(op);
+    static valuetype empty;
 
     if (it == tracemap.end()) {
         if (op->output)
             tracemap[op] = op->output->type;
+        else
+            tracemap[op] = empty;
     }
 
     return op->compute(inslot, branch);
@@ -4257,12 +4260,17 @@ int         funcdata::static_trace(pcodeop *op, int inslot, flowblock **branch)
 void        funcdata::static_trace_restore()
 {
     valuemap::iterator it = tracemap.begin();
+    pcodeop *p;
 
     for (; it != tracemap.end(); it++) {
-        pcodeop *p = it->first;
+        p = it->first;
 
         p->clear_trace();
-        p->output->type = tracemap[p];
+        if (p->output)
+            p->output->type = tracemap[p];
+
+        //p->dump(buf, PCODE_DUMP_SIMPLE & ~PCODE_HTML_COLOR);
+        //printf("buf[%s]\n", buf);
     }
 
     tracemap.clear();
