@@ -1423,14 +1423,17 @@ bool        funcdata::ollvm_find_first_const_def(pcodeop *p, int outslot, flowbl
     if (p->opcode != CPUI_MULTIEQUAL) {
         op = p->output->search_copy_chain(CPUI_MULTIEQUAL, p->parent);
 
-        if (op->output && op->output->is_constant()) {
-            from = op->parent;
-            outedge = &from->out[outslot];
-            return true;
+        if (op->opcode != CPUI_MULTIEQUAL) {
+            if (op->output && op->output->is_constant()) {
+                from = op->parent;
+                outedge = &from->out[outslot];
+                return true;
+            }
+            else {
+                return false;
+            }
         }
-        else {
-            return false;
-        }
+        p = op;
     }
 
     b->get_inlist_on_dfsort(invec);
