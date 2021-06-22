@@ -1116,7 +1116,7 @@ int         funcdata::ollvm_detect_propchains2(flowblock *&from, blockedge *&out
 
         if (oh->h->flags.f_dead) continue;
 
-        ret = ollvm_detect_propchain2(oh, from, outedge, 0);
+        ret = ollvm_detect_propchain4(oh, from, outedge, 0);
         if (!ret)
             goto success_label;
     }
@@ -1423,18 +1423,12 @@ bool        funcdata::ollvm_find_first_const_def(pcodeop *p, int outslot, flowbl
     if (p->opcode != CPUI_MULTIEQUAL) {
         op = p->output->search_copy_chain(CPUI_MULTIEQUAL, p->parent);
 
-        switch (op->opcode) {
-        case CPUI_COPY:
-            if (op->get_in(0)->is_constant()) {
-                from = op->parent;
-                outedge = &from->out[outslot];
-                return true;
-            }
-            else
-                throw LowlevelError("unknown error");
-            break;
-
-        case CPUI_LOAD:
+        if (op->output && op->output->is_constant()) {
+            from = op->parent;
+            outedge = &from->out[outslot];
+            return true;
+        }
+        else {
             return false;
         }
     }
@@ -1457,23 +1451,13 @@ bool        funcdata::ollvm_find_first_const_def(pcodeop *p, int outslot, flowbl
             outedge = e;
             return true;
         }
+
+        if (!b->is_adjacent(op->parent))  
+            continue;
+
+        if (ollvm_find_first_const_def(op, e->reverse_index, from, outedge, visit))
+            return true;
     }
-
-    for (int i = 0; i < invec.size(); i++) {
-        blockedge *e = invec[i];
-        vn = p->get_in(e->index);
-        op = vn->def;
-
-        pre = e->point;
-
-        /* 假如状态节点的某个phi节点输入就是常数，直接开始遍历 */
-        if (!vn->is_constant()) {
-            if (ollvm_find_first_const_def(op, e->reverse_index, from, outedge, visit))
-                return true;
-        }
-
-    }
-
 
     return false;
 }
