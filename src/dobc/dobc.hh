@@ -1763,6 +1763,8 @@ public:
     int         ollvm_detect_propchain3(flowblock *&from, blockedge *&outedge);
     int         ollvm_detect_propchain4(ollvmhead *oh, flowblock *&from, blockedge *&outedge, uint32_t flags);
 
+    void        ollvm_collect_safezone(pcodeop *phi, pcodeop_set set, int depth);
+
     /*
     找寻某个p节点的，第一个const_def，当有多个in节点时，按dfnum排序
 

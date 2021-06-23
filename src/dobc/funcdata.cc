@@ -1408,6 +1408,35 @@ int         funcdata::ollvm_detect_propchain4(ollvmhead *oh, flowblock *&from, b
     return -1;
 }
 
+void        funcdata::ollvm_collect_safezone(pcodeop *phi, pcodeop_set safeset, int depth)
+{
+    int i;
+    pcodeop *p1;
+    varnode *in;
+
+    if (phi->opcode != CPUI_MULTIEQUAL) {
+        p1 = phi->output->search_copy_chain(CPUI_MULTIEQUAL, NULL);
+
+        if (p1->opcode != CPUI_MULTIEQUAL) {
+            if ((p1->opcode == CPUI_LOAD) || (p1->opcode == CPUI_STORE))
+                safeset.insert(p1);
+            else
+                throw LowlevelError("not support");
+        }
+
+        phi = p1;
+    }
+
+    for (i = 0; i < phi->inrefs.size(); i++) {
+        in = phi->get_in(i);
+        p1 = in->def;
+
+        if (in->is_constant()) continue;
+
+        ollvm_collect_safezone(p1, safeset, ++depth);
+    }
+}
+
 bool        funcdata::ollvm_find_first_const_def(pcodeop *p, int outslot, flowblock *&from, blockedge *&outedge, pcodeop_set visit)
 {
     pcodeop *op;
