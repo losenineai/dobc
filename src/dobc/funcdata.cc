@@ -997,6 +997,7 @@ int         funcdata::ollvm_detect_frameworkinfo()
     ollvmhead *head;
     flowblock *b;
     vector<flowblock *> blks;
+    pcodeop *p;
 
     bblocks.collect_no_cmp_cbranch_block(blks);
 
@@ -1045,6 +1046,7 @@ int         funcdata::ollvm_detect_frameworkinfo()
 
     printf("search maybe safezone alias start...\n");
     /* FIXME:后面要改成递归收集所有的load */
+#if 0
     set<pcodeop *, pcodeop_cmp> poss_set;
     vector<pcodeop *> poss;
     for (i = 0; i < ollvm.heads.size(); i++) {
@@ -1077,19 +1079,37 @@ int         funcdata::ollvm_detect_frameworkinfo()
             }
         }
     }
+#else
+    pcodeop_set poss_set, visit;
+    for (i = 0; i < ollvm.heads.size(); i++) {
+        ollvmhead *head = ollvm.heads[i];
+        p = head->h->find_pcode_def(head->st1);
+        ollvm_collect_safezone(p, visit, poss_set, 0);
+    }
+#endif
+
+    pcodeop_set::iterator it;
+
     /* FIXME:这里我们需要校验安全区域之间是否overlap */
-    for (i = 0; i < poss.size(); i++) {
-        pcodeop *p = poss[i];
+    for (it = poss_set.begin(); it != poss_set.end(); it++) {
+        p = *it;
         char buf[128];
         p->dump(buf, PCODE_DUMP_SIMPLE & ~PCODE_HTML_COLOR);
         printf("%s\n", buf);
-        if (p->output->is_sp_constant())
-            set_safezone(p->output->get_val(), p->output->get_size());
+
+        if (p->opcode == CPUI_LOAD) {
+            set_safezone(pi2(p)->get_addr().getOffset(), p->output->get_size());
+        }
+        else {
+            set_safezone(p->output->get_addr().getOffset(), p->output->get_size());
+        }
     }
 
     /* 假如有安全区域，需要全部关联起来，但是不需要rename */
-    if (poss.size()) 
-        constant_propagation3();
+    if (poss_set.size()) {
+        heritage_clear();
+        heritage();
+    }
     printf("search maybe safezone alias end...\n");
 
 
@@ -1326,7 +1346,7 @@ int         funcdata::ollvm_detect_propchain4(ollvmhead *oh, flowblock *&from, b
 
     flowblock *h = oh->h, *pre, *cur, *h1;
     int i,  top, dfnum;
-    pcodeop *p = h->find_pcode_def(oh->st1), *p1;
+    pcodeop *p = h->find_pcode_def(oh->st1), *p1, *p2;
     varnode *vn;
     blockedge *e;
     vector<blockedge *> invec;
@@ -1365,9 +1385,11 @@ int         funcdata::ollvm_detect_propchain4(ollvmhead *oh, flowblock *&from, b
         p1 = vn->def;
         h1 = p1->parent;
 
-        if (!p1->flags.mark_cond_copy_prop 
-            && b_is_flag(flags,F_OPEN_COPY)
-            && ((p1->opcode == CPUI_COPY) || (p1->opcode == CPUI_LOAD) || (p1->opcode == CPUI_MULTIEQUAL))) {
+        /* 饶了一圈形成回环 */
+        if ((p2 = p1->output->search_copy_chain(CPUI_MULTIEQUAL, h)) && (p2->parent == h))
+            continue;
+
+        if (!p1->flags.mark_cond_copy_prop && b_is_flag(flags,F_OPEN_COPY)) {
             vector<varnode *> defs;
 
             if ((p1->opcode == CPUI_LOAD) && !p1->have_virtualnode())
@@ -1408,18 +1430,25 @@ int         funcdata::ollvm_detect_propchain4(ollvmhead *oh, flowblock *&from, b
     return -1;
 }
 
-void        funcdata::ollvm_collect_safezone(pcodeop *phi, pcodeop_set safeset, int depth)
+void        funcdata::ollvm_collect_safezone(pcodeop *phi, pcodeop_set &visit, pcodeop_set &safeset, int depth)
 {
     int i;
     pcodeop *p1;
     varnode *in;
 
+    if (visit.find(phi) != visit.end()) return;
+    visit.insert(phi);
+
     if (phi->opcode != CPUI_MULTIEQUAL) {
         p1 = phi->output->search_copy_chain(CPUI_MULTIEQUAL, NULL);
 
+        visit.insert(p1);
+
         if (p1->opcode != CPUI_MULTIEQUAL) {
-            if ((p1->opcode == CPUI_LOAD) || (p1->opcode == CPUI_STORE))
+            if ((p1->opcode == CPUI_LOAD)) {
                 safeset.insert(p1);
+                return;
+            }
             else
                 throw LowlevelError("not support");
         }
@@ -1433,7 +1462,7 @@ void        funcdata::ollvm_collect_safezone(pcodeop *phi, pcodeop_set safeset, 
 
         if (in->is_constant()) continue;
 
-        ollvm_collect_safezone(p1, safeset, ++depth);
+        ollvm_collect_safezone(p1, visit, safeset, ++depth);
     }
 }
 

@@ -420,12 +420,12 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 
 void dobc::plugin_ollvm()
 {
-#if 0 // 斗鱼
+#if 1 // 斗鱼
     //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
-    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
-    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x366f5));
+    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
+    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x366f5));
 #endif
 
 #if 0 // liblazarus
@@ -433,7 +433,7 @@ void dobc::plugin_ollvm()
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x132ed));
 #endif
 
-#if 1 // 快手
+#if 0 // 快手
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15f09));
     funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0xcb59));
 #endif
@@ -3791,7 +3791,7 @@ int         funcdata::collect_all_const_defs(pcodeop *start, vector<varnode *> &
                 } \
                 if (j == defs.size()) defs.push_back(in); \
             } \
-            else if (def && (visit.find(def) == visit.end()) && ((def->opcode == CPUI_COPY) || (def->opcode == CPUI_MULTIEQUAL) || (def->opcode == CPUI_LOAD))) { \
+            else if (def && (visit.find(def) == visit.end()) && ((def->opcode == CPUI_COPY) || (def->opcode == CPUI_MULTIEQUAL) || (def->opcode == CPUI_LOAD) || (def->opcode == CPUI_STORE))) { \
                 q.push_back(def); \
                 visit.insert(def); \
             } \
@@ -3810,6 +3810,10 @@ int         funcdata::collect_all_const_defs(pcodeop *start, vector<varnode *> &
         }
         else if ((p->opcode == CPUI_LOAD) && (in = p->get_virtualnode())) {
             in = in->def->get_in(2);
+            cad_push_def(in);
+        }
+        else if ((p->opcode == CPUI_STORE)) {
+            in = p->get_in(2);
             cad_push_def(in);
         }
     }
@@ -4204,7 +4208,7 @@ int         funcdata::ollvm_deshell()
 
         dead_code_elimination(bblocks.blist, RDS_UNROLL0);
 #if defined(DCFG_CASE)
-        dump_cfg(name, _itoa(i, buf, 10), 1);
+            dump_cfg(name, _itoa(i, buf, 10), 1);
 #endif
     }
 
