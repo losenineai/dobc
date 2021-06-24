@@ -420,12 +420,12 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 
 void dobc::plugin_ollvm()
 {
-#if 1 // 斗鱼
+#if 0 // 斗鱼
     //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
-    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
-    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x366f5));
+    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
+    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x366f5));
 #endif
 
 #if 0 // liblazarus
@@ -433,7 +433,7 @@ void dobc::plugin_ollvm()
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x132ed));
 #endif
 
-#if 0 // 快手
+#if 1 // 快手
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15f09));
     funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0xcb59));
 #endif
@@ -5881,7 +5881,7 @@ void        funcdata::dump_inst()
 void        funcdata::dump_pcode(const char *postfix)
 {
     FILE *fp;
-    char buf[8192];
+    char buf[16 * 1024];
     Address prev_addr;
     AssemblyRaw assememit;
     pcodeop *p;

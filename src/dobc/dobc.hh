@@ -993,6 +993,14 @@ struct flowblock {
     bool            is_11_branch() {
         return ((ops.size() == 1) && (last_op()->opcode == CPUI_BRANCH) && (in.size() == 1) && (out.size() == 1));
     }
+    /*
+    判断一个块是否可以直达另外一个块。
+
+    b1 -> b2 .. -> bn
+
+    [b1, bn) 的out.size()都为1
+    */
+    bool            is_direct_connect_to(flowblock *to);
 };
 
 class blockgraph {

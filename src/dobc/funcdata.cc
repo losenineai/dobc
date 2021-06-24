@@ -1148,7 +1148,7 @@ int         funcdata::ollvm_detect_propchains2(flowblock *&from, blockedge *&out
         if (oh->h->flags.f_dead) continue;
 
         /* lcs 或者拷贝传递 */
-        while ((ret = ollvm_detect_propchain2(oh, from, outedge, F_OPEN_COPY)) > 0);
+        while ((ret = ollvm_detect_propchain4(oh, from, outedge, F_OPEN_COPY)) > 0);
 
         if (ret == 0)
             goto success_label;
@@ -1187,6 +1187,19 @@ void        flowblock::get_inlist_on_dfsort(vector<blockedge *> &invec)
     std::sort(invec.begin(), invec.end(), block_dfnum_cmp);
 }
 
+bool            flowblock::is_direct_connect_to(flowblock *to)
+{
+    flowblock *b = this;
+
+    while (b->out.size() == 1) {
+        b = b->get_out(0);
+
+        if (b == to)
+            return true;
+    }
+
+    return false;
+}
 
 int         funcdata::ollvm_detect_propchain2(ollvmhead *oh, flowblock *&from, blockedge *&outedge, uint32_t flags)
 {
@@ -1470,7 +1483,7 @@ bool        funcdata::ollvm_find_first_const_def(pcodeop *p, int outslot, flowbl
 {
     pcodeop *op;
     vector<blockedge *> invec;
-    flowblock *b = p->parent, *pre;
+    flowblock *b = p->parent, *pre, *h1;
     varnode *vn;
 
     if (visit.find(p) != visit.end()) return false;
@@ -1500,6 +1513,7 @@ bool        funcdata::ollvm_find_first_const_def(pcodeop *p, int outslot, flowbl
         blockedge *e = invec[i];
         vn = p->get_in(e->index);
         op = vn->def;
+        h1 = op->parent;
 
         pre = e->point;
 
@@ -1513,11 +1527,10 @@ bool        funcdata::ollvm_find_first_const_def(pcodeop *p, int outslot, flowbl
             return true;
         }
 
-        if (!b->is_adjacent(op->parent))  
-            continue;
-
-        if (ollvm_find_first_const_def(op, e->reverse_index, from, outedge, visit))
-            return true;
+        if (b->is_adjacent(h1) || ((h1->out.size() == 1) && b->is_adjacent(h1->get_out(0)))) {
+            if (ollvm_find_first_const_def(op, e->reverse_index, from, outedge, visit))
+                return true;
+        }
     }
 
     return false;
