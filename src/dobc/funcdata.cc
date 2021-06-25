@@ -402,8 +402,8 @@ void        funcdata::dead_code_elimination(vector<flowblock *> &blks, uint32_t 
 
         if (op->opcode == CPUI_STORE) {
 
-#if 1
             vn = op->get_in(2);
+#if 0
             if (op->output && vn->def 
                 && ((load = vn->def)->opcode == CPUI_LOAD)
                 && (vn1 = load->get_virtualnode())
@@ -414,6 +414,23 @@ void        funcdata::dead_code_elimination(vector<flowblock *> &blks, uint32_t 
                 && (vn1 = load->get_virtualnode())
                 && (vn1->get_addr() == op->output->get_addr())) {
                 goto dce_label;
+            }
+
+#else
+            if (op->output && vn->def
+                && ((load = vn->def)->opcode == CPUI_LOAD)
+                && (vn1 = load->get_virtualnode())) {
+                if ((store = vn1->def)
+                    && (store->opcode == CPUI_STORE)
+                    && (vn1 = store->get_in(2))
+                    && (load = vn1->def) && (load->opcode == CPUI_LOAD)
+                    && (vn1 = load->get_virtualnode())
+                    && (vn1->get_addr() == op->output->get_addr())) {
+                    goto dce_label;
+                }
+                else if (!store && vn1->get_addr() == op->output->get_addr()) {
+                    goto dce_label;
+                }
             }
 #endif
 

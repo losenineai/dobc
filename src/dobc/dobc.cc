@@ -5881,7 +5881,7 @@ void        funcdata::dump_inst()
 void        funcdata::dump_pcode(const char *postfix)
 {
     FILE *fp;
-    char buf[16 * 1024];
+    char buf[32 * 1024];
     Address prev_addr;
     AssemblyRaw assememit;
     pcodeop *p;
