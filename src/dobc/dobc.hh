@@ -299,6 +299,7 @@ public:
     intb            get_offset() { return loc.getOffset(); }
     bool            is_heritage_known(void) const { return (flags.insert | flags.annotation) || is_constant(); }
     bool            has_no_use(void) { return uses.empty(); }
+    bool            has_use(void) { return uses.size() > 0; }
 
     void            set_def(pcodeop *op);
     pcodeop*        get_def() { return def; }
@@ -471,6 +472,8 @@ public:
 		unsigned uncalculated_store : 1;	// 这个store节点是不可计算的
         unsigned itblock : 1;
         unsigned mark_cond_copy_prop: 1;    
+
+        unsigned store_on_dead_path : 1;
     } flags = { 0 };
 
     OpCode opcode;
@@ -636,6 +639,16 @@ public:
     }
     void            loadram2out(Address &addr);
     void            create_stack_virtual_vn();
+    /*
+    这个函数主要是为了检测，在load, store路径上，当前的store的原始值是否就是来自于从这个pos的load
+    比如:
+
+    1. a = *pos1;
+    2. *pos2 = a;
+
+    假如pos1 == pos2，那返回 pcodeop 2
+    */
+    pcodeop*        find_same_pos_load(vector<pcodeop *> &store);
 };
 
 typedef struct blockedge            blockedge;

@@ -364,9 +364,15 @@ void        funcdata::dead_code_elimination(vector<flowblock *> &blks, uint32_t 
 
         marks[b->dfnum] = b;
 
+#define STORE_DCE           1
+
         for (it = b->ops.begin(); it != b->ops.end(); it++) {
             op = *it;
-            if (op->output && op->output->has_no_use()) {
+            if ((op->output && op->output->has_no_use()) 
+#if STORE_DCE
+                || (op->opcode == CPUI_STORE)
+#endif
+                ) {
                 worklist.push_back(op);
             }
         }
@@ -379,8 +385,6 @@ void        funcdata::dead_code_elimination(vector<flowblock *> &blks, uint32_t 
 
         if (op->flags.dead) continue;
         //printf("delete pcode = %d\n", op->start.getTime());
-
-        if (!op->output->has_no_use()) continue;
 
         /*
         store等于variable的write，但是它的删除规则和普通的var不一样
@@ -399,43 +403,85 @@ void        funcdata::dead_code_elimination(vector<flowblock *> &blks, uint32_t 
                 *p1 = a;
             其实就是同一个值拷来拷去
         */
+#if STORE_DCE == 0
+        if (op->output->has_use()) 
+            continue;
 
         if (op->opcode == CPUI_STORE) {
-
             vn = op->get_in(2);
-#if 0
-            if (op->output && vn->def 
-                && ((load = vn->def)->opcode == CPUI_LOAD)
-                && (vn1 = load->get_virtualnode())
-                && (store = vn1->def)
-                && (store->opcode == CPUI_STORE)
-                && (vn1 = store->get_in(2))
-                && (load = vn1->def) && (load->opcode == CPUI_LOAD)
-                && (vn1 = load->get_virtualnode())
-                && (vn1->get_addr() == op->output->get_addr())) {
-                goto dce_label;
-            }
-
-#else
             if (op->output && vn->def
                 && ((load = vn->def)->opcode == CPUI_LOAD)
                 && (vn1 = load->get_virtualnode())) {
+                /*
+
+                r0 = *pos1
+                *pos2 = r0;
+                ...
+                ...
+                r0 = *pos2;
+                *pos1 = r0
+                这一坨代码都是死的
+
+                假如*pos1没人用它的话
+                */
                 if ((store = vn1->def)
                     && (store->opcode == CPUI_STORE)
                     && (vn1 = store->get_in(2))
                     && (load = vn1->def) && (load->opcode == CPUI_LOAD)
                     && (vn1 = load->get_virtualnode())
                     && (vn1->get_addr() == op->output->get_addr())) {
+
+                    //printf("dead store, load[%d, %d] \n", op->start.getTime(), load->start.getTime());
+
                     goto dce_label;
                 }
+                /*
+                r0 = *pos1
+                *pos1 = r0
+                */
                 else if (!store && vn1->get_addr() == op->output->get_addr()) {
+
+                    //printf("dead store, load[%d, %d] \n", op->start.getTime(), load->start.getTime());
+
                     goto dce_label;
                 }
             }
-#endif
-
             continue;
         }
+
+#else
+        if (op->opcode == CPUI_STORE) {
+
+            if (op->output->has_no_use() && op->flags.store_on_dead_path) goto dce_label;
+
+            vector<pcodeop *> deadstorelist;
+
+            pcodeop *load = op->find_same_pos_load(deadstorelist);
+            if (!load) continue;
+
+            for (i = 0; i < deadstorelist.size(); i++) {
+                deadstorelist[i]->flags.store_on_dead_path = 1;
+            }
+
+            //printf("dead store, load[%d, %d] \n", op->start.getTime(), load->start.getTime());
+
+            while (op->output->has_use()) {
+                pcodeop *use = op->output->uses.front();
+                int inslot = use->get_slot(op->output);
+                //op_remove_input(use, inslot);
+                varnode *in = load->get_in(2);
+
+                if (in->def)
+                    op_set_input(use, in, inslot);
+                else
+                    op_set_input(use, clone_varnode(in), inslot);
+            }
+        }
+
+        if (op->output->has_use()) 
+            continue;
+#endif
+
         /* 有些函数是有副作用的，它的def即使没有use也是不能删除的 */
         if (op->is_call()) continue;
         if (is_out_live(op)) continue;

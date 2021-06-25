@@ -1391,6 +1391,34 @@ void            pcodeop::create_stack_virtual_vn()
     }
 }
 
+pcodeop*        pcodeop::find_same_pos_load(vector<pcodeop *> &storelist)
+{
+    pcodeop *p = this;
+
+    while (p) {
+        switch (p->opcode) {
+        case CPUI_LOAD:
+            if (!p->get_virtualnode()) return NULL;
+
+            if (p->get_in(2)->get_addr() == output->get_addr())
+                return p;
+
+            p = p->get_in(2)->def;
+            break;
+
+        case CPUI_STORE:
+            storelist.push_back(p);
+            p = p->get_in(2)->def;
+            break;
+
+        default:
+            return NULL;
+        }
+    }
+
+    return NULL;
+}
+
 bool            pcodeop::all_inrefs_is_constant(void)
 {
     int i;
@@ -5881,7 +5909,7 @@ void        funcdata::dump_inst()
 void        funcdata::dump_pcode(const char *postfix)
 {
     FILE *fp;
-    char buf[32 * 1024];
+    char buf[64 * 1024];
     Address prev_addr;
     AssemblyRaw assememit;
     pcodeop *p;
