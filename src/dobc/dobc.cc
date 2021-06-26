@@ -4235,9 +4235,9 @@ int         funcdata::ollvm_deshell()
         //dump_cfg(name, "check", 1);
 
         dead_code_elimination(bblocks.blist, RDS_UNROLL0);
-#if defined(DCFG_CASE)
+
+        if (d->debug.dump_cfg)
             dump_cfg(name, _itoa(i, buf, 10), 1);
-#endif
     }
 
     /* 删除所有splice 模块，不会导致ssa关系重构 */
