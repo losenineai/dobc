@@ -2164,6 +2164,12 @@ public:
 
     intb    stack_check_fail_addr;
 
+    struct {
+        /* 是否打印dfa_connect中的cfg流图 */
+        int dump_cfg;
+        int level;
+    } debug = { 0 };
+
     Address     sp_addr;
     Address     r0_addr;
     Address     r1_addr;

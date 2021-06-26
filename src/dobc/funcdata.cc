@@ -1489,6 +1489,25 @@ int         funcdata::ollvm_detect_propchain4(ollvmhead *oh, flowblock *&from, b
                 return 2;
             }
 
+            flowblock *bb = p1->parent;
+            if ((bb->out.size() == 1) && h->is_adjacent(bb)) {
+                varnode *vn1 = p1->output;
+
+                if (p1->opcode != CPUI_MULTIEQUAL) {
+                    p2 = p1->output->search_copy_chain(CPUI_MULTIEQUAL, bb);
+
+                    if (p2->opcode != CPUI_MULTIEQUAL)
+                        goto cond_copy_label;
+
+                    p1 = p2;
+                }
+
+                p1 = p1->get_in(0)->def;
+                pre = p1->parent;
+                cur = bb;
+            }
+
+cond_copy_label:
             top = collect_all_const_defs(p1, defs, dfnum);
             p1->flags.mark_cond_copy_prop = 1;
 

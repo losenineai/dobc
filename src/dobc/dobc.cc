@@ -428,12 +428,12 @@ void dobc::plugin_ollvm()
     funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x366f5));
 #endif
 
-#if 0 // liblazarus
-    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15f09));
-    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x132ed));
+#if 1 // liblazarus
+    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15f09));
+    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x132ed));
 #endif
 
-#if 1 // 快手
+#if 0 // 快手
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15f09));
     funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0xcb59));
 #endif
