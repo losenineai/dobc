@@ -1410,13 +1410,20 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     break;
 
                 case CPUI_INT_ADD:
+                    /*
+                    u0 = pc + c;
+                    rn = u0 + 
+                    */
                     if (pi0(p)->flags.from_pc && isreg(p1->output)) {
                         rd = reg2i(poa(p1));
                         imm = p1->output->get_val();
                         _mov_imm(rd, imm - (ind + 4 * (stuff_const(0, imm) ? 1:2)) - 4, 0);
                         _add_reg(rd, rd, PC, SRType_LSL, 0);
-                        advance(it, 1);
                     }
+                    else if (istemp(p1->output) && isreg(p2->output) && (p2->opcode == CPUI_LOAD)) {
+                        _ldr_imm(reg2i(poa(p2)), reg2i(pi0a(p)), pi1(p)->get_val() + pi1(p1)->get_val(), 0);
+                    }
+                    it = advance_to_inst_end(it);
                     break;
                 }
             }
