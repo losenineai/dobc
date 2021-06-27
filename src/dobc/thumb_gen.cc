@@ -707,20 +707,6 @@ void _rsb_reg(int rd, int rn, int rm, SRType shtype, int shift)
     o(0xebc00000 | (rn << 16) | (rd << 8) | rm | (shtype << 4) | imm_map(shift, 2, 3, 12) | imm_map(shift, 0, 2, 6));
 }
 
-void _str(int rt, int rn, int rm, int imm)
-{
-    if (rm != -1) {
-    }
-    else if (rt < 8 && rn < 8) {
-        if (align4(imm) && imm < 128)
-            o(0x6000 | ((imm >> 2) << 6) | (rn << 3) | rt);
-    }
-    else if ((rn == SP) && rt < 8 && align4(imm) && imm < 1024)
-        o(0x9000 | (rt << 8) | (imm >> 2));
-    else if (imm < 4096)
-        o(0xf8600000 | (rn << 16) | (rt << 12) | imm);
-}
-
 void _str_reg(int rt, int rn, int rm, int lsl)
 {
     if (!lsl && rt < 8 && rn < 8 && rm < 8)
@@ -740,7 +726,7 @@ void _str_imm(int rt, int rn, int imm, int wback)
         o(0x9000 | (rt << 8) | (imm >> 2));
     else if (add && imm < 4096) // t3
         o(0xf8c00000 | (rn << 16) | (rt << 12) | imm);
-    else if (pos < 128)
+    else if (pos < 256)
         o(0xf8400800 | imm | (rt << 12) | (rn << 16) | (p << 10) | (add << 9) | (wback << 8));
 }
 
@@ -1314,8 +1300,44 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                                 advance(it, 3);
                             }
                         }
+                        /* 
+                        以下是兼容这么一种情况
+
+                        libkwsgmain.so/sub_cb59:
+
+                        strd r0,r12,[sp,#0x1b0]
+                        ...
+                        strd r0,r12,[sp,#0x1b0]
+
+                        它们在转换pcode以后，变成这样
+
+                        1. u1 = sp - 0x1b0
+                        2. store [u1], r0
+                        3. u1 = u1 - 4
+                        4. store [u1], r12
+
+                        ....
+                        ....
+
+                        n.      u1 = sp - 0x1b0
+                        n+1.    store [u1], r0
+                        n+2.    u1 = u1 - 4
+                        n+3.    store [u1], r12
+
+                        出于某些原因，指令2会被删除，变成这样
+                        1. u1 = sp - 0x1b0
+                        3. u1 = u1 - 4
+                        4. store [u1], r12
+
+                        我们转换回去时，不能再拷贝了，转成:
+
+                        str r12, [sp,#0x1b4]
+                        */
+                        else if ((p2->opcode == CPUI_INT_ADD) && istemp(p2->output)) {
+                            _str_imm(reg2i(pi2a(p3)), reg2i(pi0a(p)), pi1(p)->get_val() + pi1(p2)->get_val(), 0);
+                        }
                     }
-                    advance(it, 1);
+                    it = advance_to_inst_end(it);
                     break;
 
                 case CPUI_STORE:
@@ -1455,7 +1477,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                         imm = pi1(p)->get_val();
                         rt = reg2i(pi2a(p1));
                         rn = reg2i(pi0a(p));
-                        _str(rt, rn, -1, imm);
+                        _str_imm(rt, rn, imm, 0);
                     }
                 }
             }
