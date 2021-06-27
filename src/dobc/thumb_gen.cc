@@ -800,6 +800,17 @@ void thumb_gen::_mov_imm(int rd, uint32_t v, int setflags)
     }
 }
 
+/* A8.8.103 */
+void _mov_reg(int rd, int rm, int s)
+{
+    if (!s)
+        o(0x4600 | (rm << 3) | (rd & 7) | (rd >> 3 << 7));
+    else if (s && (rd < 8) && (rm < 8))
+        o(0x0000 | (rm << 3) | rd);
+    else
+        o(0xea4f0000 | (s << 20) | (rd << 8) | rm);
+}
+
 /* A8.8.101 */
 void _mls(int rd, int rn, int rm, int ra)
 {
@@ -992,6 +1003,10 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 else if (pi0(p)->is_constant()) {
                     _mov_imm(LR, pi0(p)->get_val(), 0);
                 }
+                else if (isreg(pi0(p))) {
+                    _mov_reg(reg2i(poa(p)), reg2i(pi0a(p)), follow_by_set_cpsr(p));
+                    it = advance_to_inst_end(it);
+                }
             }
             else if (pi0(p)->is_hard_constant()) {
                 if (isreg(p->output))
@@ -1092,7 +1107,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 if (isreg(p->output)) {
                     rd = reg2i(poa(p));
                     /* A8.8.103*/
-                    o(0x4600 | (reg2i(pi0a(p)) << 3) | (rd & 7) | (rd >> 3 << 7));
+                    _mov_reg(rd, reg2i(pi0a(p)), 0);
                 }
                 else if (istemp(p->output)) {
                     switch (p1->opcode) {
