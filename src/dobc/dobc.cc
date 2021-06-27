@@ -1106,19 +1106,6 @@ int             pcodeop::dump(char *buf, uint32_t flags)
 
     if (is_call()) {
         if (flags & PCODE_HTML_COLOR)   i += sprintf(buf + i, "<font color=\"red\"> ");
-#if 0
-        i += sprintf(buf + i, "[r0:");
-        i += print_vartype(trans, buf + i, callctx->r0);
-
-        i += sprintf(buf + i, ",r1:");
-        i += print_vartype(trans, buf + i, callctx->r1);
-
-        i += sprintf(buf + i, ",r2:");
-        i += print_vartype(trans, buf + i, callctx->r2);
-
-        i += sprintf(buf + i, ",r3:");
-        i += print_vartype(trans, buf + i, callctx->r3);
-#endif
 
         i += sprintf(buf + i, "[sp:");
         i += print_vartype(trans, buf + i, get_in(d->sp_addr));
@@ -2169,20 +2156,7 @@ int             pcodeop::compute(int inslot, flowblock **branch)
                 output->set_val(in1->get_val());
             }
             else {
-#if 0
-                for (i = 1; i < inrefs.size(); i++) {
-                    in1 = get_in(i);
-                    if (in0->type != in1->type)
-                        break;
-                }
-
-                if (i == inrefs.size())
-                    output->type = in0->type;
-                else
-                    output->type.height = a_top;
-#else
                 on_MULTIEQUAL();
-#endif
             }
         }
         break;
@@ -4232,7 +4206,6 @@ int         funcdata::ollvm_deshell()
     for (i = 0; loop_dfa_connect(0) >= 0; i++)
     {
         printf("[%s] loop_unrolling sub_%llx %d times*********************** \n\n", mtime2s(NULL),  h->get_start().getOffset(), i);
-        //dump_cfg(name, "check", 1);
 
         dead_code_elimination(bblocks.blist, RDS_UNROLL0);
 

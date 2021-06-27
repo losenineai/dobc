@@ -349,8 +349,7 @@ void        funcdata::dead_code_elimination(vector<flowblock *> &blks, uint32_t 
     list<pcodeop *>::iterator it;
     list<pcodeop *> worklist;
     vector<flowblock *> marks;
-    varnode *vn, *vn1;
-    pcodeop *op, *load, *store;
+    pcodeop *op;
     int i;
 
     marks.clear();
@@ -364,15 +363,9 @@ void        funcdata::dead_code_elimination(vector<flowblock *> &blks, uint32_t 
 
         marks[b->dfnum] = b;
 
-#define STORE_DCE           1
-
         for (it = b->ops.begin(); it != b->ops.end(); it++) {
             op = *it;
-            if ((op->output && op->output->has_no_use()) 
-#if STORE_DCE
-                || (op->opcode == CPUI_STORE)
-#endif
-                ) {
+            if ((op->output && op->output->has_no_use()) || (op->opcode == CPUI_STORE)) {
                 worklist.push_back(op);
             }
         }
@@ -403,53 +396,6 @@ void        funcdata::dead_code_elimination(vector<flowblock *> &blks, uint32_t 
                 *p1 = a;
             其实就是同一个值拷来拷去
         */
-#if STORE_DCE == 0
-        if (op->output->has_use()) 
-            continue;
-
-        if (op->opcode == CPUI_STORE) {
-            vn = op->get_in(2);
-            if (op->output && vn->def
-                && ((load = vn->def)->opcode == CPUI_LOAD)
-                && (vn1 = load->get_virtualnode())) {
-                /*
-
-                r0 = *pos1
-                *pos2 = r0;
-                ...
-                ...
-                r0 = *pos2;
-                *pos1 = r0
-                这一坨代码都是死的
-
-                假如*pos1没人用它的话
-                */
-                if ((store = vn1->def)
-                    && (store->opcode == CPUI_STORE)
-                    && (vn1 = store->get_in(2))
-                    && (load = vn1->def) && (load->opcode == CPUI_LOAD)
-                    && (vn1 = load->get_virtualnode())
-                    && (vn1->get_addr() == op->output->get_addr())) {
-
-                    //printf("dead store, load[%d, %d] \n", op->start.getTime(), load->start.getTime());
-
-                    goto dce_label;
-                }
-                /*
-                r0 = *pos1
-                *pos1 = r0
-                */
-                else if (!store && vn1->get_addr() == op->output->get_addr()) {
-
-                    //printf("dead store, load[%d, %d] \n", op->start.getTime(), load->start.getTime());
-
-                    goto dce_label;
-                }
-            }
-            continue;
-        }
-
-#else
         if (op->opcode == CPUI_STORE) {
 
             if (op->output->has_no_use() && op->flags.store_on_dead_path) goto dce_label;
@@ -480,7 +426,6 @@ void        funcdata::dead_code_elimination(vector<flowblock *> &blks, uint32_t 
 
         if (op->output->has_use()) 
             continue;
-#endif
 
         /* 有些函数是有副作用的，它的def即使没有use也是不能删除的 */
         if (op->is_call()) continue;
@@ -1056,7 +1001,7 @@ int vmhead_dfnum_cmp(ollvmhead *l, ollvmhead *r)
 
 int         funcdata::ollvm_detect_frameworkinfo()
 {
-    int i, t, j, k;
+    int i, t;
     ollvmhead *head;
     flowblock *b;
     vector<flowblock *> blks;
@@ -1109,47 +1054,12 @@ int         funcdata::ollvm_detect_frameworkinfo()
 
     printf("search maybe safezone alias start...\n");
     /* FIXME:后面要改成递归收集所有的load */
-#if 0
-    set<pcodeop *, pcodeop_cmp> poss_set;
-    vector<pcodeop *> poss;
-    for (i = 0; i < ollvm.heads.size(); i++) {
-        ollvmhead *head = ollvm.heads[i];
-        pcodeop *p = head->h->find_pcode_def(head->st1), *p1, *p2, *p3;
-        for (j = 0; j < head->h->in.size(); j++) {
-            varnode *v = p->get_in(j);
-
-            if (NULL == (p1 = v->def)) continue;
-
-            if ((p1->opcode == CPUI_LOAD)) {
-                p3 = p1->get_in(1)->def;
-                if (poss_set.find(p3) == poss_set.end()) {
-                    poss_set.insert(p3);
-                    poss.push_back(p3);
-                }
-            }
-            else if (p1->opcode == CPUI_MULTIEQUAL) {
-                for (k = 0; k < p1->inrefs.size(); k++) {
-                    v = p1->get_in(k);
-                    if (!(p2 = v->def)) continue;
-                    if ((p2->opcode == CPUI_LOAD)) {
-                        p3 = p2->get_in(1)->def;
-                        if (poss_set.find(p3) == poss_set.end()) {
-                            poss_set.insert(p3);
-                            poss.push_back(p3);
-                        }
-                    }
-                }
-            }
-        }
-    }
-#else
     pcodeop_set poss_set, visit;
     for (i = 0; i < ollvm.heads.size(); i++) {
         ollvmhead *head = ollvm.heads[i];
         p = head->h->find_pcode_def(head->st1);
         ollvm_collect_safezone(p, visit, poss_set, 0);
     }
-#endif
 
     pcodeop_set::iterator it;
 
@@ -1262,158 +1172,6 @@ bool            flowblock::is_direct_connect_to(flowblock *to)
     }
 
     return false;
-}
-
-int         funcdata::ollvm_detect_propchain2(ollvmhead *oh, flowblock *&from, blockedge *&outedge, uint32_t flags)
-{
-    if (oh->h->flags.f_dead) return -1;
-
-    flowblock *h = oh->h, *pre, *pre1, *cur, *cur1, *h1;
-    int i, j, k, top, dfnum;
-    pcodeop *p = h->find_pcode_def(oh->st1), *p1, *p2, *p3;
-    varnode *vn;
-    blockedge *e, *e1;
-    vector<blockedge *> invec;
-    if (!p) {
-        if ((p = h->get_cbranch_sub_from_cmp())
-            && (p1 = p->get_in(0)->def)
-            && (p1->opcode == CPUI_MULTIEQUAL)
-            && p1->all_inrefs_is_constant()
-            && (pre = p1->parent) && h->is_in(pre)) {
-        }
-        else
-            return -1;
-    }
-    else if (p->opcode != CPUI_MULTIEQUAL)
-        return -1;
-
-    h->get_inlist_on_dfsort(invec);
-
-    /* 调试用 */
-    static int trace = 0;
-    trace++;
-
-    p1 = p;
-    for (i = 0; i < invec.size(); i++) {
-        e = invec[i];
-        pre = e->point;
-        cur = h;
-        vn = p->get_in(e->index);
-
-        p1 = vn->def;
-        h1 = p1->parent;
-
-        /* 假如状态节点的某个phi节点输入就是常数，直接开始遍历 */
-        if (vn->is_constant()) {
-            from = pre;
-            e = &pre->out[pre->get_out_index(cur)];
-            /* 假如已经被标记过，不可计算了 */
-            if (e->is(a_unpropchain)) continue;
-            outedge = e;
-            return 0;
-        }
-
-#if 1
-        if ((p1->opcode != CPUI_MULTIEQUAL) && !b_is_flag(flags,F_OPEN_COPY)) {
-            
-            /* 搜索常量传播节点时，必须搜索拷贝链，拷贝链上的节点都是等价的 */
-            p3 = vn->search_copy_chain(CPUI_MULTIEQUAL, NULL);
-
-            if ((p3->parent != p1->parent) || (p3->opcode != CPUI_MULTIEQUAL))
-                continue;
-
-            p1 = p3;
-        }
-#endif
-
-        if ((p1->opcode == CPUI_MULTIEQUAL)) {
-            /* 假如某个in节点是phi节点
-            1. 刚好邻接vmhead，那么尝试搜索它
-            2. 这个phi节点的out节点(只有一个)，邻接vmhead
-            */
-            if ((h->is_adjacent(h1)) || ((h1->out.size() == 1) && h->is_adjacent(h1->get_out(0)))) {
-                vector<blockedge *> invec2;
-
-                h1->get_inlist_on_dfsort(invec2);
-
-                for (j = 0; j < invec2.size(); j++) {
-                    e1 = invec2[j];
-                    vn = p1->get_in(e1->index);
-                    pre1 = p1->parent->get_in(e1->index);
-                    cur1 = p1->parent;
-
-                    if (vn->is_constant()) {
-                        from = pre1;
-                        e = &pre1->out[pre1->get_out_index(cur1)];
-                        /* 假如已经被标记过，不可计算了 */
-                        if (e->is(a_unpropchain)) continue;
-                        outedge = e;
-                        return 0;
-                    }
-                    else {
-                        p2 = vn->def;
-                        if (p2 && (p2->opcode == CPUI_MULTIEQUAL)) {
-                            for (k = 0; k < p2->inrefs.size(); k++) {
-                                vn = p2->get_in(k);
-                                pre1 = p2->parent->get_in(k);
-                                cur1 = p2->parent;
-
-                                if (vn->is_constant()) {
-                                    from = pre1;
-                                    e = &pre1->out[pre1->get_out_index(cur1)];
-                                    /* 假如已经被标记过，不可计算了 */
-                                    if (e->is(a_unpropchain)) continue;
-                                    outedge = e;
-                                    return 0;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if (!p1->flags.mark_cond_copy_prop 
-            && b_is_flag(flags,F_OPEN_COPY)
-            && ((p1->opcode == CPUI_COPY) || (p1->opcode == CPUI_LOAD) || (p1->opcode == CPUI_MULTIEQUAL))) {
-            vector<varnode *> defs;
-
-            if ((p1->opcode == CPUI_LOAD) && !p1->have_virtualnode())
-                throw LowlevelError("alias analysis error");
-
-            if (p1->opcode == CPUI_COPY) {
-                if (ollvm_combine_lcts(p1)) {
-                    printf("ollvm detect propchains do lcts\n");
-                    heritage_clear();
-                    heritage();
-                    dump_cfg(name, "lcts", 1);
-                    return 2;
-                }
-            }
-
-            if ((p1->opcode == CPUI_MULTIEQUAL) && p1->all_inrefs_is_top() && p1->parent->is_empty(1)) {
-                remove_empty_block(p1->parent);
-                structure_reset();
-                heritage_clear();
-                heritage();
-                return 2;
-            }
-
-            top = collect_all_const_defs(p1, defs, dfnum);
-            p1->flags.mark_cond_copy_prop = 1;
-
-            if (defs.size() > 1) {
-                cond_copy_expand(p1, pre, pre->get_out_index(cur));
-                printf("ollvm detect propchains do copy_expand\n");
-                heritage_clear();
-                heritage();
-                dump_cfg(name, "cond_copy_expand", 1);
-                return 1;
-            }
-        }
-    }
-
-    return -1;
 }
 
 int         funcdata::ollvm_detect_propchain4(ollvmhead *oh, flowblock *&from, blockedge *&outedge, uint32_t flags)
@@ -2439,7 +2197,7 @@ void        funcdata::heritage(void)
 
     long start1 = clock();
 
-    constant_propagation3();
+    constant_propagation4();
 
     print_info("%sheritage scan node end.  heriage spent [%lu]ms, CP spent [%lu]ms.", print_indent(), start1 - start, clock() - start);
 }
@@ -2459,151 +2217,6 @@ void    funcdata::heritage_clear()
 
     maxdepth = -1;
     pass = 0;
-}
-
-int         funcdata::constant_propagation3()
-{
-    return constant_propagation4();
-
-    list<pcodeop *>::const_iterator iter;
-    list<pcodeop *>::const_iterator iter1;
-	vector<pcodeop *> topstorelist;
-    pcodeop_set::iterator it;
-    pcodeop_set set;
-    pcodeop_set visit;
-	pcodeop_set maystore_set;
-    pcodeop *op, *use, *load, *store, *maystore;
-	int ret = 0, r, changed = 0;
-    flowblock *b;
-    varnode *out;
-
-    bblocks.collect_sideeffect_ops();
-
-    for (iter = deadlist.begin(); iter != deadlist.end(); iter++) {
-        op = *iter;
-        if (op->flags.dead) continue;
-        set.insert(op);
-    }
-
-cp_label1:
-    while (!set.empty()) {
-        it = set.begin();
-        op = *it;
-        set.erase(it);
-
-        if (op->flags.dead) continue;
-
-        if ((op->opcode == CPUI_STORE) && (op->get_in(1)->type.height != a_top)) {
-            for (iter1 = op->mayuses.begin(); iter1 != op->mayuses.end(); ++iter1) {
-                use = *iter1;
-                set.insert(use);
-            }
-            op->mayuses.clear();
-        }
-
-        r = op->compute(-1, &b);
-        if (!flags.disable_to_const)
-            op->to_constant1();
-        if (r == ERR_FREE_SELF) continue;
-        ret |= r;
-
-        out = op->output;
-
-        if (!out) continue;
-
-        if (out->is_constant() || out->is_sp_constant()) {
-            if (visit.find(op) != visit.end()) continue;
-            visit.insert(op);
-
-            for (iter1 = out->uses.begin(); iter1 != out->uses.end(); ++iter1) {
-                set.insert(*iter1);
-            }
-        }
-        else if ((op->opcode == CPUI_LOAD) && !op->get_virtualnode() && !op->flags.input) {
-            load = op;
-            maystore = NULL;
-            store = store_query(load, NULL, load->get_in(1), &maystore);
-
-            if (!store) {
-                if (maystore) {
-                    maystore->add_mayuse(load);
-					maystore_set.insert(maystore);
-                }
-                continue;
-            }
-
-            if (store->opcode != CPUI_STORE) {
-                load->output->set_val(0);
-                load->flags.val_from_sp_alloc = 1;
-                continue;
-            }
-
-            set.insert(load);
-            if (store->parent->fd != this) {
-                load->output->type = store->get_in(2)->type;
-                load->flags.input = 1;
-                continue;
-            }
-
-            varnode *in = store->get_in(1);
-
-            /* 假如这个store已经被分析过，直接把store的版本设置过来 */
-            if (store->output) {
-                op_set_input(load, store->output, 2);
-            }
-            else {
-                if (!store->get_in(1)->is_sp_constant())
-                    throw LowlevelError("only support sp constant");
-
-                //Address oaddr(d->getUniqueSpace(), virtualbase += in->size);
-                Address oaddr(d->getStackBaseSpace(), pi1(store)->get_val());
-                out = new_varnode_out(in->size, oaddr, store);
-
-                op_resize(load, 3);
-                op_set_input(load, out, 2);
-                set.insert(store);
-            }
-        }
-    }
-
-	topstorelist.clear();
-	while (!maystore_set.empty()) {
-        it = maystore_set.begin();
-        op = *it;
-        maystore_set.erase(it);
-
-		if (op->flags.dead) continue;
-
-		op->mayuses.clear();
-		if (op->get_in(1)->type.height == a_top)
-			topstorelist.push_back(op);
-	}
-
-	if (flags.enable_topstore_mark && !topstorelist.empty()) {
-		sort(topstorelist.begin(), topstorelist.end(), pcodeop_domdepth_cmp());
-
-		op = topstorelist[0];
-		flowblock *b = op->parent;
-		while (b) {
-			if (b->in.size() > 1) break;
-
-			b = b->in.size() ? b->get_in(0):NULL;
-		}
-
-		if (!b) {
-			changed = 1;
-			op->flags.uncalculated_store = 1;
-			for (iter1 = op->mayuses.begin(); iter1 != op->mayuses.end(); iter1++) {
-				set.insert(*iter1);
-			}
-
-			op->mayuses.clear();
-
-			goto cp_label1;
-		}
-	}
-
-    return ret;
 }
 
 int         funcdata::constant_propagation4()

@@ -1626,7 +1626,6 @@ public:
 
     */
     void        split_pieces(const vector<varnode *> &vnlist, pcodeop *insertop, const Address &addr, int size, varnode *startvn);
-    int         constant_propagation3();
     /* 重构新的常量传播算法，尝试解决版本3遗留的几个问题
 
     1. 别名搜索效率过低，它针对每个load都会
@@ -1780,7 +1779,6 @@ public:
 
 #define F_OPEN_COPY             0x01
 #define F_OPEN_PHI              0x02
-    int         ollvm_detect_propchain2(ollvmhead *oh, flowblock *&from, blockedge *&outedge, uint32_t flags);
     int         ollvm_detect_propchain3(flowblock *&from, blockedge *&outedge);
     int         ollvm_detect_propchain4(ollvmhead *oh, flowblock *&from, blockedge *&outedge, uint32_t flags);
 
