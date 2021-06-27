@@ -1293,12 +1293,15 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                                     rt = d->reg2i(pi0a(p1));
                                 rn = d->reg2i(pi0a(p));
                                 _strb_imm(rt, rn, pi1(p)->get_val(), 0);
-                                advance(it, 1);
                             }
                             else if (p3 && (p3->opcode == CPUI_INT_ADD) && pi0(p3) == p1->output && (p4 = *it1)->opcode == CPUI_STORE) {
                                 _strd(reg2i(pi2a(p2)), reg2i(pi2a(p4)), reg2i(pi0a(p)), pi1(p)->get_val(), 0);
-                                advance(it, 3);
                             }
+                            else if (p3 && (p3->get_addr() != p2->get_addr())) {
+                                _str_imm(reg2i(pi2a(p2)), reg2i(pi0a(p)), pi1(p)->get_val(), 0);
+                            }
+
+                            it = advance_to_inst_end(it);
                         }
                         /* 
                         以下是兼容这么一种情况
