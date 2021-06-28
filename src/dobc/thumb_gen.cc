@@ -818,10 +818,12 @@ void _mls(int rd, int rn, int rm, int ra)
 }
 
 /* A8.8.274 */
-void _uxtb(int rd, int rm)
+void _uxtb(int rd, int rm, int rotate)
 {
-    if (rd < 8 && rm < 8)
+    if (rd < 8 && rm < 8) // t1
         o(0xb260 | (rm << 3) | rd);
+    else // t2
+        o(0xfa5ff080 | (rd << 8) | (rotate << 4) | rm);
 }
 
 /* A8.8.339 */
@@ -1651,7 +1653,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 }
             }
             else if (p1->opcode == CPUI_INT_ZEXT) {
-                _uxtb(reg2i(poa(p1)), reg2i(pi0a(p)));
+                _uxtb(reg2i(poa(p1)), reg2i(pi0a(p)), 0);
             }
             break;
 
