@@ -817,6 +817,13 @@ void _mls(int rd, int rn, int rm, int ra)
     o(0xfb000010 | (rn << 16) | (ra << 12) | (rd << 8) | rm);
 }
 
+/* A8.8.274 */
+void _uxtb(int rd, int rm)
+{
+    if (rd < 8 && rm < 8)
+        o(0xb260 | (rm << 3) | rd);
+}
+
 /* A8.8.339 */
 void vmov_imm(int siz, int vd, uint64_t imm)
 {
@@ -1642,6 +1649,9 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 if (p2->opcode == CPUI_INT_SEXT) {
                     it = retrieve_orig_inst(b, it, 1);
                 }
+            }
+            else if (p1->opcode == CPUI_INT_ZEXT) {
+                _uxtb(reg2i(poa(p1)), reg2i(pi0a(p)));
             }
             break;
 
