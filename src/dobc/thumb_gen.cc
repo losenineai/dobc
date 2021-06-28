@@ -1355,6 +1355,12 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                             _str_imm(reg2i(pi2a(p3)), reg2i(pi0a(p)), pi1(p)->get_val() + pi1(p2)->get_val(), 0);
                         }
                     }
+                    else if (isreg(p1->output) && isreg(pi0(p1)) 
+                        && (p2->get_addr() == p1->get_addr())
+                        && p2->opcode == CPUI_INT_ADD
+                        && p3->opcode == CPUI_LOAD) {
+                        it = retrieve_orig_inst(b, it, 1);
+                    }
                     it = advance_to_inst_end(it);
                     break;
 
