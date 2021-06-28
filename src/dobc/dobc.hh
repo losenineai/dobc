@@ -26,6 +26,9 @@ class pcodeop;
 class dobc;
 class valuetype;
 
+/* 重命名一些符号，做内部使用，我懒的改opcodes.hh了 */
+#define CPUI_USE        CPUI_CAST
+
 #define pi0(p)              p->get_in(0)
 #define pi1(p)              p->get_in(1)
 #define pi1(p)              p->get_in(1)
@@ -348,11 +351,12 @@ public:
             set_val(l - r);
     }
     bool            is_sp_constant(void) { return type.height == a_sp_constant; }
-    bool            is_sp_vn();
+    bool            is_sp_vn() const;
     bool            is_input(void) { return flags.input; }
     void            set_sp_constant(int v) { type.height = a_sp_constant; type.v = v;  }
     void            set_pc_constant(intb v) { type.height = a_pc_constant; type.v = v; }
     intb            get_val(void) const;
+    intb            get_sp_offset() { return get_addr().getOffset() - STACK_BASE; }
 
     void            add_use(pcodeop *op);
     void            del_use(pcodeop *op);

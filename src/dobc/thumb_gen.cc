@@ -1639,6 +1639,16 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
             }
             break;
 
+        case CPUI_USE:
+            rn = regalloc(p);
+            rm = regalloc(p);
+
+            _ldr_imm(rn, SP, pi0(p1)->get_sp_offset() - pi0(p)->get_val(), 0);
+            _mov_imm(rm, pi1(p1)->get_val(), 0);
+            _cmp_reg(rn, rm);
+            it = advance_to_inst_end(it);
+            break;
+
         default:
             break;
         }

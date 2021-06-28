@@ -803,7 +803,7 @@ bool            varnode::maystore_from_this(pcodeop *p)
     return false;
 }
 
-bool            varnode::is_sp_vn() 
+bool            varnode::is_sp_vn() const
 { 
     return (dobc::singleton()->getStackBaseSpace()) == get_addr().getSpace();  
 }
@@ -1103,7 +1103,7 @@ int             pcodeop::dump(char *buf, uint32_t flags)
     if (flags & PCODE_DUMP_UD)
         i += print_udchain(buf + i, this, flags);
 
-    if (is_call()) {
+    if (is_call() || (opcode == CPUI_USE)) {
         if (flags & PCODE_HTML_COLOR)   i += sprintf(buf + i, "<font color=\"red\"> ");
 
         i += sprintf(buf + i, "[sp:");
