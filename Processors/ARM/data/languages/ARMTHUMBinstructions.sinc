@@ -905,6 +905,7 @@ pcpbrace:{ lr }	is thc0007=0 & lr					{ mult_addr = mult_addr - 4; *mult_addr = 
 @if defined(VERSION_6T2) || defined(VERSION_7)
 RnIndirect12: [Rn0003,"#"^offset12]	is Rn0003; offset12	 { local tmp = Rn0003 + offset12; export tmp; }
 
+
 RnIndirectPUW: [Rn0003],"#"^-immed8	is Rn0003; addr_puw=1 & immed8	 { local tmp = Rn0003; Rn0003=Rn0003-immed8; export tmp; }
 RnIndirectPUW: [Rn0003],"#"^immed8	    is Rn0003; addr_puw=3 & immed8	 { local tmp = Rn0003; Rn0003=Rn0003+immed8; export tmp; }
 RnIndirectPUW: [Rn0003,"#"^-immed8]	is Rn0003; addr_puw=4 & immed8	 { local tmp = Rn0003 - immed8; export tmp; }
@@ -2131,14 +2132,6 @@ define pcodeop ExclusiveAccess;
   build RtGotoCheck;
 }
 
-:ldr^ItCond^".w"	Rt1215,RnIndirectPUW 		is TMode=1 & ItCond & (op4=0xf85; Rt1215 & thc1111=1 & RtGotoCheck) & $(RN_INDIRECT_PUW)
-{
-  build ItCond;
-  build RnIndirectPUW;
-  Rt1215 = *RnIndirectPUW;
-  build RtGotoCheck;
-}
-
 :ldr^ItCond^".w"  Rt1215,PcrelOffset12         is TMode=1 & ItCond & (op4=0xf8d & sop0003=15; Rt1215 & RtGotoCheck) & PcrelOffset12
 {
   build ItCond;
@@ -2155,6 +2148,15 @@ define pcodeop ExclusiveAccess;
   Rt1215 = PcrelOffset12:4;
   build RtGotoCheck;
 }
+
+:ldr^ItCond^".w"	Rt1215,RnIndirectPUW 		is TMode=1 & ItCond & (op4=0xf85; Rt1215 & thc1111=1 & RtGotoCheck) & $(RN_INDIRECT_PUW)
+{
+  build ItCond;
+  build RnIndirectPUW;
+  Rt1215 = *RnIndirectPUW;
+  build RtGotoCheck;
+}
+
 
 :ldr^ItCond^".w"  Rt1215,[Rn0003,Rm0003]             is TMode=1 & ItCond & op4=0xf85 & Rn0003; Rt1215 & RtGotoCheck & thc1111=0 & sop0610=0 & thc0405=0 & Rm0003
 {
