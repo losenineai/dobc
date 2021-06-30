@@ -580,10 +580,10 @@ void _ldrd_imm(int rt, int rt2, int rn, int imm)
     int add = imm > 0;
     imm = abs(imm);
 
-    if (rn == rt) UNPREDICITABLE();
-    if (!align4(imm)) UNPREDICITABLE();
+    if (rn == rt) return;
 
-    o(0xe8550000 | (imm ? 0x01000000:0) | (rn << 16) | (rt << 12) | (rt2 << 8) | (imm >> 2) | (add << 23));
+    if (imm < 1024 && align4(imm)) 
+        o(0xe9550000 |  (rn << 16) | (rt << 12) | (rt2 << 8) | (imm >> 2) | (add << 23));
     /* wback ? */
 }
 
@@ -1391,7 +1391,6 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     if (a(pi1(p1)) == poa(p)) {
                         if (p2 && p3 && (pi0a(p2) == poa(p)) && (p3->opcode == CPUI_LOAD)) {
                             _ldrd_imm(reg2i(poa(p1)), reg2i(poa(p3)), reg2i(pi0a(p)), p->get_in(1)->get_val());
-                            advance(it, 3);
                         }
                         else if (istemp(p1->output) && isreg(p2->output) && p2->opcode == CPUI_INT_ZEXT) {
                             if (pi1(p)->is_hard_constant()) {
@@ -1399,7 +1398,6 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                             }
                             else
                                 _ldrb_reg(reg2i(poa(p2)), reg2i(pi0a(p)), reg2i(pi1a(p)), 0);
-                            advance(it, 2);
                         }
                         else {
                             rt = reg2i(poa(p1));
@@ -1409,9 +1407,9 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                                 o(0x9800 | (rt << 8) | (imm >> 2));
                             else if (imm < 4096) // T3
                                 o(0xf8d00000 | (rt << 12) | (reg2i(pi0a(p)) << 16) | imm);
-
-                            advance(it, 1);
                         }
+
+                        it = advance_to_inst_end(it);
                     }
                     break;
 
