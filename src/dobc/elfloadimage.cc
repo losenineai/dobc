@@ -48,6 +48,9 @@ ElfLoadImage::~ElfLoadImage()
 int ElfLoadImage::loadFill(uint1 *ptr, int size, const Address &addr) 
 {
     unsigned start = (unsigned)addr.getOffset();
+
+    //elf32_shdr_get_by_addr((Elf32_Ehdr *)filedata, start);
+
     if ((start + size) > filelen) {
         /* FIXME: 我们对所有访问的超过空间的地址都返回 0xaabbccdd，这里不是BUG，是因为我们载入so的时候，是直接平铺着载入的
         但是实际在程序加载so的时候，会填充很多结构，并做一些扩展 */

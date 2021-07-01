@@ -289,6 +289,29 @@ Elf32_Shdr *elf32_shdr_get(Elf32_Ehdr *hdr, int type)
     return NULL;
 }
 
+#define addr_in_shdr(pos,sh)         (sh->sh_addr && (pos >= sh->sh_addr) && (pos < (sh->sh_addr + sh->sh_size)))
+
+Elf32_Shdr *elf32_shdr_get_by_addr(Elf32_Ehdr *hdr, uint32_t addr)
+{
+    static Elf32_Shdr *prev = NULL;
+	int i;
+	Elf32_Shdr *shdr;
+
+    if (prev && addr_in_shdr(addr, prev))
+        return prev;
+
+	for (i = 1; i < hdr->e_shnum; i++) {
+		shdr = (Elf32_Shdr *)((char *)hdr + hdr->e_shoff) + i;
+
+        if (addr_in_shdr(addr, shdr)) {
+            prev = shdr;
+			return shdr;
+        }
+	}
+
+    return NULL;
+}
+
 struct {
     const char *str;
     int id;
