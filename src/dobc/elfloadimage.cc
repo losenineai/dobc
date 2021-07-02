@@ -62,15 +62,6 @@ int ElfLoadImage::loadFill(uint1 *ptr, int size, const Address &addr)
         return -1;
     }
 
-    /* FIXME: .got表我没有生成，这里直接根据IDA的结构，手动写了*/
-    if ((start == 0xfe8c) && (size == 4)) {
-        ptr[0] = 0x98;
-        ptr[1] = 0x57;
-        ptr[2] = 0x08;
-        ptr[3] = 0x00;
-        return 0;
-    }
-
     memcpy(ptr, filedata + start, size);
     return 0;
 }
