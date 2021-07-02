@@ -3329,6 +3329,8 @@ Elf32_Shdr *elf32_shdr_get(Elf32_Ehdr *hdr, int type);
 
 Elf32_Shdr *elf32_shdr_get_by_addr(Elf32_Ehdr *hdr, uint32_t addr);
 
+const char*     elf32_shdr_name(Elf32_Ehdr *hdr, Elf32_Shdr *sh);
+
 Elf32_Sym *elf32_sym_find(Elf32_Ehdr *hdr, unsigned long sym_val);
 Elf32_Sym *elf32_sym_find2(Elf32_Ehdr *hdr, const char *name);
 int         elf32_sym_count(Elf32_Ehdr *hdr);

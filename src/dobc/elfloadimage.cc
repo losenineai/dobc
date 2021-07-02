@@ -33,6 +33,7 @@ void ElfLoadImage::init()
 ElfLoadImage::ElfLoadImage(const string &filename):LoadImageB(filename)
 {
     filedata = (unsigned char *)file_load(filename.c_str(), (int *)&filelen);
+    hdr = (Elf32_Ehdr *)filedata;
 
     if (!filedata) 
         vm_error("ElfLoadImage() failed open [%s]", filename);
@@ -48,8 +49,12 @@ ElfLoadImage::~ElfLoadImage()
 int ElfLoadImage::loadFill(uint1 *ptr, int size, const Address &addr) 
 {
     unsigned start = (unsigned)addr.getOffset();
+    Elf32_Shdr *sh;
 
-    //elf32_shdr_get_by_addr((Elf32_Ehdr *)filedata, start);
+    sh = elf32_shdr_get_by_addr(hdr, start);
+
+    if (sh && (sh->sh_flags & SHF_WRITE))
+        return -1;
 
     if ((start + size) > filelen) {
         /* FIXME: 我们对所有访问的超过空间的地址都返回 0xaabbccdd，这里不是BUG，是因为我们载入so的时候，是直接平铺着载入的

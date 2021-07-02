@@ -557,8 +557,17 @@ void elf32_dump(char *elf, int opt)
 				name);
 		}
 	}
-
 }
+
+const char*     elf32_shdr_name(Elf32_Ehdr *hdr, Elf32_Shdr *sh)
+{
+    Elf32_Shdr *shstrdr;
+
+    shstrdr = (Elf32_Shdr *)((char *)hdr + hdr->e_shoff) + hdr->e_shstrndx;
+
+    return (const char *)hdr + (shstrdr->sh_offset + sh->sh_name);
+}
+
 
 void elf64_dump(char *elf, int opt)
 {

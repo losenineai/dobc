@@ -1,5 +1,6 @@
 ﻿
 #include "loadimage.hh"
+#include "elf.h"
 
 typedef map<Address, LoadImageFunc *>   addrtab;
 typedef map<string, LoadImageFunc *>   nametab;
@@ -15,6 +16,8 @@ class ElfLoadImage : public LoadImageB {
     FILE *fp;
     int cur_sym;
     AddrSpace *codespace;
+
+    Elf32_Ehdr *hdr;
 
 public:
     unsigned char*  filedata;
