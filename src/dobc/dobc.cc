@@ -421,10 +421,10 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 void dobc::plugin_ollvm()
 {
 #if 1 // 斗鱼
-    //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
+    funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
-    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
+    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x366f5));
 #endif
 
@@ -5213,6 +5213,26 @@ void        funcdata::add_callspec(pcodeop *p, funcdata *fd)
 
     if (!p->get_in(d->sp_addr)) {
         vn = new_varnode(4, d->sp_addr);
+        op_set_input(p, vn, p->inrefs.size());
+    }
+
+    list<pcodeop *>::iterator it = p->insertiter;
+    pcodeop *prev = *--it;
+
+    /*
+    blx指令在转换成pcode时，会携带一个 TB标记，比如:
+
+        blx 0x1380
+
+    p748 [  0]:(%lr.3:4) = COPY (#3669:4)          3669 [u:751]
+    p749 [  1]:(%ISAModeSwitch.3:1) = COPY (#0:1)  0 [u:750]
+    p750 [  2]:(%TB.3:1) = COPY (%ISAModeSwitch.3:1) 0 [d:749]
+    p751 [  3]:(%r0.21:4) = CALL.__stack_check_fail 
+
+    这个标记一般在call指令的前一条
+    */
+    if ((prev->get_addr() == p->get_addr()) && (prev->opcode == CPUI_COPY) && (poa(prev) == d->get_addr("TB"))) {
+        vn = new_varnode(1, poa(prev));
         op_set_input(p, vn, p->inrefs.size());
     }
 

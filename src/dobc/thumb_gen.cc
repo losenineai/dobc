@@ -392,6 +392,7 @@ void _vpush(int s, uint32_t reglist)
     o(x);
 }
 
+/* A8.8.131 */
 void _pop(int32_t reglist)
 {
     /* A8.8.131 */
