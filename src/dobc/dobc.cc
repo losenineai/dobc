@@ -420,20 +420,20 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 
 void dobc::plugin_ollvm()
 {
-#if 1 // 斗鱼
-    funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
+#if 0 // 斗鱼
+    //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
     //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
-    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
+    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
     //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x366f5));
 #endif
 
 #if 0 // liblazarus
-    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15f09));
-    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x132ed));
+    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15f09));
+    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x132ed));
 #endif
 
-#if 0 // 快手
+#if 1 // 快手
     funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0xcb59));
 #endif
     fd_main->ollvm_deshell();
@@ -528,6 +528,8 @@ void dobc::init_regs()
         string &name = it->second;
         if (name.find("tmp") != string::npos) continue;
         if (name.find("multi") != string::npos) continue;
+        if (name == "TB") continue;
+        if (name == "ISAModeSwitch") continue;
         cpu_regs.insert(it->first.getAddr());
     }
 }
