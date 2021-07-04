@@ -27,6 +27,7 @@
 #define in_imm7(a)          ANDNEQ(a, 0x7f)
 #define in_imm8(a)          ANDNEQ(a, 0xff)
 #define align4(a)           ((a & 3) == 0)
+#define align2(a)           ((a & 1) == 0)
 
 
 /* A8.8.119 */
@@ -186,6 +187,35 @@ static void o(uint32_t i)
     else
         ot((uint16_t)i);
 }
+
+uint32_t encbranch2(int pos, int target, int arm)
+{
+    if (arm && !align4(target))
+        vm_error("blx address must be align 4 bytes");
+
+    if (!arm && !align2(target))
+        vm_error("bl address must be align 2bytes");
+
+    int addr = 0;
+
+    addr = target - (pos + 4);
+
+    if (arm && !align4(addr))
+        return (uint32_t)-1;
+
+    addr /= 2;
+
+    if ((addr >= 0xffffff) && (addr < -0xffffff))
+        vm_error("FIXME: jmp bigger than 16MB");
+
+    int s = bit_get(addr, 31, 1), j1, j2, i1 = bit_get(addr, 22, 1), i2 = bit_get(addr, 21, 1);
+
+    j1 = (!i1) ^ s;
+    j2 = (!i2) ^ s;
+
+    return  (s << 26) | (j1 << 13) | (j2 << 11) | imm_map(addr, 11, 10, 16) | imm_map(addr, 0, 11, 0);
+}
+
 
 uint32_t thumb_gen::stuff_const(uint32_t op, uint32_t c)
 {
@@ -519,6 +549,21 @@ void _bic(int rd, int rn, int rm, SRType shtype,  int shift, int setflags)
         o(0xea200000 | (setflags << 20) | (rd << 8) | (rn << 16) | rm | (shtype << 4) | imm_map(shift, 2, 3, 12) | imm_map(shift, 0, 2, 6));
 }
 
+/* A8.8.25 bl or blx */
+void _bl_x_imm(int arm, int to)
+{
+    uint32_t x;
+    if (arm) {
+        if ((x = encbranch2(g_cg->ind, to, arm)) == (uint32_t)-1) {
+            o(NOP1);
+            x = encbranch2(g_cg->ind, to, arm);
+        }
+        o(0xf000c000 | x);
+    }
+    else
+        o(0xf000d000 | encbranch2(g_cg->ind, to, arm));
+}
+
 /* A8.8.221 */
 void thumb_gen::_sub_imm(int rd, int rn, uint32_t imm, int setflags)
 {
@@ -848,21 +893,6 @@ uint32_t encbranch(int pos, int addr, int fail)
     return 0xf0008000 | imm_map(addr, 31, 1, 26) | imm_map(addr, 18, 1, 11) | imm_map(addr, 17, 1, 13) | imm_map(addr, 11, 6, 16) | imm_map(addr, 0, 11, 0);
 }
 
-uint32_t encbranch2(int pos, int addr, int arm)
-{
-    addr -= pos + 4;
-    addr /= 2;
-    if ((addr >= 0xffffff) && (addr < -0xffffff))
-        vm_error("FIXME: jmp bigger than 16MB");
-
-    int s = bit_get(addr, 31, 1), j1, j2, i1 = bit_get(addr, 22, 1), i2 = bit_get(addr, 21, 1);
-
-    j1 = (!i1) ^ s;
-    j2 = (!i2) ^ s;
-
-    return  (s << 26) | (j1 << 13) | (j2 << 11) | imm_map(addr, 11, 10, 16) | imm_map(addr, 0, 11, 0);
-}
-
 char *vstl_slgh[] = {
     "ma:4 = copy rn:4" ,
     ""
@@ -942,7 +972,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
     pcodeop *p, *p1, *p2, *p3, *p4;
     uint32_t x, rt, rd, rn, rm, setflags;
     pc_rel_table pc_rel_tab;
-    int oind, imm, target_thumb, i;
+    int oind, imm, i;
 
     b->cg.data = data + ind;
 
@@ -1000,23 +1030,25 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     it = g_vstl(b, it);
             }
             else if (poa(p) == alr) {
-                if ((p1->opcode == CPUI_CALL) && (pi0(p1)->get_addr().getSpace() == d->ram_spc)) {
+                if ((p1->opcode == CPUI_COPY) && poa(p1) == d->get_addr("ISAModeSwitch")
+                    && (p2->opcode == CPUI_COPY) && poa(p2) == d->get_addr("TB")
+                    && (p3->opcode == CPUI_CALL) && (pi0(p3)->get_addr().getSpace() == d->ram_spc)) {
+
+                    imm = pi0(p3)->get_addr().getOffset();
+                    int tb = p2->output->get_val();
+                    _bl_x_imm(!tb, imm);
+                }
+                else if ((p1->opcode == CPUI_CALL) && (pi0(p1)->get_addr().getSpace() == d->ram_spc)) {
                     imm = pi0(p1)->get_addr().getOffset();
-                    target_thumb = d->func_is_thumb(pi0(p1)->get_val());
-                    /* A8.8.25 */
-                    if (fd->flags.thumb ^ target_thumb)
-                        o(0xf000c000 | encbranch2(ind, imm, !target_thumb));
-                    else 
-                        o(0xf000d000 | encbranch2(ind, imm, !target_thumb));
-                    advance(it, 1);
+                    _bl_x_imm(0, imm);
                 }
                 else if (pi0(p)->is_constant()) {
                     _mov_imm(LR, pi0(p)->get_val(), 0);
                 }
                 else if (isreg(pi0(p))) {
                     _mov_reg(reg2i(poa(p)), reg2i(pi0a(p)), follow_by_set_cpsr(p));
-                    it = advance_to_inst_end(it);
                 }
+                it = advance_to_inst_end(it);
             }
             else if (pi0(p)->is_hard_constant()) {
                 if (isreg(p->output))
