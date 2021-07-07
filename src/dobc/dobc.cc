@@ -420,28 +420,11 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 
 void dobc::plugin_ollvm()
 {
-#if 0 // 斗鱼
-    //funcdata *fd_main = find_func(std::string("JNI_OnLoad"));
-    //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x407d));
-    //funcdata *fd_main = find_func(Address(trans->getDefaultCodeSpace(), 0x367d));
-    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15521));
-    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x366f5));
-#endif
+    for (int i = 0; i < decode_address_list.size(); i++) {
+        funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), decode_address_list[i]));
 
-#if 0 // liblazarus
-    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15f09));
-    //funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x132ed));
-#endif
-
-#if 1 // 快手
-    funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0xcb59));
-#endif
-    fd_main->ollvm_deshell();
-
-#if 0
-    fd_main = add_func(Address(trans->getDefaultCodeSpace(), 0x15f09));
-    fd_main->ollvm_deshell();
-#endif
+        fd_main->ollvm_deshell();
+    }
 
     loader->saveFile(out_dir + out_filename);
 }

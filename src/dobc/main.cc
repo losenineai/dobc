@@ -41,7 +41,7 @@ int main(int argc, char **argv)
             sd = 1;
         }
         else if (!strcmp(argv[i], "-da")) {
-            while (argv[i + 1][0] != '-') {
+            while (((i+ 1) < argc) && argv[i + 1][0] != '-') {
                 addr_list.push_back(strtoul(argv[i+1], NULL, 16));
                 i++;
             }
