@@ -2154,6 +2154,8 @@ public:
     map<Address, funcdata *> addrtab;
     map<string, funcdata *> nametab;
 
+    vector<intb>     decode_address_list;
+
 #define SHELL_OLLVM           0
 #define SHELL_360FREE         1
     int shelltype = -1;

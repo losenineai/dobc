@@ -22,6 +22,7 @@ int main(int argc, char **argv)
     char *sla = NULL, *filename = NULL, *st = NULL;
     intb stack_check_fail_addr = 0, sd = 0, dcfg = 0;
     char *out_filename = NULL;
+    vector<intb>    addr_list;
 
     for (i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "-s")) {
@@ -38,6 +39,12 @@ int main(int argc, char **argv)
         }
         else if (!strcmp(argv[i], "-sd")) {
             sd = 1;
+        }
+        else if (!strcmp(argv[i], "-da")) {
+            while (argv[i + 1][0] != '-') {
+                addr_list.push_back(strtoul(argv[i+1], NULL, 16));
+                i++;
+            }
         }
         else if (!strcmp(argv[i], "-dcfg")) {
             dcfg = 1;
