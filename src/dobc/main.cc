@@ -54,7 +54,7 @@ int main(int argc, char **argv)
         }
     }
 
-    if (!sla || !st || !filename || !stack_check_fail_addr) {
+    if (!sla || !st || !filename || !stack_check_fail_addr || addr_list.empty()) {
         puts(help);
         return -1;
     }
@@ -64,6 +64,8 @@ int main(int argc, char **argv)
     d.set_shelltype(st);
     d.stack_check_fail_addr = stack_check_fail_addr;
     d.debug.dump_cfg = dcfg;
+
+    d.decode_address_list = addr_list;
 
     if (out_filename)
         d.out_filename.assign(out_filename, strlen(out_filename));
