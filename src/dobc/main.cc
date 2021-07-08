@@ -2,33 +2,32 @@
 #include "vm.h"
 #include "dobc.hh"
 
-#define SLA_FILE            "../../../Processors/ARM/data/languages/ARM8_le.sla"
+#define ARM_SLA            "/Processors/ARM/data/languages/ARM8_le.sla"
 #define PSPEC_FILE          "../../../Processors/ARM/data/languages/ARMCortex.pspec"
 #define CSPEC_FILE          "../../../Processors/ARM/data/languages/ARM.cspec"
 #define TEST_SO             "../../../data/vmp/360_1/libjiagu.so"
 
 static char help[] = {
-    "dobc [-s .sla filename] [-st (360free|ollvm)] [-i filename] [-stack_check_fail addr]\r\n" 
+    "dobc [-st (360free|ollvm)] [-i filename] [-stack_check_fail addr]\r\n" 
     "       -o                  output filename\r\n"
     "       -sd                 dump new so to so directory or current directory\r\n"
     "       -d[0-6]             debug info level\r\n"
     "       -da [hex address]   decode address\r\n"
     "       -dcfg               dump static trace cfg\r\n"
+    "       --ghidra            ghidra config directory\r\n"
 };
 
 int main(int argc, char **argv)
 {
     int i;
-    char *sla = NULL, *filename = NULL, *st = NULL;
+    char *filename = NULL, *st = NULL;
     intb stack_check_fail_addr = 0, sd = 0, dcfg = 0;
-    char *out_filename = NULL;
+    char *out_filename = NULL, *ghidra = NULL;
+    char sla[256];
     vector<intb>    addr_list;
 
     for (i = 1; i < argc; i++) {
-        if (!strcmp(argv[i], "-s")) {
-            sla = argv[++i];
-        }
-        else if (!strcmp(argv[i], "-st")) {
+        if (!strcmp(argv[i], "-st")) {
             st = argv[++i];
         }
         else if (!strcmp(argv[i], "-i")) {
@@ -39,6 +38,9 @@ int main(int argc, char **argv)
         }
         else if (!strcmp(argv[i], "-sd")) {
             sd = 1;
+        }
+        else if (!strcmp(argv[i], "-c")) {
+            ghidra = argv[++i];
         }
         else if (!strcmp(argv[i], "-da")) {
             while (((i+ 1) < argc) && argv[i + 1][0] != '-') {
@@ -54,10 +56,12 @@ int main(int argc, char **argv)
         }
     }
 
-    if (!sla || !st || !filename || !stack_check_fail_addr || addr_list.empty()) {
+    if (!ghidra || !st || !filename || !stack_check_fail_addr || addr_list.empty()) {
         puts(help);
         return -1;
     }
+
+    sprintf(sla, "%s/" ARM_SLA, ghidra);
 
     dobc d(sla, filename);
 
