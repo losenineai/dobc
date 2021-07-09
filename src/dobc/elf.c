@@ -312,6 +312,22 @@ Elf32_Shdr *elf32_shdr_get_by_addr(Elf32_Ehdr *hdr, uint32_t addr)
     return NULL;
 }
 
+Elf32_Shdr *elf32_shdr_get_by_name(Elf32_Ehdr *hdr, const char *name)
+{
+    static Elf32_Shdr *prev = NULL;
+	int i;
+	Elf32_Shdr *shdr;
+
+	for (i = 1; i < hdr->e_shnum; i++) {
+		shdr = (Elf32_Shdr *)((char *)hdr + hdr->e_shoff) + i;
+
+        if (strcmp(elf32_shdr_name(hdr, shdr), name) == 0)
+            return shdr;
+	}
+
+    return NULL;
+}
+
 struct {
     const char *str;
     int id;
@@ -377,6 +393,15 @@ const char *elf_symvis(int visibility)
 	if (visibility == STV_PROTECTED)	return "PROTECTED";
 
 	return "Unknown";
+}
+
+const char *elf32_sym_name(Elf32_Ehdr *hdr, Elf32_Sym *sym)
+{
+    Elf32_Shdr *dynsymsh = elf32_shdr_get(hdr, SHT_DYNSYM);
+    Elf32_Shdr *linksh;
+
+    linksh = (Elf32_Shdr *)((char *)hdr + hdr->e_shoff) + dynsymsh->sh_link;
+    return (char *)hdr + (linksh->sh_offset + sym->st_name);
 }
 
 Elf32_Sym *elf32_sym_find(Elf32_Ehdr *hdr, unsigned long sym_val)

@@ -2,6 +2,16 @@
 #include "loadimage.hh"
 #include "elf.h"
 
+#define SYM_GLOBAL          1
+#define SYM_LOCAL           2
+#define SYM_IMPORT          3
+#define SYM_IMPORT_PTR      4
+
+class LoadImageSymbol : public LoadImageFunc {
+public:
+    int type = 0;
+};
+
 typedef map<Address, LoadImageFunc *>   addrtab;
 typedef map<string, LoadImageFunc *>   nametab;
 
@@ -18,6 +28,9 @@ class ElfLoadImage : public LoadImageB {
     AddrSpace *codespace;
 
     Elf32_Ehdr *hdr;
+
+private:
+    void            init_plt();
 
 public:
     unsigned char*  filedata;
