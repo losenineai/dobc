@@ -6,8 +6,8 @@ void ElfLoadImage::init()
 {
     assert(codespace);
 
-    //init_plt();
 
+    init_plt();
     int count = elf32_sym_count((Elf32_Ehdr *)filedata), i;
     Elf32_Shdr *dynsymsh, *link_sh;
     Elf32_Ehdr *hdr = (Elf32_Ehdr *)filedata;
@@ -21,8 +21,11 @@ void ElfLoadImage::init()
         Elf32_Sym  *sym = elf32_sym_geti((Elf32_Ehdr *)filedata, i);
         name = (char *)filedata + (link_sh->sh_offset + sym->st_name);
 
+        if (!sym->st_shndx) continue;
+
         addSymbol(Address(codespace, sym->st_value), sym->st_size, name, SYM_GLOBAL);
     }
+
 }
 
 typedef struct plt_entry {
@@ -194,7 +197,13 @@ LoadImageSymbol *ElfLoadImage::addSymbol(const Address &addr, int size, const ch
     LoadImageSymbol *func;
     char buf[128];
 
-    printf("add Symbol{ addr:%llx, size:%d, name:%s } \n", addr.getOffset(), size, name);
+    func = getSymbol(addr);
+    if (func) {
+        //vm_error("dont add the same symbol[%llx], name[%s]", addr.getOffset(), name);
+        //printf("warn: try to add same symbol[%s] to table, rename to [j_%s].", name, name);
+    }
+
+    // printf("add Symbol{ addr:%llx, size:%d, name:%s } \n", addr.getOffset(), size, name);
 
     func = new LoadImageSymbol();
 

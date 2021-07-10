@@ -2,13 +2,12 @@
 #include "vm.h"
 #include "dobc.hh"
 
-#define ARM_SLA            "/Processors/ARM/data/languages/ARM8_le.sla"
 #define PSPEC_FILE          "../../../Processors/ARM/data/languages/ARMCortex.pspec"
 #define CSPEC_FILE          "../../../Processors/ARM/data/languages/ARM.cspec"
 #define TEST_SO             "../../../data/vmp/360_1/libjiagu.so"
 
 static char help[] = {
-    "dobc [-st (360free|ollvm)] [-i filename] [-stack_check_fail addr]\r\n" 
+    "dobc [-st (360free|ollvm)] [-i filename] \r\n" 
     "       -o                  output filename\r\n"
     "       -sd                 dump new so to so directory or current directory\r\n"
     "       -d[0-6]             debug info level\r\n"
@@ -21,9 +20,8 @@ int main(int argc, char **argv)
 {
     int i;
     char *filename = NULL, *st = NULL;
-    intb stack_check_fail_addr = 0, sd = 0, dcfg = 0;
+    intb sd = 0, dcfg = 0;
     char *out_filename = NULL, *ghidra = NULL;
-    char sla[256];
     vector<intb>    addr_list;
 
     for (i = 1; i < argc; i++) {
@@ -51,22 +49,16 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "-dcfg")) {
             dcfg = 1;
         }
-        else if (!strcmp(argv[i], "-stack_check_fail")) {
-            stack_check_fail_addr = strtol(argv[++i], NULL, 16);
-        }
     }
 
-    if (!ghidra || !st || !filename || !stack_check_fail_addr || addr_list.empty()) {
+    if (!ghidra || !st || !filename || addr_list.empty()) {
         puts(help);
         return -1;
     }
 
-    sprintf(sla, "%s/" ARM_SLA, ghidra);
-
-    dobc d(sla, filename);
+    dobc d(ghidra, filename);
 
     d.set_shelltype(st);
-    d.stack_check_fail_addr = stack_check_fail_addr;
     d.debug.dump_cfg = dcfg;
 
     d.decode_address_list = addr_list;
@@ -78,7 +70,7 @@ int main(int argc, char **argv)
         d.out_dir.assign(filename, basename(filename) - filename);
 
     DocumentStorage docstorage;
-    Element *sleighroot = docstorage.openDocument(sla)->getRoot();
+    Element *sleighroot = docstorage.openDocument(d.slafilename)->getRoot();
     docstorage.registerTag(sleighroot);
 
     d.init(docstorage);

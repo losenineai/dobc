@@ -18,7 +18,7 @@ void codegen::sort_blocks(vector<flowblock *> &blks)
     j = blks.size() - 1;
     for (i = 0; i < exitlist.size(); i++) {
         b = exitlist[i];
-        if (b->is_stack_check_fail()) {
+        if (b->noreturn()) {
             tmpb = b->get_in(0);
             blks[j--] = b;
             b->set_mark();
@@ -28,7 +28,7 @@ void codegen::sort_blocks(vector<flowblock *> &blks)
 
     for (i = 0; i < exitlist.size(); i++) {
         b = exitlist[i];
-        if (!b->is_stack_check_fail()) {
+        if (!b->noreturn()) {
             blks[j--] = b;
             b->set_mark();
         }

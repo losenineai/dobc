@@ -358,19 +358,12 @@ void dobc::init_plt()
 
             Address addr(getDefaultCodeSpace(), entry->addr);
             fd = new funcdata(entry->name, addr, 0, this);
-            fd->set_exit(entry->exit);
+            fd->set_noreturn(entry->exit);
             fd->funcp.set_side_effect(entry->side_effect);
             fd->funcp.inputs = entry->input;
             fd->funcp.output = 1;
             addrtab[addr] = fd;
         }
-    }
-    else {
-        Address addr(getDefaultCodeSpace(), stack_check_fail_addr);
-        fd = new funcdata("__stack_check_fail", addr, 0, this);
-        fd->set_exit(1);
-        addrtab[addr] = fd;
-        nametab[fd->name] = fd;
     }
 }
 
@@ -2661,7 +2654,7 @@ int         flowblock::sub_id()
 
 bool        flowblock::noreturn(void) 
 { 
-    return ops.size() && last_op()->callfd && last_op()->callfd->flags.exit;  
+    return ops.size() && last_op()->callfd && last_op()->callfd->noreturn();
 }
 
 pcodeop*    flowblock::get_cbranch_sub_from_cmp(void)
@@ -2726,17 +2719,6 @@ pcodeop*    flowblock::get_last_oper_zr(void)
     } while (it != ops.begin());
 
     return NULL;
-}
-
-bool        flowblock::is_stack_check_fail()
-{
-    if (out.size()) return false;
-    pcodeop *p = last_op();
-
-    if (p->is_call() && p->flags.exit)
-        return true;
-
-    return false;
 }
 
 int         flowblock::get_cbranch_cond()
@@ -5234,7 +5216,7 @@ pcodeop*    funcdata::xref_control_flow(list<pcodeop *>::const_iterator oiter, b
     pcodeop *op = NULL;
     isfallthru = false;
     uintm maxtime = 0;
-    int exit = 0;
+    int noreturn = 0;
 
     while (oiter != deadlist.end()) {
         op = *oiter++;
@@ -5306,11 +5288,11 @@ branch指令打上call_branch标记
                 const Address &destaddr(op->get_in(0)->get_addr());
                 /* 假如发现某些call的函数有exit标记，则开始新的block，并删除当前inst的接下去的所有pcode，因为走不到了 */
                 if ((fd = d->add_func(destaddr))) {
-                    if (exit = fd->flags.exit) startbasic = true;
+                    if (noreturn = fd->flags.noreturn) startbasic = true;
 
                     add_callspec(op, fd);
                 }
-                op->flags.exit = exit;
+                op->flags.exit = noreturn;
         }
         break;
 
@@ -5322,13 +5304,13 @@ branch指令打上call_branch标记
         if ((op->opcode == CPUI_BRANCH
             || op->opcode == CPUI_BRANCHIND
             || op->opcode == CPUI_RETURN
-            || exit) && (op->start.getTime() >= maxtime)) {
+            || noreturn) && (op->start.getTime() >= maxtime)) {
             del_remaining_ops(oiter);
             oiter = deadlist.end();
         }
     }
 
-    if (exit)
+    if (noreturn)
         isfallthru = false;
     else if (isfallthru)
         startbasic = true;
@@ -7863,13 +7845,18 @@ void dobc::restore_from_spec(DocumentStorage &store)
     loader->init();
 }
 
-dobc::dobc(const char *sla, const char *bin) 
-    : fullpath(bin),
-        out_filename(basename(bin))
+dobc::dobc(const char *g, const char *bin) 
+    : fullpath(bin), 
+    out_filename(basename(bin)),
+    ghidra(g)
 {
     g_dobc = this;
 
-    slafilename.assign(sla);
+    char buf[128];
+
+    sprintf(buf, "%s/" ARM_SLA, g);
+
+    slafilename.assign(buf);
     filename.assign(basename(bin));
 
     out_filename += ".decode";
@@ -7922,6 +7909,15 @@ void        dobc::set_func_alias(const string &sym, const string &alias)
     fd->set_alias(alias);
 }
 
+static string strip__(string &name)
+{
+    const char *s = name.c_str();
+
+    while (*s && *s == '_') s++;
+
+    return string(s);
+}
+
 void dobc::init(DocumentStorage &store)
 {
     build_loader(store);
@@ -7930,6 +7926,7 @@ void dobc::init(DocumentStorage &store)
     restore_from_spec(store);
 
     build_arm();
+    build_function_type();
 
     init_spcs();
     init_regs();
@@ -7945,6 +7942,10 @@ void dobc::init(DocumentStorage &store)
 
         if (NULL == (fd  = find_func(sym->address)))
             fd = new funcdata(sym->name.c_str(), sym->address, sym->size, this);
+
+        /* 这里之所以这么做，是因为Ghidra在设置noreturn的列表时，这个默认的列表，是删除了头部的 _ 符号的。*/
+        if (noreturn_func_tab.find(strip__(sym->name)) != noreturn_func_tab.end())
+            fd->set_noreturn(1);
 
         addrtab[sym->address] = fd;
         nametab[sym->name] = fd;
@@ -7989,4 +7990,43 @@ AddrSpace *dobc::getSpaceBySpacebase(const Address &loc, int4 size) const
     }
     throw LowlevelError("Unable to find entry for spacebase register");
     return (AddrSpace *)0;
+}
+
+void    dobc::build_noreturn_function()
+{
+    string noreturn_config = ghidra + "/Features/Base/data/noReturnFunctionConstraints.xml";
+
+    DocumentStorage storage;
+    Element *root = storage.openDocument(noreturn_config)->getRoot();
+
+    const List &list(root->getChildren());
+    List::const_iterator iter;
+    
+    for (iter = list.begin(); iter != list.end(); iter++) {
+        string name = (*iter)->getAttributeValue("name");
+
+        if (name.find("ELF") != -1) {
+            Element *child = *((*iter)->getChildren().begin());
+            noreturn_elf = child->getContent();
+            break;
+        }
+    }
+
+    if (noreturn_elf.empty())
+        vm_error("noreturn elf file is empty");
+
+    string noreturn_elf_fullpath = ghidra + "/Features/Base/data/" + noreturn_elf;
+
+    ifstream infile(noreturn_elf_fullpath);
+    string line;
+
+    while (getline(infile, line)) {
+        if (line.rfind("# ", 0) == 0) continue;
+        noreturn_func_tab.insert(line);
+    }
+}
+
+void    dobc::build_function_type()
+{
+    build_noreturn_function();
 }

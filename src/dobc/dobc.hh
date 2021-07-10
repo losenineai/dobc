@@ -957,7 +957,6 @@ struct flowblock {
     bool        is_it_cbranch() {
         return is_cbranch() ? last_op()->flags.itblock : 0;
     }
-    bool        is_stack_check_fail();
     /* 获取输入节点中没有被标记过的数量 */
     int         incoming_forward_branches();
     /* 当flowblock是一个分支跳转节点时，给出除了b以外的另外一个节点 */
@@ -1240,7 +1239,6 @@ public:
 
         unsigned safezone : 1;
         unsigned plt : 1;               // 是否是外部导入符号
-        unsigned exit : 1;              // 有些函数有直接结束整个程序的作用，比如stack_check_fail, exit, abort
 		/* 是否允许标记未识别store，让安全store可以跨过去这个pcode*/
 		unsigned enable_topstore_mark : 1;
 		/* liverange有2种计算类型
@@ -1266,6 +1264,8 @@ public:
         unsigned disable_inrefs_to_const : 1;
         /* 关闭simid指令的常量化，否则处理起来很麻烦 */
         unsigned disable_simd_to_const : 1;
+
+        unsigned noreturn : 1;
     } flags = { 0 };
 
     enum {
@@ -1718,7 +1718,6 @@ public:
     void        remove_from_codelist(pcodeop *op);
 
     void        set_plt(int v) { flags.plt = v; };
-    void        set_exit(int v) { flags.exit = v; }
     bool        test_hard_inline_restrictions(funcdata *inlinefd, pcodeop *op, Address &retaddr);
     bool        is_first_op(pcodeop *op);
 
@@ -2117,6 +2116,8 @@ public:
     */
     void        static_trace_restore();
     bool        is_safe_sp_vn(varnode *vn);
+    void        set_noreturn(int v) { flags.noreturn = v;  }
+    bool        noreturn() { return flags.noreturn; }
 };
 
 struct func_call_specs {
@@ -2130,6 +2131,8 @@ struct func_call_specs {
     const Address &get_addr() { return fd->get_addr(); }
 };
 
+#define ARM_SLA            "/Processors/ARM/data/languages/ARM8_le.sla"
+
 class dobc:public AddrSpaceManager {
 public:
     string  archid;
@@ -2142,6 +2145,7 @@ public:
 
     string fullpath;
     string filename;
+    string ghidra;
 
     /* 输出目录，一般是输出到文件所在的目录，假如开启dc选项，则是开启到 */
     string out_dir;
@@ -2165,8 +2169,6 @@ public:
     int max_instructions;
     map<string, string>     abbrev;
     test_cond_inline_fn test_cond_inline = NULL;
-
-    intb    stack_check_fail_addr;
 
     struct {
         /* 是否打印dfa_connect中的cfg流图 */
@@ -2211,6 +2213,12 @@ public:
     int wordsize = 4;
     vector<int>     insts;
     vector<string>  useroplist;
+
+    set<string>     noreturn_func_tab;
+    string          noreturn_elf;
+    string          noreturn_xmach;
+    string          noreturn_mach;
+    string          noreturn_pe;
 
     dobc(const char *slafilename, const char *filename);
     ~dobc();
@@ -2301,6 +2309,9 @@ public:
     void        build_context();
     Translate*  build_translator(DocumentStorage &store);
     void        build_arm();
+
+    void        build_noreturn_function();
+    void        build_function_type();
 
     void restore_from_spec(DocumentStorage &storage);
     void parse_stack_pointer(const Element *el);
