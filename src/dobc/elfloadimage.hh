@@ -10,10 +10,11 @@
 class LoadImageSymbol : public LoadImageFunc {
 public:
     int type = 0;
+    const char *pltname;
 };
 
-typedef map<Address, LoadImageFunc *>   addrtab;
-typedef map<string, LoadImageFunc *>   nametab;
+typedef map<Address, LoadImageSymbol *>   addrtab;
+typedef map<string, LoadImageSymbol *>   nametab;
 
 class ElfLoadImage : public LoadImageB {
     long long baseaddr;
@@ -51,9 +52,11 @@ public:
     virtual string getArchType(void) const { return is64bit?"Elf64":"Elf32"; }
     virtual bool getNextSymbol(LoadImageFunc &record); 
     virtual void adjustVma(long adjust) { }
-    int getSymbol(const string &name, LoadImageFunc &record);
+    LoadImageSymbol *getSymbol(const string &name) { return nametab[name];  }
+    LoadImageSymbol *getSymbol(const Address &addr) { return addrtab[addr];  }
+    LoadImageSymbol *getSymbol(const intb addr) { return addrtab[Address(codespace, addr)];  }
     int saveSymbol(const char *symname, int size);
-    int addSymbol(const Address &addr, int size);
+    LoadImageSymbol *addSymbol(const Address &addr, int size, const char *name, int type);
     void saveFile(const string &filename);
     addrtab::iterator   beginSymbol() { return addrtab.begin();  }
     addrtab::iterator   endSymbol() { return addrtab.end();  }

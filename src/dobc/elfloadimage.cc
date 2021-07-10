@@ -6,8 +6,9 @@ void ElfLoadImage::init()
 {
     assert(codespace);
 
+    //init_plt();
+
     int count = elf32_sym_count((Elf32_Ehdr *)filedata), i;
-    LoadImageFunc *func;
     Elf32_Shdr *dynsymsh, *link_sh;
     Elf32_Ehdr *hdr = (Elf32_Ehdr *)filedata;
     char *name;
@@ -18,15 +19,9 @@ void ElfLoadImage::init()
 
     for (i = 0; i < count; i++) {
         Elf32_Sym  *sym = elf32_sym_geti((Elf32_Ehdr *)filedata, i);
-        func = new LoadImageFunc();
         name = (char *)filedata + (link_sh->sh_offset + sym->st_name);
 
-        func->address = Address(codespace, sym->st_value);
-        func->name = string(name);
-        func->size = sym->st_size;
-
-        addrtab[func->address] = func;
-        nametab[func->name] = func;
+        addSymbol(Address(codespace, sym->st_value), sym->st_size, name, SYM_GLOBAL);
     }
 }
 
@@ -46,27 +41,22 @@ void ElfLoadImage::init_plt()
     int type, symind, offset;
     const char *name;
     struct plt_entry *ent;
-
     LoadImageSymbol *imgsym;
 
     int i, imm;
     int count = relplt->sh_size / relplt->sh_entsize;
+    char buf[128];
 
     for (i = 0; i < count; i++) {
         rel = ((ElfW(Rel) *)(filedata + relplt->sh_offset)) + i;
         type = ELFW(R_TYPE)(rel->r_info);
         symind = ELFW(R_SYM)(rel->r_info);
         sym = ((ElfW(Sym *))(filedata + dynsymsh->sh_offset)) + symind;
-        name = elf32_sym_name(hdr, sym);
 
-        imgsym = new LoadImageSymbol();
+        sprintf(buf, "%s_ptr", name = elf32_sym_name(hdr, sym));
 
-        imgsym->address = Address(codespace, rel->r_offset);
-        imgsym->type = SYM_IMPORT_PTR;
-        imgsym->name = string(name) + "_ptr";
-
-        addrtab[imgsym->address] = imgsym;
-        nametab[imgsym->name] = imgsym;
+        imgsym = addSymbol(Address(codespace, rel->r_offset), 0, buf, SYM_IMPORT_PTR);
+        imgsym->pltname = name;
     }
 
 
@@ -105,11 +95,17 @@ plt section的头，都有20个字节的头，这20个字节的头不知道是�
         */
         imm = ent->add & 0xfff;
         uint32_t unrotate_value = imm & 0xff;
-        uint32_t r = imm >> 8;
+        uint32_t r = (imm >> 8) * 2;
         uint32_t imm32 = (unrotate_value >> r) | (unrotate_value << (32 - r));
 
         imm = ent->ldr & 0xfff;
-        imm32 = imm32 + (ent->ldr & (1 << 24)) ? imm:-imm;
+        offset = offset + imm32 + ((ent->ldr & (1 << 24)) ? imm:-imm);
+
+        LoadImageSymbol *ptrsym = getSymbol(offset);
+        if (!ptrsym)
+            vm_error("not found symbol on address[%llx]", offset);
+
+        addSymbol(Address(codespace, (unsigned char *)ent - filedata), sizeof (plt_entry_t), ptrsym->pltname, SYM_IMPORT);
     }
 }
  
@@ -122,8 +118,6 @@ ElfLoadImage::ElfLoadImage(const string &filename):LoadImageB(filename)
         vm_error("ElfLoadImage() failed open [%s]", filename);
 
     cur_sym = -1;
-
-    //init_plt();
 }
 
 ElfLoadImage::~ElfLoadImage()
@@ -183,15 +177,6 @@ bool ElfLoadImage::getNextSymbol(LoadImageFunc &record)
     return true;
 }
 
-int ElfLoadImage::getSymbol(const string &name, LoadImageFunc &record)
-{
-    LoadImageFunc *func = nametab[name];
-    if (func)
-        record = *func;
-
-    return func ? 0:-1;;
-}
-
 int ElfLoadImage::saveSymbol(const char *symname, int size)
 {
     Elf32_Sym *sym = elf32_sym_find2((Elf32_Ehdr *)filedata, symname);
@@ -204,23 +189,28 @@ int ElfLoadImage::saveSymbol(const char *symname, int size)
     return 0;
 }
 
-int ElfLoadImage::addSymbol(const Address &addr, int size)
+LoadImageSymbol *ElfLoadImage::addSymbol(const Address &addr, int size, const char *name, int symtype)
 {
-    LoadImageFunc *func;
+    LoadImageSymbol *func;
     char buf[128];
 
-    sprintf(buf, "sub_%llx", addr.getOffset());
+    printf("add Symbol{ addr:%llx, size:%d, name:%s } \n", addr.getOffset(), size, name);
 
-    func = new LoadImageFunc();
+    func = new LoadImageSymbol();
 
     func->address = addr;
-    func->name = string(buf);
     func->size = size;
+    if (!name) {
+        sprintf(buf, "sub_%llx", addr.getOffset());
+        func->name = string(buf);
+    }
+    else
+        func->name = string(name);
 
     addrtab[func->address] = func;
     nametab[func->name] = func;
 
-    return 0;
+    return func;
 }
 
 void ElfLoadImage::saveFile(const string &filename)
