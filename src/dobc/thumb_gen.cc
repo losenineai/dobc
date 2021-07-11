@@ -1879,7 +1879,6 @@ int thumb_gen::follow_by_set_cpsr(pcodeop *p)
     return (p && p->output && d->is_tsreg(poa(p)));
 }
 
-
 void thumb_gen::write_cbranch(flowblock *b, uint32_t cond)
 {
     uint32_t x;

@@ -1,12 +1,12 @@
 ﻿
 
 //#include "sleigh_arch.hh"
+#include "vm.h"
 #include "sleigh.hh"
 #include "dobc.hh"
 #include "thumb_gen.hh"
 #include <iostream>
 #include <assert.h>
-#include "vm.h"
 
 #define strdup _strdup 
 
@@ -489,7 +489,7 @@ void dobc::init_spcs()
         else if (spc->getName() == "register")
             reg_spc = spc;
 
-        printf("Space[%s, type:%d, size:%llu, shortcut:%c\n", spc->getName().c_str(), spc->getType(), spc->getHighest(), spc->getShortcut());
+        print_info("Space[%s, type:%d, size:%llx, shortcut:%c\n", spc->getName().c_str(), spc->getType(), spc->getHighest(), spc->getShortcut());
     }
 }
 
@@ -3469,7 +3469,8 @@ void        funcdata::dump_exe()
 
     gen.run();
 
-    gen.dump();
+    if (d->debug.dump_inst1)
+        gen.dump();
 }
 
 void        funcdata::detect_calced_loops(vector<flowblock *> &loops)
@@ -4171,7 +4172,7 @@ int         funcdata::ollvm_deshell()
     h = ollvm_get_head();
     for (i = 0; loop_dfa_connect(0) >= 0; i++)
     {
-        printf("[%s] loop_unrolling sub_%llx %d times*********************** \n\n", mtime2s(NULL),  h->get_start().getOffset(), i);
+        print_tag("[%s] loop_unrolling sub_%llx %d times*********************** \n\n", mtime2s(NULL),  h->get_start().getOffset(), i);
 
         dead_code_elimination(bblocks.blist, RDS_UNROLL0);
 
@@ -4205,7 +4206,7 @@ int         funcdata::ollvm_deshell()
     dump_pcode("1");
     dump_loop("1");
 
-	printf("deshell spent %u ms\n", mtime_tick() - tick);
+	print_tag("de-ollvm spent %u ms\n", mtime_tick() - tick);
 
     dump_exe();
 
@@ -4239,9 +4240,6 @@ void        funcdata::static_trace_restore()
         p->clear_trace();
         if (p->output)
             p->output->type = tracemap[p];
-
-        //p->dump(buf, PCODE_DUMP_SIMPLE & ~PCODE_HTML_COLOR);
-        //printf("buf[%s]\n", buf);
     }
 
     tracemap.clear();
@@ -5532,7 +5530,6 @@ void        funcdata::generate_ops(void)
     vector<pcodeop *> notreached;       // 间接跳转是不可达的?
 
     /* 修改了原有逻辑，可以多遍op_generated*/
-    //printf("%s generate ops %d times\n", name.c_str(), op_generated+1);
 
     while (!addrlist.empty())
         fallthru();
@@ -5765,7 +5762,7 @@ void        funcdata::connect_basic()
 
         bblocks.add_edge(from, to, edge->t ? a_true_edge:0);
 
-        //printf("0x%x -> 0x%x\n", (int)edge->from->start.getAddr().getOffset(), (int)edge->to->start.getAddr().getOffset());
+        print_detail("0x%x -> 0x%x\n", (int)edge->from->start.getAddr().getOffset(), (int)edge->to->start.getAddr().getOffset());
     }
 }
 
@@ -5976,10 +5973,8 @@ void        funcdata::dump_djgraph(const char *postfix, int flag)
     sprintf(obuf, "%s/djgraph_%s.dot", get_dir(obuf), postfix);
 
     FILE *fp = fopen(obuf, "w");
-    if (NULL == fp) {
-        printf("fopen failure %s", obuf);
-        exit(0);
-    }
+    if (NULL == fp) 
+        vm_error("fopen failure %s", obuf);
 
     fprintf(fp, "digraph G {\n");
     fprintf(fp, "node [fontname = \"helvetica\"]\n");
@@ -6082,10 +6077,8 @@ void        funcdata::dump_cfg(const string &name, const char *postfix, int dump
     sprintf(obuf, "%s/cfg_%s_%s.dot", get_dir(obuf), name.c_str(), postfix);
 
     FILE *fp = fopen(obuf, "w");
-    if (NULL == fp) {
-        printf("fopen failure %s", obuf);
-        exit(0);
-    }
+    if (NULL == fp) 
+        vm_error("fopen failure %s", obuf);
 
     fprintf(fp, "digraph G {\n");
     fprintf(fp, "node [fontname = \"helvetica\"]\n");
@@ -6126,10 +6119,8 @@ void        funcdata::dump_loop(const char *postfix)
     sprintf(obuf, "%s/loop_%s.dot", get_dir(obuf), postfix);
 
     FILE *fp = fopen(obuf, "w");
-    if (NULL == fp) {
-        printf("fopen failure %s", obuf);
-        exit(0);
-    }
+    if (NULL == fp) 
+        vm_error("fopen failure %s", obuf);
 
     fprintf(fp, "digraph G {\n");
     fprintf(fp, "node [fontname = \"helvetica\"]\n");
@@ -6164,10 +6155,8 @@ void        funcdata::dump_liverange(const char *postfix)
     sprintf(obuf, "%s/liverange_%s.txt", get_dir(obuf), postfix);
 
     FILE *fp = fopen(obuf, "w");
-    if (NULL == fp) {
-        printf("fopen failure %s", obuf);
-        exit(0);
-    }
+    if (NULL == fp) 
+        vm_error("fopen failure %s", obuf);
 
 	list<pcodeop *>::iterator it = deadlist.begin();
 
@@ -6309,7 +6298,7 @@ void        funcdata::delete_varnode(varnode *vn)
 {
     if (vn->def) {
         if (!vn->is_sp_vn())
-            printf("warn:try to remove varnode have def[%d] forbidden. %s:%d\n", vn->def->start.getTime(), __FILE__,__LINE__);
+            print_warn("try to remove varnode have def[%d] forbidden", vn->def->start.getTime());
         return;
     }
 
@@ -7252,7 +7241,7 @@ flowblock*       funcdata::loop_unrolling(flowblock *h, flowblock *end, uint32_t
 
     meet_exit = 0;
 
-    printf("\n\nloop_unrolling sub_%llx \n", h->get_start().getOffset());
+    print_tag("\n\nloop_unrolling sub_%llx \n", h->get_start().getOffset());
 
     /* 取loop的进入节点*/
     prev = start = loop_pre_get(h, 0);
@@ -7267,7 +7256,7 @@ flowblock*       funcdata::loop_unrolling(flowblock *h, flowblock *end, uint32_t
     }
 
     do {
-        printf("\tprocess flowblock sub_%llx\n", cur->get_start().getOffset());
+        print_info("\tprocess flowblock sub_%llx\n", cur->get_start().getOffset());
 
         it = cur->ops.begin();
         inslot = cur->get_in_index(prev);
@@ -7845,26 +7834,6 @@ void dobc::restore_from_spec(DocumentStorage &store)
     loader->init();
 }
 
-dobc::dobc(const char *g, const char *bin) 
-    : fullpath(bin), 
-    out_filename(basename(bin)),
-    ghidra(g)
-{
-    g_dobc = this;
-
-    char buf[128];
-
-    sprintf(buf, "%s/" ARM_SLA, g);
-
-    slafilename.assign(buf);
-    filename.assign(basename(bin));
-
-    out_filename += ".decode";
-
-    mdir_make(filename.c_str());
-    gen_sh();
-}
-
 void        dobc::build_arm()
 {
     sp_addr = trans->getRegister("sp").getAddr();
@@ -8029,4 +7998,29 @@ void    dobc::build_noreturn_function()
 void    dobc::build_function_type()
 {
     build_noreturn_function();
+}
+
+void    dobc::set_ghidra(const char *ghidra_path)
+{
+    ghidra.assign(ghidra_path);
+    slafilename = ghidra + "/" + ARM_SLA;
+}
+
+void    dobc::set_input_bin(const char *bin)
+{
+    fullpath.assign(bin);
+    filename.assign(basename(bin));
+
+    if (out_filename.empty()) {
+        out_filename.assign(basename(bin));
+        out_filename += ".decode";
+    }
+
+    mdir_make(filename.c_str());
+    gen_sh();
+}
+
+dobc::dobc() 
+{
+    g_dobc = this;
 }

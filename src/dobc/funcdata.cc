@@ -6,11 +6,6 @@
 
 #define STACKBASE           0x4000000
 
-#define func_format_s					"%s"
-#define func_format()					""
-#undef print_level
-#define print_level		4
-
 void AssemblyRaw::dump(const Address &addr, const string &mnem, const string &body) {
     if (mnem1) {
         dobc::singleton()->add_inst_mnem(addr, mnem);
@@ -67,7 +62,7 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
 #define TEST_STATIC_TRACE       1
 
     do {
-        printf("\tprocess flowblock sub_%llx\n", cur->get_start().getOffset());
+        print_info("\tprocess flowblock sub_%llx", cur->get_start().getOffset());
 
         it = cur->ops.begin();
         inslot = cur->get_in_index(prev);

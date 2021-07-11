@@ -2162,7 +2162,7 @@ public:
 
 #define SHELL_OLLVM           0
 #define SHELL_360FREE         1
-    int shelltype = -1;
+    int shelltype = SHELL_OLLVM;
 
     int max_basetype_size;
     int min_funcsymbol_size;
@@ -2174,6 +2174,11 @@ public:
         /* 是否打印dfa_connect中的cfg流图 */
         int dump_cfg;
         int level;
+
+        /* refer to main.cc:help */
+        int dump_inst0;
+        int dump_inst1;     
+        int dump_inst2;
     } debug = { 0 };
 
     Address     sp_addr;
@@ -2220,7 +2225,7 @@ public:
     string          noreturn_mach;
     string          noreturn_pe;
 
-    dobc(const char *slafilename, const char *filename);
+    dobc();
     ~dobc();
     static dobc*    singleton();
 
@@ -2235,6 +2240,14 @@ public:
     funcdata*   add_func(const Address &addr);
     string&     get_userop_name(int i) { return useroplist[i];  }
     void        set_shelltype(char *shelltype);
+    void        set_ghidra(const char *ghidra_path);
+    void        set_input_bin(const char *bin_path);
+    void        set_output_dir(string &out) {
+        out_dir = out;
+    }
+    void        set_output_filename(const char *filename) {
+        out_filename.assign(filename);
+    }
 
 #define strprefix(m1,c)     (strncmp(m1.c_str(), c, strlen(c)) == 0)
     bool        is_simd(const Address &addr) { return context->getVariable("simd", addr);  }

@@ -7,6 +7,7 @@ extern "C" {
 #define __vm_h__ 1
 
 #include "config.h"
+
 #include "mcore/mcore.h"
 #include <fcntl.h>
  
