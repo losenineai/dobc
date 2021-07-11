@@ -12,11 +12,8 @@ extern "C" {
 #include <stdint.h>
 #include <stdbool.h>
 
-#if 0 //defined(_MSC_VER)
-#include <winsock2.h>
-#include <ws2tcpip.h>
+#if defined(_MSC_VER)
 #include <windows.h>
-#include "mcore/process.h"
 #endif
 
 #include "mcore/basic_types.h"
