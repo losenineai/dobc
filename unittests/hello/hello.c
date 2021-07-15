@@ -3,15 +3,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-char * a(char* Text)
+char * hello(char *text, char *outbuf)
 {
-    static char secretText[128]={'\0'};
-    int count=0;
-    int i;
-    count = strlen(Text);
-    for(i=0;i<count;i++){
-        secretText[i]=Text[i]-i-1;
-    }
-    secretText[i] = '\0';
-    return secretText;
+    sprintf(outbuf, "hello, %s", text);
+
+    return outbuf;
 }

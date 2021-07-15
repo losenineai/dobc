@@ -1,0 +1,9 @@
+README
+=================================================
+
+一般来说，在构建测试用例系统时，可能用CMake是一个更好的选择，但是在经过诸多尝试以后，发现在windows
+上设置专门的交叉编译clang有不少的麻烦:
+
+    https://stackoverflow.com/questions/54539682/how-to-set-up-cmake-to-cross-compile-with-clang-for-arm-embedded-on-windows
+
+所以我放弃了使用CMake，改成了传统的Make
