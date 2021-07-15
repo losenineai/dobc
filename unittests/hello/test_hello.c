@@ -1,13 +1,14 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <dlfcn.h>
 
 
 int test_hello(const char **so)
 {
     void *handle[2];
-    char *(*hello[2])(char *);
+    char *(*hello[2])(char *, char *);
 
     handle[0] = dlopen(so[0], RTLD_LAZY);
     handle[1] = dlopen(so[1], RTLD_LAZY);
@@ -26,7 +27,7 @@ int test_hello(const char **so)
 
 int main(int argc, char **argv)
 {
-    const char *so[2] = { "hello.so", "hello.so.decode" }
+    const char *so[2] = {"hello.so", "hello.so.decode"};
 
     return test_hello(so);
 }
