@@ -16,4 +16,4 @@ include_directories(${PROJECT_SOURCE_DIR}/src/sleigh)
 add_subdirectory(${PROJECT_SOURCE_DIR}/src/mcore)
 add_subdirectory(${PROJECT_SOURCE_DIR}/src/sleigh)
 add_subdirectory(${PROJECT_SOURCE_DIR}/src/dobc)
-
+add_subdirectory(${PROJECT_SOURCE_DIR}/src/test1)
