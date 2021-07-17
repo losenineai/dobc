@@ -37,6 +37,7 @@ extern "C" {
 //#include "mcore/mthread.h"
 //#include "mcore/mrand.h"
 #include "mcore/mdir.h"
+#include "mcore/elf.h"
 
 #pragma comment(lib, "mcore.lib")
 

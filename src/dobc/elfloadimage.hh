@@ -1,6 +1,6 @@
 ﻿
 #include "loadimage.hh"
-#include "elf.h"
+#include "mcore/mcore.h"
 
 #define SYM_GLOBAL          1
 #define SYM_LOCAL           2

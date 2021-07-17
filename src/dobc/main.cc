@@ -19,7 +19,7 @@ static char help[] = {
     "       -debug.inst0            dump stage0(dobc.initial) process instruction \r\n"
     "       -debug.inst1            dump stage1(dobc.codegen-ing, not fix pc-relative instruction) process instruction \r\n"
     "       -debug.inst2            dump stage2(dobc.codegen-success) process instruction \r\n"
-    "       -debug.zxw              used by author \r\n"
+    "       -debug.zxw              this option only used by author(zhengxianwei) \r\n"
 };
 
 int main(int argc, char **argv)

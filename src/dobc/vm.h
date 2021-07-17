@@ -81,7 +81,6 @@ extern "C" {
 #endif
 
 #include "libdobc.h"
-#include "elf.h"
 
 #define DOBC_TARGET_ARM         /* ARMv4 code generator */
 
@@ -227,12 +226,6 @@ void _vm_warning(const char *fmt, ...);
 #define OPT_HELP                    1
 #define OPT_HELP2                   2
 #define OPT_V                       3
-
-#define OPT_DUMP_ELF_HEADER         10
-#define OPT_DUMP_ELF_PROG_HEADER    11
-#define OPT_DUMP_ELF_SECTION        12
-#define OPT_DUMP_ELF_REL            13
-#define OPT_DUMP_ELF_DYNSYM         14
 
 #define OPT_DECODE_ELF              20
 #define OPT_DECODE_FUNC             21
