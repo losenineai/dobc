@@ -5,6 +5,7 @@
 
 #include <unicorn/unicorn.h>
 #include <string.h>
+#include "mcore/mcore.h"
 
 
 // code to be emulated
@@ -82,7 +83,7 @@ static void test_arm(void)
     uc_close(uc);
 }
 
-static void thumb_test_hello(void)
+static void thumb_test_hello(const char *soname)
 {
     uc_engine *uc;
     uc_err err;
@@ -100,11 +101,27 @@ static void thumb_test_hello(void)
         return;
     }
 
+    int solen;
+    Elf32_Ehdr *hdr = (Elf32_Ehdr *)file_load(soname, &solen);
+    Elf32_Sym *sym;
+
+    if (!hdr) {
+        print_err("file_load(%s)", soname);
+        goto exit_label;
+    }
+
+    sym = elf32_sym_get_by_name(hdr, "hello");
+    if (!sym) {
+        print_err("failed with found symbol(hello).");
+        goto exit_label;
+    }
+
     // map 2MB memory for this emulation
     uc_mem_map(uc, ADDRESS, 2 * 1024 * 1024, UC_PROT_ALL);
 
     // write machine code to be emulated to memory
-    uc_mem_write(uc, ADDRESS, THUMB_CODE, sizeof(THUMB_CODE) - 1);
+    // uc_mem_write(uc, ADDRESS, THUMB_CODE, sizeof(THUMB_CODE) - 1);
+     uc_mem_write(uc, ADDRESS, hdr, solen);
 
     // initialize machine registers
     uc_reg_write(uc, UC_ARM_REG_SP, &sp);
@@ -118,7 +135,7 @@ static void thumb_test_hello(void)
     // emulate machine code in infinite time (last param = 0), or when
     // finishing all the code.
     // Note we start at ADDRESS | 1 to indicate THUMB mode.
-    err = uc_emu_start(uc, ADDRESS | 1, ADDRESS + sizeof(THUMB_CODE) -1, 0, 0);
+    err = uc_emu_start(uc, (uint64_t)elf32_sym_addr(hdr, sym), sym->st_size, 0, 0);
     if (err) {
         printf("Failed on uc_emu_start() with error returned: %u\n", err);
     }
@@ -130,7 +147,9 @@ static void thumb_test_hello(void)
 
     printf(">>> SP = 0x%x\n", sp);
 
+exit_label:
     uc_close(uc);
+    file_unload(hdr);
 }
 
 static void test_thumb(void)
@@ -256,6 +275,10 @@ static void test_thumb_ite()
     }
 }
 
+static const char *help = {
+    "test1 [data_dir] \n"
+};
+
 int main(int argc, char **argv, char **envp)
 {
     // dynamically load shared library
@@ -268,12 +291,15 @@ int main(int argc, char **argv, char **envp)
         return 1;
     }
 #endif
+    char buf[128];
+    if (argc != 2) {
+        puts(help);
+        return -1;
+    }
+
+    sprintf(buf, "%s/unittests/hello/hello.so", argv[1]);
+    thumb_test_hello(buf);
     
-    test_arm();
-    printf("==========================\n");
-    test_thumb();
-    printf("==========================\n");
-    test_thumb_ite();
     // dynamically free shared library
 #ifdef DYNLOAD
     uc_dyn_free();

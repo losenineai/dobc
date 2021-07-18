@@ -3328,18 +3328,21 @@ const char *elf_secflag2str(int flags);
 Elf32_Shdr *elf32_shdr_get(Elf32_Ehdr *hdr, int type);
 Elf32_Shdr *elf32_shdr_get_by_addr(Elf32_Ehdr *hdr, uint32_t addr);
 Elf32_Shdr *elf32_shdr_get_by_name(Elf32_Ehdr *hdr, const char *name);
+Elf32_Shdr *elf32_symtab_get(Elf32_Ehdr *hdr);
 
 const char*     elf32_shdr_name(Elf32_Ehdr *hdr, Elf32_Shdr *sh);
 
 Elf32_Sym *elf32_sym_find(Elf32_Ehdr *hdr, unsigned long sym_val);
-Elf32_Sym *elf32_sym_find2(Elf32_Ehdr *hdr, const char *name);
+Elf32_Sym *elf32_sym_get_by_name(Elf32_Ehdr *hdr, const char *name);
 int         elf32_sym_count(Elf32_Ehdr *hdr);
 Elf32_Sym *elf32_sym_geti(Elf32_Ehdr *hdr, int index);
 
 const char *elf_symtype(int type);
 const char *elf_symbindtype(int bindtype);
 const char *elf_symvis(int visibility);
+
 const char *elf32_sym_name(Elf32_Ehdr *hdr, Elf32_Sym *name);
+#define elf32_sym_addr(hdr,sym)     (((unsigned char *)hdr) + sym->st_value)
 
 void elf_dump(char *elf, int elf_len, int opt);
 

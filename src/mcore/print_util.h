@@ -8,12 +8,12 @@ extern "C" {
 
 #include <stdio.h>
 
-#define PRINT_LEVEL_ERR         1
-#define PRINT_LEVEL_WARN        2
-#define PRINT_LEVEL_TAG         3
-#define PRINT_LEVEL_INFO        4
-#define PRINT_LEVEL_DEBUG       5
-#define PRINT_LEVEL_DETAIL      6
+#define PRINT_LEVEL_ERR         0
+#define PRINT_LEVEL_WARN        1
+#define PRINT_LEVEL_TAG         2
+#define PRINT_LEVEL_INFO        3
+#define PRINT_LEVEL_DEBUG       4
+#define PRINT_LEVEL_DETAIL      5
 
     extern int print_level;
 

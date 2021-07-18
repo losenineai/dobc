@@ -100,7 +100,7 @@ char* file_load(const char *filename, int *len)
 }
 
 
-int file_unload(char *data)
+int file_unload(void *data)
 {
 	if (data) {
 		free(data);

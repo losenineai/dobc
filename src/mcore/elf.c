@@ -1,6 +1,13 @@
 ﻿
 #include <stdio.h>
+#include <string.h>
 #include "elf.h"
+
+/* 
+elf: https://refspecs.linuxfoundation.org/elf/elf.pdf
+
+elf.c中的内容都参考自上文，一般的页码和章节都是指此spec
+*/
 
 #define count_of_array(a)           (sizeof(a)/sizeof(a[0]))
 
@@ -347,6 +354,26 @@ Elf32_Shdr *elf32_shdr_get_by_name(Elf32_Ehdr *hdr, const char *name)
     return NULL;
 }
 
+Elf32_Shdr *elf32_symtab_get(Elf32_Ehdr *hdr)
+{
+    static Elf32_Ehdr *h1;
+    static Elf32_Shdr *s1;
+
+    if (s1 && (hdr == h1))
+        return s1;
+
+    Elf32_Shdr *symtab = elf32_shdr_get(hdr, SHT_DYNSYM);
+    if (!symtab) 
+        symtab = elf32_shdr_get(hdr, SHT_SYMTAB);
+
+    if (symtab) {
+        h1 = hdr;
+        s1 = symtab;
+    }
+
+    return symtab;
+}
+
 struct {
     const char *str;
     int id;
@@ -416,26 +443,26 @@ const char *elf_symvis(int visibility)
 
 const char *elf32_sym_name(Elf32_Ehdr *hdr, Elf32_Sym *sym)
 {
-    Elf32_Shdr *dynsymsh = elf32_shdr_get(hdr, SHT_DYNSYM);
+    Elf32_Shdr *symtab = elf32_symtab_get(hdr);
     Elf32_Shdr *linksh;
 
-    linksh = (Elf32_Shdr *)((char *)hdr + hdr->e_shoff) + dynsymsh->sh_link;
+    linksh = (Elf32_Shdr *)((char *)hdr + hdr->e_shoff) + symtab->sh_link;
     return (char *)hdr + (linksh->sh_offset + sym->st_name);
 }
 
 Elf32_Sym *elf32_sym_find(Elf32_Ehdr *hdr, unsigned long sym_val)
 {
-	Elf32_Shdr *dynsymsh;
+	Elf32_Shdr *symtab;
 	Elf32_Sym *sym;
 	int i, num;
 
-	dynsymsh = elf32_shdr_get(hdr, SHT_DYNSYM);
-	if (!dynsymsh)
+    symtab = elf32_symtab_get(hdr);
+	if (!symtab)
 		return NULL;
 
-	num = dynsymsh->sh_size / dynsymsh->sh_entsize;
+	num = symtab->sh_size / symtab->sh_entsize;
 	for (i = 0; i < num; i++) {
-		sym = (Elf32_Sym *)((char *)hdr + dynsymsh->sh_offset) + i;
+		sym = (Elf32_Sym *)((char *)hdr + symtab->sh_offset) + i;
 		if (sym->st_value == sym_val)
 			return sym;
 	}
@@ -443,25 +470,26 @@ Elf32_Sym *elf32_sym_find(Elf32_Ehdr *hdr, unsigned long sym_val)
 	return NULL;
 }
 
-Elf32_Sym *elf32_sym_find2(Elf32_Ehdr *hdr, const char *symname)
+Elf32_Sym *elf32_sym_get_by_name(Elf32_Ehdr *hdr, const char *symname)
 {
-    Elf32_Shdr *dynsymsh, *link_sh;
+    Elf32_Shdr *symtab , *link_sh;
     Elf32_Sym *sym;
     int i, num;
     const char *name;
 
-    dynsymsh = elf32_shdr_get(hdr, SHT_DYNSYM);
-    if (!dynsymsh)
+    // elf里必须有一个符号表，可以时SHT_DYNSYM类型，也可以是SHT_SYMTAB类型
+    symtab = elf32_symtab_get(hdr);
+    if (!symtab)
         return NULL;
 
-    link_sh = (Elf32_Shdr *)((char *)hdr + hdr->e_shoff) + dynsymsh->sh_link;
+    link_sh = (Elf32_Shdr *)((char *)hdr + hdr->e_shoff) + symtab->sh_link;
 
-    num = dynsymsh->sh_size / dynsymsh->sh_entsize;
+    num = symtab->sh_size / symtab->sh_entsize;
 
     for (i = 0; i < num; i++) {
-        sym = (Elf32_Sym *)((char *)hdr + dynsymsh->sh_offset) + i;
+        sym = (Elf32_Sym *)((char *)hdr + symtab->sh_offset) + i;
         name = (char *)hdr + (link_sh->sh_offset + sym->st_name);
-        if (!strcmp(name, symname)) 
+        if (!strcmp(name, symname))
             return sym;
     }
 
@@ -470,24 +498,15 @@ Elf32_Sym *elf32_sym_find2(Elf32_Ehdr *hdr, const char *symname)
 
 int         elf32_sym_count(Elf32_Ehdr *hdr)
 {
-	Elf32_Shdr *dynsymsh;
-
-	dynsymsh = elf32_shdr_get(hdr, SHT_DYNSYM);
-	if (!dynsymsh)
-		return 0;
-
-	return dynsymsh->sh_size / dynsymsh->sh_entsize;
+    Elf32_Shdr *symtab;
+	symtab = elf32_symtab_get(hdr);
+	return symtab->sh_size / symtab->sh_entsize;
 }
 
 Elf32_Sym *elf32_sym_geti(Elf32_Ehdr *hdr, int index)
 {
-	Elf32_Shdr *dynsymsh;
-
-	dynsymsh = elf32_shdr_get(hdr, SHT_DYNSYM);
-	if (!dynsymsh)
-		return NULL;
-
-    return (Elf32_Sym *)((char *)hdr + dynsymsh->sh_offset) + index;
+    Elf32_Shdr *symtab = elf32_symtab_get(hdr);
+    return (Elf32_Sym *)((char *)hdr + symtab->sh_offset) + index;
 }
 
 void elf32_dump(char *elf, int opt)

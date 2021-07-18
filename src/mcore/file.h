@@ -10,7 +10,7 @@ extern "C" {
 	int file_exist(char *filename);
 	int file_save(const char *filename, char *buf, int len);
 	char* file_load(const char *filename, int *len);
-	int file_unload(char *data);
+	int file_unload(void *data);
 
 #ifdef __cplusplus
 }
