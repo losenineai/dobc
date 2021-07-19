@@ -6,6 +6,7 @@
 #include <unicorn/unicorn.h>
 #include <string.h>
 #include "mcore/mcore.h"
+#include "uc_util.h"
 
 
 // code to be emulated
@@ -137,7 +138,7 @@ static void thumb_test_hello(const char *soname)
     // Note we start at ADDRESS | 1 to indicate THUMB mode.
     err = uc_emu_start(uc, (uint64_t)elf32_sym_addr(hdr, sym), sym->st_size, 0, 0);
     if (err) {
-        printf("Failed on uc_emu_start() with error returned: %u\n", err);
+        printf("Failed on uc_emu_start() with error returned: %s(%d)\n", uc_strerror(err), err);
     }
 
     // now print out some registers
