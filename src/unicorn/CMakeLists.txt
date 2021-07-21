@@ -930,6 +930,7 @@ foreach(arch-softmmu IN LISTS archlist)
     set_target_properties(${arch-softmmu} PROPERTIES FOLDER "unicorn")
 endforeach()
 
+
 if(UNICORN_BUILD_SAMPLES)
     find_package(Threads REQUIRED)
 
@@ -941,6 +942,8 @@ if(UNICORN_BUILD_SAMPLES)
             unicorn
             ${CMAKE_THREAD_LIBS_INIT}
         )
+
+        set_target_properties(${SAMPLE_FILE} PROPERTIES FOLDER "unicorn_samples")
     endforeach()
 endif()
 
