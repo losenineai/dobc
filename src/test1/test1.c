@@ -292,6 +292,8 @@ int main(int argc, char **argv, char **envp)
         return 1;
     }
 #endif
+
+#if 0
     char buf[128];
     if (argc != 2) {
         puts(help);
@@ -300,6 +302,11 @@ int main(int argc, char **argv, char **envp)
 
     sprintf(buf, "%s/unittests/hello/hello.so", argv[1]);
     thumb_test_hello(buf);
+#else
+    test_arm();
+    test_thumb();
+    test_thumb_ite();
+#endif
     
     // dynamically free shared library
 #ifdef DYNLOAD

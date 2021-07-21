@@ -59,13 +59,9 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
 endif()
 
 if(MSVC)
-    include_directories(
-        ${CMAKE_CURRENT_SOURCE_DIR}/msvc/unicorn
-    )
+    include_directories(${CMAKE_CURRENT_SOURCE_DIR}/msvc/unicorn)
 else()
-    include_directories(
-        ${CMAKE_BINARY_DIR}
-    )
+    include_directories(${CMAKE_BINARY_DIR})
 endif()
 
 include_directories(
@@ -896,9 +892,7 @@ foreach(OBJECT_LIBRARY ${UNICORN_OBJECT_LIBRARIES})
     list(APPEND UNICORN_SRCS $<TARGET_OBJECTS:${OBJECT_LIBRARY}>)
 endforeach()
 
-add_library(unicorn
-    ${UNICORN_SRCS}
-)
+add_library(unicorn ${UNICORN_SRCS})
 
 if(WIN32)
     if(BUILD_SHARED_LIBS)
@@ -917,14 +911,8 @@ else()
     )
 endif()
 
-target_compile_options(unicorn PRIVATE
-    ${UNICORN_COMPILE_OPTIONS}
-)
-
-target_include_directories(unicorn PUBLIC
-    include
-)
-
+target_compile_options(unicorn PRIVATE ${UNICORN_COMPILE_OPTIONS})
+target_include_directories(unicorn PUBLIC include)
 
 foreach(arch-softmmu IN LISTS archlist)
     set_target_properties(${arch-softmmu} PROPERTIES FOLDER "unicorn")
