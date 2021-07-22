@@ -84,13 +84,67 @@ static void test_arm(void)
     uc_close(uc);
 }
 
-static void thumb_test_hello(const char *soname)
+#define THUMB_CODE2 "\xf0\xb5"
+
+static void test_thumb2(void)
 {
     uc_engine *uc;
     uc_err err;
     uc_hook trace1, trace2;
 
     int sp = 0x1234;     // R0 register
+
+    printf("Emulate THUMB code\n");
+
+    // Initialize emulator in ARM mode
+    err = uc_open(UC_ARCH_ARM, UC_MODE_THUMB, &uc);
+    if (err) {
+        printf("Failed on uc_open() with error returned: %u (%s)\n",
+                err, uc_strerror(err));
+        return;
+    }
+
+    // map 2MB memory for this emulation
+    uc_mem_map(uc, ADDRESS, 2 * 1024 * 1024, UC_PROT_ALL);
+
+    // write machine code to be emulated to memory
+    uc_mem_write(uc, ADDRESS, THUMB_CODE2, sizeof(THUMB_CODE2) - 1);
+
+    sp = ADDRESS + 1024 * 1024;
+    // initialize machine registers
+    uc_reg_write(uc, UC_ARM_REG_SP, &sp);
+
+    // tracing all basic blocks with customized callback
+    uc_hook_add(uc, &trace1, UC_HOOK_BLOCK, hook_block, NULL, 1, 0);
+
+    // tracing one instruction at ADDRESS with customized callback
+    uc_hook_add(uc, &trace2, UC_HOOK_CODE, hook_code, NULL, ADDRESS, ADDRESS);
+
+    // emulate machine code in infinite time (last param = 0), or when
+    // finishing all the code.
+    // Note we start at ADDRESS | 1 to indicate THUMB mode.
+    err = uc_emu_start(uc, ADDRESS | 1, ADDRESS + sizeof(THUMB_CODE2) -1, 0, 0);
+    if (err) {
+        printf("Failed on uc_emu_start() with error returned: %u[%s]\n", err, uc_strerror(err));
+    }
+
+    // now print out some registers
+    printf(">>> Emulation done. Below is the CPU context\n");
+
+    uc_reg_read(uc, UC_ARM_REG_SP, &sp);
+    printf(">>> SP = 0x%x\n", sp);
+
+    uc_close(uc);
+}
+
+
+static void thumb_test_hello(const char *soname)
+{
+    uc_engine *uc;
+    uc_err err;
+    uc_hook trace1, trace2;
+
+    int sp;
 
     printf("Emulate THUMB code\n");
 
@@ -124,6 +178,7 @@ static void thumb_test_hello(const char *soname)
     // uc_mem_write(uc, ADDRESS, THUMB_CODE, sizeof(THUMB_CODE) - 1);
      uc_mem_write(uc, ADDRESS, hdr, solen);
 
+     sp = ADDRESS + 1 * 1024 * 1024;
     // initialize machine registers
     uc_reg_write(uc, UC_ARM_REG_SP, &sp);
 
@@ -136,7 +191,8 @@ static void thumb_test_hello(const char *soname)
     // emulate machine code in infinite time (last param = 0), or when
     // finishing all the code.
     // Note we start at ADDRESS | 1 to indicate THUMB mode.
-    err = uc_emu_start(uc, (uint64_t)elf32_sym_addr(hdr, sym), sym->st_size, 0, 0);
+    uint64_t start = ADDRESS + sym->st_value;
+    err = uc_emu_start(uc, start, start + sym->st_size - 1, 0, 0);
     if (err) {
         printf("Failed on uc_emu_start() with error returned: %s(%d)\n", uc_strerror(err), err);
     }
@@ -293,12 +349,15 @@ int main(int argc, char **argv, char **envp)
     }
 #endif
 
-#if 0
+#if 1
     char buf[128];
     if (argc != 2) {
         puts(help);
         return -1;
     }
+
+    test_thumb2();
+    printf("===============\n");
 
     sprintf(buf, "%s/unittests/hello/hello.so", argv[1]);
     thumb_test_hello(buf);

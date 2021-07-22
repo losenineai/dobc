@@ -892,11 +892,11 @@ foreach(OBJECT_LIBRARY ${UNICORN_OBJECT_LIBRARIES})
     list(APPEND UNICORN_SRCS $<TARGET_OBJECTS:${OBJECT_LIBRARY}>)
 endforeach()
 
-add_library(unicorn ${UNICORN_SRCS})
+add_library(unicorn STATIC ${UNICORN_SRCS})
 
 if(WIN32)
     if(BUILD_SHARED_LIBS)
-        list(APPEND UNICORN_COMPILE_OPTIONS -DUNICORN_SHARED)
+        #list(APPEND UNICORN_COMPILE_OPTIONS -DUNICORN_SHARED)
     endif()
 
     set_target_properties(unicorn PROPERTIES
