@@ -2,7 +2,7 @@
 include ../toolchain.mk
 
 md5.so : md5.c
-	$(CC) -c -o $@ $< -fPIC $(OLLVM_CFLAGS) 
+	$(CC) -shared -undefined dynamic_lookup $(OLLVM_CFLAGS) -o $@ $< 
 	cp $@ $@.decode
 
 .PHONY: clean
