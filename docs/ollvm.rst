@@ -41,14 +41,15 @@ ollvm的版本，似乎要和ndk的版本对应起来，按照网上的说法:
 
 工具链编译和构建
 =================
-执行命令:
+MingGW编译:
+-----------
 
 .. code-block:: bash
 
     git clone https://github.com/chen-yijie/obfuscator
     mkdir build
     cd build
-    cmake -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_SH="CMAKE_SH-NOTFOUND" -DCMAKE_CROSSCOMPILING=True -DLLVM_DEFAULT_TARGET_TRIPLE=arm-linux-androideabi -DLLVM_TARGET_ARCH=ARM -DLLVM_TARGETS_TO_B
+    cmake -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_SH="CMAKE_SH-NOTFOUND" -DCMAKE_CROSSCOMPILING=True -DLLVM_DEFAULT_TARGET_TRIPLE=arm-linux-androideabi -DLLVM_TARGET_ARCH=ARM -DLLVM_TARGETS_TO_BUILD=ARM ..
     UILD=ARM  ..
     mingw32-make.exe -j4
 
@@ -116,9 +117,15 @@ ollvm的版本，似乎要和ndk的版本对应起来，按照网上的说法:
 
 重新cmake 然后 make 即可。
 
+清理CMake缓存
+---------------
+.. code-block:: bash
+
+    rm -f `find -name CMakeCache.txt`
+
 工具链安装
 ===============
-编译完成以后，build下有 bin 和 lib 目录，假如你需要使用android studio来做编译，那么需要拷贝到对应的 ndk的 toolchains/llvm/prebuilt 目录下，但是假如你打算裸用命令行，其实拷贝到哪里都无所谓，主要是需要用 -L 指明 lib 搜索的路径，然后 -I指明要搜索的头文件位置，具体的可以参考 ``unittests\toolchain.mk``
+编译完成以后，build下有 bin 和 lib 目录，拷贝到llvm/prebuilt/windows-x86_64下的bin和lib
 
 ollvm编译目标文件
 ==================
@@ -142,8 +149,8 @@ ollvm编译目标文件碰到的问题
 
 编译目标函数不生效
 -------------------------------
-实际测试，经常发现，这个混淆没有效果，开了和没开一样，似乎有一定概率
+bcf_prob用来设置概率
 
 如何控制随机
 -------------------------------
-能否指定随机因子的情况下，然后让每次生成的文件都一样。
+能否指定随机因子的情况下，然后让每次生成的文件都一样。暂时不清除
