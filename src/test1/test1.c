@@ -20,6 +20,18 @@
 // memory address where emulation starts
 #define ADDRESS 0x10000
 
+static void dump_regs(uc_engine *uc)
+{
+    int sp, r0, r1, pc;
+
+    uc_reg_read(uc, UC_ARM_REG_SP, &sp);
+    uc_reg_read(uc, UC_ARM_REG_R0, &r0);
+    uc_reg_read(uc, UC_ARM_REG_R1, &r1);
+    uc_reg_read(uc, UC_ARM_REG_PC, &pc);
+
+    printf("\tsp=%08x, r0=%08x, r1=%08x, pc=%08x\n", sp, r0, r1, pc);
+}
+
 static void hook_block(uc_engine *uc, uint64_t address, uint32_t size, void *user_data)
 {
     printf(">>> Tracing basic block at 0x%"PRIx64 ", block size = 0x%x\n", address, size);
@@ -27,67 +39,21 @@ static void hook_block(uc_engine *uc, uint64_t address, uint32_t size, void *use
 
 static void hook_code(uc_engine *uc, uint64_t address, uint32_t size, void *user_data)
 {
-    printf(">>> Tracing instruction at 0x%"PRIx64 ", instruction size = 0x%x\n", address, size);
+    int i;
+    printf("%llx ", address);
+
+    uint8_t buf[128];
+
+    uc_mem_read(uc, address, buf, size);
+
+    for (i = 0; i < (int)size; i++)
+        printf("%02x ", buf[i]);
+    printf("\n");
+
+    dump_regs(uc);
+
+    printf("\n");
 }
-
-static void test_arm(void)
-{
-    uc_engine *uc;
-    uc_err err;
-    uc_hook trace1, trace2;
-
-    int r0 = 0x1234;     // R0 register
-    int r2 = 0x6789;     // R1 register
-    int r3 = 0x3333;     // R2 register
-    int r1;     // R1 register
-
-    printf("Emulate ARM code\n");
-
-    // Initialize emulator in ARM mode
-    err = uc_open(UC_ARCH_ARM, UC_MODE_ARM, &uc);
-    if (err) {
-        printf("Failed on uc_open() with error returned: %u (%s)\n",
-                err, uc_strerror(err));
-        return;
-    }
-
-    // map 2MB memory for this emulation
-    uc_mem_map(uc, ADDRESS, 2 * 1024 * 1024, UC_PROT_ALL);
-
-    // write machine code to be emulated to memory
-    uc_mem_write(uc, ADDRESS, ARM_CODE, sizeof(ARM_CODE) - 1);
-
-    // initialize machine registers
-    uc_reg_write(uc, UC_ARM_REG_R0, &r0);
-    uc_reg_write(uc, UC_ARM_REG_R2, &r2);
-    uc_reg_write(uc, UC_ARM_REG_R3, &r3);
-
-    // tracing all basic blocks with customized callback
-    uc_hook_add(uc, &trace1, UC_HOOK_BLOCK, hook_block, NULL, 1, 0);
-
-    // tracing one instruction at ADDRESS with customized callback
-    uc_hook_add(uc, &trace2, UC_HOOK_CODE, hook_code, NULL, ADDRESS, ADDRESS);
-
-    // emulate machine code in infinite time (last param = 0), or when
-    // finishing all the code.
-    err = uc_emu_start(uc, ADDRESS, ADDRESS + sizeof(ARM_CODE) -1, 0, 0);
-    if (err) {
-        printf("Failed on uc_emu_start() with error returned: %u\n", err);
-    }
-
-    // now print out some registers
-    printf(">>> Emulation done. Below is the CPU context\n");
-
-    uc_reg_read(uc, UC_ARM_REG_R0, &r0);
-    uc_reg_read(uc, UC_ARM_REG_R1, &r1);
-    printf(">>> R0 = 0x%x\n", r0);
-    printf(">>> R1 = 0x%x\n", r1);
-
-    uc_close(uc);
-}
-
-#define KB      1024
-#define MB      (1024 * KB)
 
 #define MEM_MAP_SIZE        (2 * MB)
 
@@ -97,9 +63,7 @@ static void thumb_test_base64(const char *soname)
     uc_err err;
     uc_hook trace1, trace2;
 
-    int sp;
-
-    printf("Emulate THUMB code\n");
+    int sp, r0, r1;
 
     // Initialize emulator in ARM mode
     err = uc_open(UC_ARCH_ARM, UC_MODE_THUMB, &uc);
@@ -109,44 +73,24 @@ static void thumb_test_base64(const char *soname)
         return;
     }
 
-    int solen;
-    Elf32_Ehdr *hdr = (Elf32_Ehdr *)file_load(soname, &solen);
-    Elf32_Sym *base64_decode_sym, *base64_encode_sym;
+    uc_runtime_t *ur = uc_runtime_new(uc, soname, 0, 0);
+    if (!ur)
+        return;
 
-    if (!hdr) {
-        print_err("file_load(%s)", soname);
-        goto exit_label;
-    }
-
-    base64_decode_sym = elf32_sym_get_by_name(hdr, "base64_decode");
-    base64_encode_sym = elf32_sym_get_by_name(hdr, "base64_encode");
-
-    if (!base64_decode_sym || !base64_encode_sym) {
-        print_err("failed with found symbol base64.");
-        goto exit_label;
-    }
-
-    // map 2MB memory for this emulation
-    uc_mem_map(uc, ADDRESS, MEM_MAP_SIZE, UC_PROT_ALL);
-
-    // write machine code to be emulated to memory
-    uc_mem_write(uc, ADDRESS, hdr, solen);
-
-    sp = ADDRESS + MEM_MAP_SIZE;
-    // initialize machine registers
+    sp = (int)ur_stack_end(ur) + 1;
     uc_reg_write(uc, UC_ARM_REG_SP, &sp);
 
-    // tracing all basic blocks with customized callback
-    uc_hook_add(uc, &trace1, UC_HOOK_BLOCK, hook_block, NULL, 1, 0);
+    r0 = ur_string32(ur, "hello, world");
+    uc_reg_write(uc, UC_ARM_REG_R0, &r0);
 
-    // tracing one instruction at ADDRESS with customized callback
-    uc_hook_add(uc, &trace2, UC_HOOK_CODE, hook_code, NULL, ADDRESS, ADDRESS + MEM_MAP_SIZE);
+    r1 = (int)ur_malloc(ur, 100);
+    uc_reg_write(uc, UC_ARM_REG_R1, &r1);
 
-    // emulate machine code in infinite time (last param = 0), or when
-    // finishing all the code.
-    // Note we start at ADDRESS | 1 to indicate THUMB mode.
-    uint64_t start = ADDRESS + base64_encode_sym->st_value;
-    err = uc_emu_start(uc, start, start + base64_encode_sym->st_size, 0, 0);
+    uc_hook_add(uc, &trace1, UC_HOOK_BLOCK, hook_block, ur, 1, 0);
+    uc_hook_add(uc, &trace2, UC_HOOK_CODE, hook_code, ur, ur_text_start(ur), ur_text_end(ur));
+
+    uint64_t start = ur_symbol_addr(ur, "base64_encode");
+    err = uc_emu_start(uc, start, 0, 0, 0);
     if (err) {
         printf("Failed on uc_emu_start() with error returned: %s(%d)\n", uc_strerror(err), err);
     }
@@ -158,10 +102,8 @@ static void thumb_test_base64(const char *soname)
 
     printf(">>> SP = 0x%x\n", sp);
 
-exit_label:
     uc_close(uc);
-    file_unload(hdr);
-} 
+}
 
 static void test_thumb2(void)
 {
@@ -265,7 +207,7 @@ static void test_thumb(void)
     uc_close(uc);
 }
 
-static void test_thumb_ite_internal(bool step, uint32_t *r2_out, uint32_t *r3_out) 
+static void test_thumb_ite_internal(bool step, uint32_t *r2_out, uint32_t *r3_out)
 {
     uc_engine *uc;
     uc_err err;
@@ -314,13 +256,13 @@ static void test_thumb_ite_internal(bool step, uint32_t *r2_out, uint32_t *r3_ou
     *r3_out = r3;
 }
 
-static void test_thumb_ite() 
+static void test_thumb_ite()
 {
     uint32_t r2, r3;
     uint32_t step_r2, step_r3;
 
     printf("Emulate a THUMB ITE block as a whole or per instruction.\n");
-    
+
     // Run once.
     printf("Running the entire binary.\n");
     test_thumb_ite_internal(false, &r2, &r3);
@@ -371,11 +313,11 @@ int main(int argc, char **argv, char **envp)
     test_thumb();
     test_thumb_ite();
 #endif
-    
+
     // dynamically free shared library
 #ifdef DYNLOAD
     uc_dyn_free();
 #endif
-    
+
     return 0;
 }
