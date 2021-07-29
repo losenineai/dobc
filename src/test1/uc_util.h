@@ -7,6 +7,39 @@
 #define KB      1024
 #define MB      (1024 * KB)
 
+#define NONE "\033[m"
+#define RED "\033[0;32;31m"
+#define LIGHT_RED "\033[1;31m"
+#define GREEN "\033[0;32;32m"
+#define LIGHT_GREEN "\033[1;32m"
+#define BLUE "\033[0;32;34m"
+#define LIGHT_BLUE "\033[1;34m"
+#define DARY_GRAY "\033[1;30m"
+#define CYAN "\033[0;36m"
+#define LIGHT_CYAN "\033[1;36m"
+#define PURPLE "\033[0;35m"
+#define LIGHT_PURPLE "\033[1;35m"
+#define BROWN "\033[0;33m"
+#define YELLOW "\033[1;33m"
+#define LIGHT_GRAY "\033[0;37m"
+#define WHITE "\033[1;37m"
+
+#define print_red()             printf(RED)
+#define print_light_red()       printf(LIGHT_RED)
+#define print_green()           printf(GREEN)
+#define print_light_green()     printf(LIGHT_GREEN)
+#define print_blue()            printf(BLUE)
+#define print_light_blue()      printf(LIGHT_BLUE)
+#define print_dark_gray()       printf(DARK_GRAY)
+#define print_cyan()            printf(CYAN)
+#define print_light_cyan()      printf(LIGHT_CYAN)
+#define print_purple()          printf(PURPLE)
+#define print_light_purple()    printf(LIGHT_PURPLE)
+#define print_brown()           printf(BROWN)
+#define print_yellow()          printf(YELLOW)
+#define print_light_gray()      printf(LIGHT_GRAY)
+#define print_white()           printf(WHITE)
+
 typedef uint64_t            uc_pos_t;
 typedef uint64_t*           uc_ptr;
 typedef long                pos_t;
@@ -19,6 +52,24 @@ typedef enum ur_error {
     UR_ENOMEM   = 2,
 } ur_error;
 
+struct uc_area {
+    int         index;
+    uc_pos_t    data;
+    uc_pos_t    end;
+    int         size;
+};
+
+struct uc_hook_func;
+
+struct uc_hook_func {
+    struct {
+        struct uc_hook_func     *next;
+        struct uc_hook_func     *prev;
+    } node;
+    const char *name;
+    uint64_t    address;
+};
+
 /*
 FIXME:
 1. uc_runtime 改为 uc_task_struct
@@ -30,36 +81,23 @@ typedef struct uc_runtime {
     uc_engine*  uc;
     int         err;
 
-    struct {
-        int         index;
-        uc_pos_t    data;
-        uc_pos_t    end;
-        int         size;
-    } heap;
-
-    /* 
-    FIXME: text这个段的概念是来自于elf，而不属于进程管理
-    */
-    struct {
-        uc_pos_t    data;
-        uc_pos_t    end;
-        int         size;
-    } stack;
-
-    struct {
-        uc_pos_t    data;
-        uc_pos_t    end;
-        int         size;
-    } text;
+    struct uc_area  heap;
+    struct uc_area  stack;
+    struct uc_area  text;
+    struct uc_area  rel;
 
     uint8_t*    fdata;
     int         flen;
-
 
     /* 线程集 */
     struct {
         int counts;
     } task_heads;
+
+    struct {
+        int     counts;
+        struct uc_hook_func *list;
+    } hooktab;
 
     char soname[1];
 } uc_runtime_t;
@@ -105,6 +143,9 @@ uc_pos_t        ur_string(uc_runtime_t *r, const char *str);
 uc_pos_t        ur_symbol_addr(uc_runtime_t *r, const char *sym);
 
 void*           uc_vir2phy(uc_pos_t t);
+
+struct uc_hook_func*    ur_hook_func_find(uc_runtime_t *r, const char *name);
+struct uc_hook_func*    ur_hook_func_find_by_addr(uc_runtime_t *r, uint64_t addr);
 
 
 #endif

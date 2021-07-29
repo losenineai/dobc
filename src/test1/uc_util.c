@@ -12,6 +12,8 @@
 
 #define SO_ADDR                 0x10000
 
+void                    ur_elf_lib_init(uc_runtime_t *t);
+
 uc_runtime_t*   uc_runtime_new(uc_engine *uc, const char *soname, int stack_size, int heap_size)
 {
     uc_runtime_t *ur;
@@ -42,9 +44,13 @@ uc_runtime_t*   uc_runtime_new(uc_engine *uc, const char *soname, int stack_size
     ur->text.data = SO_ADDR;
     ur->text.size = MB;
 
+    ur->rel.data = 0x800000;
+    ur->rel.size = 0x1000;
+
     if ((err = uc_mem_map(uc, ur->stack.data, ur->stack.size, UC_PROT_READ | UC_PROT_WRITE))
         || (err = uc_mem_map(uc, ur->heap.data, ur->heap.size, UC_PROT_READ | UC_PROT_WRITE))
-        || (err = uc_mem_map(uc, ur->text.data, ur->text.size, UC_PROT_ALL))) {
+        || (err = uc_mem_map(uc, ur->text.data, ur->text.size, UC_PROT_ALL))
+        || (err = uc_mem_map(uc, ur->rel.data, ur->rel.size, UC_PROT_ALL))) {
         print_err ("err: %s  failed with (%d:%s)uc_mem_map. %s:%d\r\n",  __func__, err, uc_strerror(err), __FILE__, __LINE__);
         return NULL;
     }
@@ -55,19 +61,26 @@ uc_runtime_t*   uc_runtime_new(uc_engine *uc, const char *soname, int stack_size
 
     uc_mem_write(uc, SO_ADDR, ur->fdata, ur->flen);
 
+    ur_elf_lib_init(ur);
+
     return ur;
+}
+
+uc_pos_t            ur__malloc(uc_runtime_t *r, struct uc_area *area, int size)
+{
+    int ind = area->index;
+
+    if ((ind + size) > area->size)
+        return 0;
+
+    area->index += size;
+
+    return area->data + ind;
 }
 
 uc_pos_t            ur_malloc(uc_runtime_t *r, int size)
 {
-    int ind = r->heap.index;
-
-    if ((ind + size) > r->heap.size)
-        return 0;
-
-    r->heap.index += size;
-
-    return r->heap.data + ind;
+    return ur__malloc(r, &r->heap, size);
 }
 
 uc_pos_t           ur_calloc(uc_runtime_t *uc, int elmnum, int elmsiz)
@@ -130,3 +143,80 @@ uc_pos_t        ur_string(uc_runtime_t *r, const char *str)
 
     return p;
 }
+
+struct uc_hook_func*    ur_hook_func_find(uc_runtime_t *r, const char *name)
+{
+    int i;
+    struct uc_hook_func *f;
+
+    for (i = 0, f= r->hooktab.list; i < r->hooktab.counts; i++, f = f->node.next) {
+        if (!strcmp(f->name, name))
+            return f;
+    }
+
+    return NULL;
+}
+
+struct uc_hook_func*    ur_hook_func_find_by_addr(uc_runtime_t *r, uint64_t addr)
+{
+    int i;
+    struct uc_hook_func *f;
+
+    for (i = 0, f= r->hooktab.list; i < r->hooktab.counts; i++, f = f->node.next) {
+        if (f->address == addr)
+            return f;
+    }
+
+    return NULL;
+}
+
+struct uc_hook_func*    ur_regist_func(uc_runtime_t *t, const char *name, uint32_t offset)
+{
+    struct uc_hook_func *f;
+    if (f = ur_hook_func_find(t, name))
+        return f;
+
+    uint32_t v = (uint32_t)ur__malloc(t, &t->rel, 4);
+    if (!v) {
+        assert(0);
+    }
+
+    f = calloc(1, sizeof (f[0]));
+    f->name = name;
+    f->address = v;
+    mlist_add(t->hooktab, f, node);
+
+    uc_mem_write(t->uc, offset, &v, sizeof (v));
+
+    printf("hook func = %s\n", name);
+    return f;
+}
+
+void            ur_elf_lib_init(uc_runtime_t *t)
+{
+    Elf32_Shdr *dynsymsh = elf32_shdr_get((Elf32_Ehdr *)t->fdata, SHT_DYNSYM);
+    Elf32_Shdr *sh = elf32_shdr_get_by_name((Elf32_Ehdr *)t->fdata, ".rel.dyn");
+    Elf32_Rel *rel;
+    int i, count, type, symind;
+    Elf32_Sym *sym;
+    const char *name;
+
+    if (sh->sh_type != SHT_REL) {
+        assert(0);
+    }
+
+    count = sh->sh_size / sh->sh_entsize;
+    for (i = 0; i < count; i++) {
+        rel = ((Elf32_Rel *)(t->fdata + sh->sh_offset)) + i;
+        type = ELF32_R_TYPE(rel->r_info);
+        symind = ELF32_R_SYM(rel->r_info);
+        sym = ((Elf32_Sym *)(t->fdata + dynsymsh->sh_offset)) + symind;
+
+        if (sym->st_value) continue;
+        name = elf32_sym_name((Elf32_Ehdr *)t->fdata, sym);
+
+        if (name && name[0])
+            ur_regist_func(t, name, (uint32_t)(rel->r_offset + t->text.data));
+    }
+}
+

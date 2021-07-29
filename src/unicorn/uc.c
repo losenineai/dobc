@@ -1,4 +1,4 @@
-/* Unicorn Emulator Engine */
+﻿/* Unicorn Emulator Engine */
 /* By Nguyen Anh Quynh <aquynh@gmail.com>, 2015 */
 
 #if defined(UNICORN_HAS_OSXKERNEL)
