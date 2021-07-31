@@ -95,16 +95,14 @@ int base64_test_init(struct base64_test *test, struct uc_runtime *ur)
 
 static void dump_regs(uc_engine *uc)
 {
-    int sp, r0, r1, r2, lr, pc;
+    int regs[16];
 
-    uc_reg_read(uc, UC_ARM_REG_SP, &sp);
-    uc_reg_read(uc, UC_ARM_REG_R0, &r0);
-    uc_reg_read(uc, UC_ARM_REG_R1, &r1);
-    uc_reg_read(uc, UC_ARM_REG_R2, &r2);
-    uc_reg_read(uc, UC_ARM_REG_LR, &lr);
-    uc_reg_read(uc, UC_ARM_REG_PC, &pc);
+    uc_reg_read_batch2(uc, arm_general_regs, regs, 16);
 
-    printf("\tsp=%08x, r0=%08x, r1=%08x, r2=%08x, lr=%08x, pc=%08x\n", sp, r0, r1, r2, lr, pc);
+    printf("\tr0=%08x, r1=%08x, r2=%08x,   r3=%08x,  r4=%08x, r5=%08x, r6=%08x, r7=%08x\n"
+           "\tr8=%08x, r9=%08x, r10=%08x, r11=%08x, r12=%08x, sp=%08x, lr=%08x, pc=%08x\n",
+        regs[0], regs[1], regs[2], regs[3], regs[4], regs[5], regs[6], regs[7],
+        regs[8], regs[9], regs[10], regs[11], regs[12], regs[13], regs[14], regs[15]);
 }
 
 static void hook_block(uc_engine *uc, uint64_t address, uint32_t size, void *user_data)

@@ -54,6 +54,9 @@ uc_runtime_t*   uc_runtime_new(uc_engine *uc, const char *soname, int stack_size
     ur->elf_load_addr = ur__alloc(ur, ur_area_text(ur), ur->flen, ur_area_text(ur)->align_size);
     uc_mem_write(uc, ur->elf_load_addr, ur->fdata, ur->flen);
 
+    int stack_guard = rand();
+    ur_symbol_add(ur, "__stack_chk_guard", UR_SYMBOL_DATA, &stack_guard, sizeof (stack_guard));
+
     ur_elf_addr_fix(ur);
 
     return ur;
@@ -114,11 +117,47 @@ uc_pos_t        ur_stack_end(uc_runtime_t *r)
     return ur_area_stack(r)->end;
 }
 
-uc_pos_t        ur_symbol_addr(uc_runtime_t *r, const char *symname)
+uc_pos_t            ur_symbol_addr(uc_runtime_t *r, const char *symname)
 {
     Elf32_Sym *sym = elf32_sym_get_by_name((Elf32_Ehdr *)r->fdata, symname);
 
     return r->elf_load_addr + sym->st_value;
+}
+
+struct ur_symbol*   ur_symbol_find(uc_runtime_t *r, const char *symname, enum ur_symbol_type type)
+{
+    int i;
+    struct ur_symbol *sym;
+
+    for (i = 0, sym = r->symtab.list; i < r->symtab.counts; i++, sym = sym->node.next) {
+        if (!strcmp(sym->name, symname) && (sym->type == type))
+            return sym;
+    }
+
+    return NULL;
+}
+
+struct ur_symbol*   ur_symbol_add(uc_runtime_t *r, const char *symname, int type, void *data, int size)
+{
+    struct ur_symbol *sym = ur_symbol_find(r, symname, type);
+    if (sym)
+        return sym;
+
+    sym = calloc(1, sizeof (sym[0]) + strlen(symname));
+    if (!sym)
+        return NULL;
+
+    strcpy(sym->name, symname);
+    sym->type = type;
+
+    if (type == UR_SYMBOL_DATA) {
+        sym->addr = ur__alloc(r, ur_area_data(r), size, 4);
+        uc_mem_write(r->uc, sym->addr, data, size);
+    }
+
+    mlist_add(r->symtab, sym, node);
+
+    return sym;
 }
 
 void*           uc_vir2phy(uc_pos_t t)
@@ -191,23 +230,29 @@ void            ur_elf_do_rel_sym_fix(uc_runtime_t *t, Elf32_Rel *rel)
 {
     Elf32_Shdr *dynsymsh = elf32_shdr_get((Elf32_Ehdr *)t->fdata, SHT_DYNSYM);
 
-    uint32_t rel_offset;
+    uint32_t global_offset;
     int type, symind;
     Elf32_Sym *sym;
+    struct ur_symbol *ur_sym;
     const char *name;
 
     type = ELF32_R_TYPE(rel->r_info);
     symind = ELF32_R_SYM(rel->r_info);
     sym = ((Elf32_Sym *)(t->fdata + dynsymsh->sh_offset)) + symind;
+    name = elf32_sym_name((Elf32_Ehdr *)t->fdata, sym);
 
     if (ELF32_ST_TYPE(sym->st_info) == STT_OBJECT) {
-        uc_mem_read(t->uc, t->elf_load_addr + rel->r_offset,  (void *)&rel_offset, sizeof (rel_offset));
-        rel_offset += (uint32_t)t->elf_load_addr;
-        uc_mem_write(t->uc, t->elf_load_addr + rel->r_offset, (void *)&rel_offset, sizeof (rel_offset));
+        if (sym->st_value) {
+            global_offset = sym->st_value + (uint32_t)t->elf_load_addr;
+            uc_mem_write(t->uc, t->elf_load_addr + rel->r_offset, (void *)&global_offset, sizeof (global_offset));
+        }
+        else if (ur_sym = ur_symbol_find(t, name, UR_SYMBOL_DATA)) {
+            global_offset = (uint32_t)ur_sym->addr;
+            uc_mem_write(t->uc, t->elf_load_addr + rel->r_offset, (void *)&global_offset, sizeof (global_offset));
+        }
     }
     else if (ELF32_ST_TYPE(sym->st_info) == STT_FUNC) {
         if (sym->st_value) return;
-        name = elf32_sym_name((Elf32_Ehdr *)t->fdata, sym);
 
         if (name && name[0])
             ur_relocate_func(t, name, (uint32_t)(rel->r_offset + t->elf_load_addr));
@@ -241,11 +286,6 @@ static void            ur_elf_addr_fix(uc_runtime_t *t)
         rel = ((Elf32_Rel *)(t->fdata + sh->sh_offset)) + i;
         ur_elf_do_rel_sym_fix(t, rel);
     }
-}
-
-int             uc_on_hook_func(uc_runtime_t *t, uint64_t addr)
-{
-    return 0;
 }
 
 struct uc_hook_func*    ur_alloc_func(uc_runtime_t *t, const char *name, void (* cb)(void *user_data), void *user_data)

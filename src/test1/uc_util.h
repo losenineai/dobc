@@ -7,39 +7,6 @@
 #define KB      1024
 #define MB      (1024 * KB)
 
-#define NONE "\033[m"
-#define RED "\033[0;32;31m"
-#define LIGHT_RED "\033[1;31m"
-#define GREEN "\033[0;32;32m"
-#define LIGHT_GREEN "\033[1;32m"
-#define BLUE "\033[0;32;34m"
-#define LIGHT_BLUE "\033[1;34m"
-#define DARY_GRAY "\033[1;30m"
-#define CYAN "\033[0;36m"
-#define LIGHT_CYAN "\033[1;36m"
-#define PURPLE "\033[0;35m"
-#define LIGHT_PURPLE "\033[1;35m"
-#define BROWN "\033[0;33m"
-#define YELLOW "\033[1;33m"
-#define LIGHT_GRAY "\033[0;37m"
-#define WHITE "\033[1;37m"
-
-#define print_red()             printf(RED)
-#define print_light_red()       printf(LIGHT_RED)
-#define print_green()           printf(GREEN)
-#define print_light_green()     printf(LIGHT_GREEN)
-#define print_blue()            printf(BLUE)
-#define print_light_blue()      printf(LIGHT_BLUE)
-#define print_dark_gray()       printf(DARK_GRAY)
-#define print_cyan()            printf(CYAN)
-#define print_light_cyan()      printf(LIGHT_CYAN)
-#define print_purple()          printf(PURPLE)
-#define print_light_purple()    printf(LIGHT_PURPLE)
-#define print_brown()           printf(BROWN)
-#define print_yellow()          printf(YELLOW)
-#define print_light_gray()      printf(LIGHT_GRAY)
-#define print_white()           printf(WHITE)
-
 typedef uint64_t            uc_pos_t;
 typedef uint64_t*           uc_ptr;
 typedef long                pos_t;
@@ -79,6 +46,24 @@ struct uc_area {
     int                 align_shift;
     int                 align_size;
     int                 align_mask;
+};
+
+enum ur_symbol_type {
+    UR_SYMBOL_DATA,
+    UR_SYMBOL_FUNC
+};
+
+struct ur_symbol;
+struct ur_symbol {
+    struct {
+        struct ur_symbol *next;
+        struct ur_symbol *prev;
+    } node;
+
+    enum ur_symbol_type type;
+    uc_pos_t addr;
+
+    char name[1];
 };
 
 struct uc_hook_func;
@@ -159,6 +144,11 @@ typedef struct uc_runtime {
         struct uc_hook_func *list;
     } hooktab;
 
+    struct {
+        int     counts;
+        struct ur_symbol *list;
+    } symtab;
+
     char soname[1];
 } uc_runtime_t;
 
@@ -200,7 +190,9 @@ ur_strcpy(r0, str);
 uc_pos_t        ur_string(uc_runtime_t *r, const char *str);
 #define ur_string32(r,str)  (int)ur_string(r,str)
 
-uc_pos_t        ur_symbol_addr(uc_runtime_t *r, const char *sym);
+struct ur_symbol*   ur_symbol_find(uc_runtime_t *r, const char *symname, enum ur_symbol_type type);
+uc_pos_t            ur_symbol_addr(uc_runtime_t *r, const char *sym);
+struct ur_symbol*   ur_symbol_add(uc_runtime_t *r, const char *symname, int type, void *data, int size);
 
 void*           uc_vir2phy(uc_pos_t t);
 
@@ -214,6 +206,7 @@ struct uc_hook_func*    ur_hook_func_find_by_addr(uc_runtime_t *r, uint64_t addr
                 <0      failure, error code
 */
 struct uc_hook_func*    ur_alloc_func(uc_runtime_t *r, const char *name, void (* cb)(void *user_data), void *user_data);
+
 
 
 #endif
