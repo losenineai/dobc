@@ -8,28 +8,103 @@
 #include "mcore/mcore.h"
 #include "uc_util.h"
 
+int arm_general_regs[16] = {
+    UC_ARM_REG_R0,
+    UC_ARM_REG_R1,
+    UC_ARM_REG_R2,
+    UC_ARM_REG_R3,
+    UC_ARM_REG_R4,
+    UC_ARM_REG_R5,
+    UC_ARM_REG_R6,
+    UC_ARM_REG_R7,
+    UC_ARM_REG_R8,
+    UC_ARM_REG_R9,
+    UC_ARM_REG_R10,
+    UC_ARM_REG_R11,
+    UC_ARM_REG_R12,
+    UC_ARM_REG_R13,
+    UC_ARM_REG_R14,
+    UC_ARM_REG_PC
+};
 
-// code to be emulated
-#define ARM_CODE "\x37\x00\xa0\xe3\x03\x10\x42\xe0" // mov r0, #0x37; sub r1, r2, r3
-#define THUMB_CODE "\x83\xb0" // sub    sp, #0xc
-#define THUMB_CODE2 "\xf0\xb5"
+static void dump_regs(uc_engine *uc);
+
+struct base64_test {
+    int regs[count_of_array(arm_general_regs)];
+    struct uc_runtime *ur;
+};
+
+void base64_test_on_main_exit()
+{
+}
+
+int uc_reg_read_batch2(uc_engine *uc, int *ids, int *vals, int count)
+{
+    int i;
+
+    for (i = 0; i < count; i++) {
+        uc_reg_read(uc, ids[i], vals + i);
+    }
+
+    return 0;
+}
+
+void base64_test_on_exit(struct base64_test *test)
+{
+    struct uc_runtime *ur = test->ur;
+    int r0;
+    char buf[128];
+
+    uc_emu_stop(ur->uc);
+
+    uc_reg_read(ur->uc, UC_ARM_REG_R0,  &r0);
+
+    uc_mem_read(ur->uc, test->regs[1], buf, sizeof (buf));
+    printf("base64_encode = %s, size = %d\n", buf, r0);
+}
+
+int base64_test_init(struct base64_test *test, struct uc_runtime *ur)
+{
+    int sp, r0, r1;
+    uc_engine *uc = ur->uc;
+    struct uc_hook_func *f;
+
+    test->ur = ur;
 
 
-#define ARM_THUM_COND_CODE "\x9a\x42\x14\xbf\x68\x22\x4d\x22" // 'cmp r2, r3\nit ne\nmov r2, #0x68\nmov r2, #0x4d'
+    sp = (int)ur_stack_end(ur) + 1;
+    uc_reg_write(uc, UC_ARM_REG_SP, &sp);
 
-// memory address where emulation starts
-#define ADDRESS 0x10000
+    r0 = ur_string32(ur, "hello, world");
+    uc_reg_write(uc, UC_ARM_REG_R0, &r0);
+
+    r1 = (int)ur_malloc(ur, 100);
+    uc_reg_write(uc, UC_ARM_REG_R1, &r1);
+
+    f = ur_alloc_func(ur, "main_exit", base64_test_on_exit, test);
+    uc_reg_write(uc, UC_ARM_REG_LR, &f->address);
+
+    uc_reg_read_batch2(ur->uc, arm_general_regs, test->regs, count_of_array(test->regs));
+
+    dump_regs(uc);
+
+    printf("start run====================================");
+
+    return 0;
+}
 
 static void dump_regs(uc_engine *uc)
 {
-    int sp, r0, r1, pc;
+    int sp, r0, r1, r2, lr, pc;
 
     uc_reg_read(uc, UC_ARM_REG_SP, &sp);
     uc_reg_read(uc, UC_ARM_REG_R0, &r0);
     uc_reg_read(uc, UC_ARM_REG_R1, &r1);
+    uc_reg_read(uc, UC_ARM_REG_R2, &r2);
+    uc_reg_read(uc, UC_ARM_REG_LR, &lr);
     uc_reg_read(uc, UC_ARM_REG_PC, &pc);
 
-    printf("\tsp=%08x, r0=%08x, r1=%08x, pc=%08x\n", sp, r0, r1, pc);
+    printf("\tsp=%08x, r0=%08x, r1=%08x, r2=%08x, lr=%08x, pc=%08x\n", sp, r0, r1, r2, lr, pc);
 }
 
 static void hook_block(uc_engine *uc, uint64_t address, uint32_t size, void *user_data)
@@ -39,6 +114,9 @@ static void hook_block(uc_engine *uc, uint64_t address, uint32_t size, void *use
 
 static void hook_code(uc_engine *uc, uint64_t address, uint32_t size, void *user_data)
 {
+    struct uc_runtime *t = user_data;
+    struct uc_hook_func *hook;
+
     int i;
     printf("%llx ", address);
 
@@ -54,9 +132,18 @@ static void hook_code(uc_engine *uc, uint64_t address, uint32_t size, void *user
 
     printf("\n");
 
-    if (ur_hook_func_find_by_addr(user_data, address)) {
+    if ((hook = ur_hook_func_find_by_addr(t, address))) {
+        if (hook->cb) {
+            hook->cb(hook->user_data);
+        }
     }
 }
+
+static void main_exit(struct uc_runtime *ur, void *user_data)
+{
+    uc_emu_stop(ur->uc);
+}
+
 
 #define MEM_MAP_SIZE        (2 * MB)
 
@@ -65,8 +152,6 @@ static void thumb_test_base64(const char *soname)
     uc_engine *uc;
     uc_err err;
     uc_hook trace1, trace2;
-
-    int sp, r0, r1;
 
     // Initialize emulator in ARM mode
     err = uc_open(UC_ARCH_ARM, UC_MODE_THUMB, &uc);
@@ -80,14 +165,9 @@ static void thumb_test_base64(const char *soname)
     if (!ur)
         return;
 
-    sp = (int)ur_stack_end(ur) + 1;
-    uc_reg_write(uc, UC_ARM_REG_SP, &sp);
+    struct base64_test test;
 
-    r0 = ur_string32(ur, "hello, world");
-    uc_reg_write(uc, UC_ARM_REG_R0, &r0);
-
-    r1 = (int)ur_malloc(ur, 100);
-    uc_reg_write(uc, UC_ARM_REG_R1, &r1);
+    base64_test_init(&test, ur);
 
     uc_hook_add(uc, &trace1, UC_HOOK_BLOCK, hook_block, ur, 1, 0);
     uc_hook_add(uc, &trace2, UC_HOOK_CODE, hook_code, ur, ur_text_start(ur), ur_text_end(ur));
@@ -101,9 +181,7 @@ static void thumb_test_base64(const char *soname)
     // now print out some registers
     printf(">>> Emulation done. Below is the CPU context\n");
 
-    uc_reg_read(uc, UC_ARM_REG_SP, &sp);
-
-    printf(">>> SP = 0x%x\n", sp);
+    dump_regs(uc);
 
     uc_close(uc);
 }

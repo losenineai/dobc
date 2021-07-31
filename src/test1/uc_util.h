@@ -44,6 +44,10 @@ typedef uint64_t            uc_pos_t;
 typedef uint64_t*           uc_ptr;
 typedef long                pos_t;
 
+#define UE_NOMEM            1
+#define UE_UC_NOMEM         2
+#define UE_INVAL            3
+
 typedef struct uc_runtime   uc_task_struct;
 
 typedef enum ur_error {
@@ -52,11 +56,29 @@ typedef enum ur_error {
     UR_ENOMEM   = 2,
 } ur_error;
 
+enum uc_area_type {
+    UC_AREA_TEXT,
+    UC_AREA_DATA,
+    UC_AREA_BSS,
+    UC_AREA_HEAP,
+    UC_AREA_STACK,
+    UC_AREA_MAX
+};
+
+#define count_of_array(a)       (sizeof (a) / sizeof (a[0]))
+
+
 struct uc_area {
-    int         index;
-    uc_pos_t    data;
-    uc_pos_t    end;
-    int         size;
+    enum uc_area_type   type;
+    int                 index;
+    uc_pos_t            begin;
+    uc_pos_t            end;
+    int                 size;
+    uint32_t            perms;
+
+    int                 align_shift;
+    int                 align_size;
+    int                 align_mask;
 };
 
 struct uc_hook_func;
@@ -66,28 +88,66 @@ struct uc_hook_func {
         struct uc_hook_func     *next;
         struct uc_hook_func     *prev;
     } node;
-    const char *name;
-    uint64_t    address;
+    uc_pos_t    address;
+    char        name[1];
+    void*       user_data;
+    void(*cb)(void *user_data);
 };
+
+/*
+High Addresses ---> .----------------------.
+                    |      Environment     |
+                    |----------------------|
+                    |                      |   Functions and variable are declared
+                    |         STACK        |   on the stack.
+base pointer ->     | - - - - - - - - - - -|
+                    |           |          |
+                    |           v          |
+                    :                      :
+                    .                      .   The stack grows down into unused space
+                    .         Empty        .   while the heap grows up. 
+                    .                      .
+                    .                      .   (other memory maps do occur here, such 
+                    .                      .    as dynamic libraries, and different memory
+                    :                      :    allocate)
+                    |           ^          |
+                    |           |          |
+ brk point ->       | - - - - - - - - - - -|   Dynamic memory is declared on the heap
+                    |          HEAP        |
+                    |                      |
+                    |----------------------|
+                    |          BSS         |   Uninitialized data (BSS)
+                    |----------------------|   
+                    |          Data        |   Initialized data (DS)
+                    |----------------------|
+                    |          Text        |   Binary code
+Low Addresses ----> '----------------------'
+*/
+
+
 
 /*
 FIXME:
 1. uc_runtime 改为 uc_task_struct
 2. 我们没有区分线程和进程
 
-
 */
+
+#define ur_area_text(u)             (&u->areas[UC_AREA_TEXT])
+#define ur_area_data(u)             (&u->areas[UC_AREA_DATA])
+#define ur_area_bss(u)              (&u->areas[UC_AREA_BSS])
+#define ur_area_heap(u)             (&u->areas[UC_AREA_HEAP])
+#define ur_area_stack(u)            (&u->areas[UC_AREA_STACK])
+
 typedef struct uc_runtime {
     uc_engine*  uc;
     int         err;
 
-    struct uc_area  heap;
-    struct uc_area  stack;
-    struct uc_area  text;
-    struct uc_area  rel;
+    struct uc_area  areas[UC_AREA_MAX];
 
     uint8_t*    fdata;
     int         flen;
+    uc_pos_t    elf_load_addr;
 
     /* 线程集 */
     struct {
@@ -146,6 +206,14 @@ void*           uc_vir2phy(uc_pos_t t);
 
 struct uc_hook_func*    ur_hook_func_find(uc_runtime_t *r, const char *name);
 struct uc_hook_func*    ur_hook_func_find_by_addr(uc_runtime_t *r, uint64_t addr);
+
+/*
+分配一个函数
+
+@return         0       success
+                <0      failure, error code
+*/
+struct uc_hook_func*    ur_alloc_func(uc_runtime_t *r, const char *name, void (* cb)(void *user_data), void *user_data);
 
 
 #endif
