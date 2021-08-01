@@ -3419,6 +3419,32 @@ void elf_dump(char *elf, int elf_len, int opt);
 #define OPT_DUMP_ELF_REL            13
 #define OPT_DUMP_ELF_DYNSYM         14
 
+/*
+这个函数把一个elf文件，按照运行时的布局载入到内存中，它不严格的来说，类似于 linux kernel的 
+binfmt_elf.c:load_elf_binary
+
+但是我们不需要做的和load_elf_binary这么严格，因为我们不是真的搭建一个模拟运行时的环境。假如
+需要一个更加标准的运行时展开的load函数，建议在更高层的模拟kernel层去实现这个函数，并且它基于
+的cpu模拟器，要支持softmmu，比如unicorn
+
+这里面主要就是做了把elf的library按照load program header进行页对其以后展开
+
+NOTE1:
+elf的Load segment进行对齐时，按照page_size == 4096对齐
+
+NOTE2:
+传统的linux 内核中在载入各个segment时，用了vmmap，所以假如多个load之间有空隙，是不会浪费内存
+空间的，但是我们直接在内存中展开，假如segment之间空袭很大，那么展开会导致内存浪费严重，但是
+实际的so中，似乎很少各个segment之间有大量空隙，这个是可以接受的
+
+@filename       binary name
+@page_shift     1 << page_shift, is page_size
+@len[out]       extend buffer size
+@return         
+        NULL    failure
+        other   success, data ptr
+*/
+uint8_t*        elf_load_binary(const char *filename, int *len);
 
 #if defined(__cplusplus)
 }

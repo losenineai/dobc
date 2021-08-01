@@ -8,11 +8,10 @@ static int kernel_read(FILE *fp, long offset, void *buf, int bufsiz)
     return fread(buf, bufsiz, 1, fp); 
 }
 
-static int load_elf_binary(FILE *fp)
+static int load_elf_library(FILE *fp)
 {
     Elf32_Phdr *elf_phdata = NULL;
     Elf32_Phdr *eppnt;
-    unsigned long elf_bss, bss, len;
     int retval, error, i, j;
     Elf32_Ehdr elf_ex;
 

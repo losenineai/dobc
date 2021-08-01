@@ -1,7 +1,9 @@
 ﻿
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "elf.h"
+#include "file.h"
 
 /* 
 elf: https://refspecs.linuxfoundation.org/elf/elf.pdf
@@ -669,4 +671,56 @@ void elf_dump(char *elf, int elf_len, int opt)
 char *elf_arm_rel_type(int type)
 {
     return NULL;
+}
+
+
+#define ELF_MIN_ALIGN       4096
+
+#define ELF_PAGESTART(_v) ((_v) & ~(unsigned long)(ELF_MIN_ALIGN-1))
+#define ELF_PAGEOFFSET(_v) ((_v) & (ELF_MIN_ALIGN-1))
+#define ELF_PAGEALIGN(_v) (((_v) + ELF_MIN_ALIGN - 1) & ~(ELF_MIN_ALIGN - 1))
+
+#define elf_phdr(hdr)               ((Elf32_Phdr *)((unsigned char *)hdr + hdr->e_phoff))
+
+uint8_t*        elf_load_binary(const char *filename, int *len)
+{
+    int i, flen, size, alignsiz;
+    uint8_t *fdata = file_load(filename, &flen), *mem = NULL;
+    Elf32_Ehdr *hdr = (Elf32_Ehdr *)fdata;
+    Elf32_Phdr *phdr = elf_phdr(hdr), *last_load_phdr = NULL;
+
+    if (!fdata)
+        return NULL;
+
+    for (i = 0; i < hdr->e_phnum; i++, phdr++) {
+        if (phdr->p_type != PT_LOAD)  continue;
+
+        last_load_phdr = phdr;
+    }
+
+    if (!last_load_phdr)
+        goto exit_label;
+
+    size = last_load_phdr->p_vaddr + last_load_phdr->p_memsz;
+    alignsiz = ELF_PAGEALIGN(size);
+    *len = alignsiz;
+
+    mem = calloc(1, alignsiz);
+    if (!mem)
+        goto exit_label;
+
+    /*
+    ?: 为什么load的有些段，它的filesiz和memsiz是不等的
+    */
+    for (i = 0, phdr = elf_phdr(hdr); i < hdr->e_phnum; i++, phdr++) {
+        if (phdr->p_type != PT_LOAD)  continue;
+
+        memcpy(mem + phdr->p_vaddr, fdata + phdr->p_offset, phdr->p_memsz);
+    }
+
+exit_label:
+    if (fdata)
+        file_unload(fdata);
+
+    return mem;
 }

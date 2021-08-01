@@ -51,8 +51,15 @@ uc_runtime_t*   uc_runtime_new(uc_engine *uc, const char *soname, int stack_size
         area->end = area->begin + area->size - 1;
     }
 
-    ur->elf_load_addr = ur__alloc(ur, ur_area_text(ur), ur->flen, ur_area_text(ur)->align_size);
-    uc_mem_write(uc, ur->elf_load_addr, ur->fdata, ur->flen);
+    int memlen;
+    uint8_t *memdata = elf_load_binary(soname, &memlen);
+
+    ur->elf_load_addr = ur__alloc(ur, ur_area_text(ur), memlen, ur_area_text(ur)->align_size);
+
+    //uc_mem_write(uc, ur->elf_load_addr, ur->fdata, ur->flen);
+    uc_mem_write(uc, ur->elf_load_addr, memdata, memlen);
+
+    free(memdata);
 
     int stack_guard = rand();
     ur_symbol_add(ur, "__stack_chk_guard", UR_SYMBOL_DATA, &stack_guard, sizeof (stack_guard));
