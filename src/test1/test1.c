@@ -60,7 +60,13 @@ void base64_test_on_exit(struct base64_test *test)
     uc_reg_read(ur->uc, UC_ARM_REG_R0,  &r0);
 
     uc_mem_read(ur->uc, test->regs[1], buf, sizeof (buf));
-    printf("base64_encode = %s, size = %d\n", buf, r0);
+
+    if (strcmp(buf, "aGVsbG8sIHdvcmxk")) {
+        printf("base64_encode test failure\n");
+    }
+    else {
+        printf("base64_encode test success\n");
+    }
 }
 
 int base64_test_init(struct base64_test *test, struct uc_runtime *ur)
@@ -70,7 +76,6 @@ int base64_test_init(struct base64_test *test, struct uc_runtime *ur)
     struct uc_hook_func *f;
 
     test->ur = ur;
-
 
     sp = (int)ur_stack_end(ur) + 1;
     uc_reg_write(uc, UC_ARM_REG_SP, &sp);
@@ -116,19 +121,20 @@ static void hook_code(uc_engine *uc, uint64_t address, uint32_t size, void *user
     struct uc_hook_func *hook;
 
     int i;
-    printf("%llx ", address);
 
-    uint8_t buf[128];
+    if (t->debug.trace) {
+        printf("%llx ", address);
 
-    uc_mem_read(uc, address, buf, size);
+        uint8_t buf[128];
 
-    for (i = 0; i < (int)size; i++)
-        printf("%02x ", buf[i]);
-    printf("\n");
+        uc_mem_read(uc, address, buf, size);
 
-    dump_regs(uc);
+        for (i = 0; i < (int)size; i++)
+            printf("%02x ", buf[i]);
+        printf("\n");
 
-    printf("\n");
+        dump_regs(uc);
+    }
 
     if ((hook = ur_hook_func_find_by_addr(t, address))) {
         if (hook->cb) {
@@ -176,17 +182,8 @@ static void thumb_test_base64(const char *soname)
         printf("Failed on uc_emu_start() with error returned: %s(%d)\n", uc_strerror(err), err);
     }
 
-    // now print out some registers
-    printf(">>> Emulation done. Below is the CPU context\n");
-
-    dump_regs(uc);
-
     uc_close(uc);
 }
-
-
-
-
 
 static const char *help = {
     "test1 [data_dir] \n"

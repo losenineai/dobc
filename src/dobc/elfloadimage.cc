@@ -114,6 +114,7 @@ plt section的头，都有20个字节的头，这20个字节的头不知道是�
  
 ElfLoadImage::ElfLoadImage(const string &filename):LoadImageB(filename)
 {
+    //mem = (unsigned char *)elf_load_binary(filename.c_str(), (int *)&memlen);
     filedata = (unsigned char *)file_load(filename.c_str(), (int *)&filelen);
     hdr = (Elf32_Ehdr *)filedata;
 
@@ -138,13 +139,14 @@ int ElfLoadImage::loadFill(uint1 *ptr, int size, const Address &addr)
     if (sh && (sh->sh_flags & SHF_WRITE))
         return -1;
 
-    if ((start + size) > filelen) {
+    if ((start + size) > memlen) {
         /* FIXME: 我们对所有访问的超过空间的地址都返回 0xaabbccdd，这里不是BUG，是因为我们载入so的时候，是直接平铺着载入的
         但是实际在程序加载so的时候，会填充很多结构，并做一些扩展 */
         return -1;
     }
 
     memcpy(ptr, filedata + start, size);
+    //memcpy(ptr, mem + start, size);
     return 0;
 }
 
@@ -182,7 +184,7 @@ bool ElfLoadImage::getNextSymbol(LoadImageFunc &record)
 
 int ElfLoadImage::saveSymbol(const char *symname, int size)
 {
-    Elf32_Sym *sym = elf32_sym_find2((Elf32_Ehdr *)filedata, symname);
+    Elf32_Sym *sym = elf32_sym_get_by_name((Elf32_Ehdr *)filedata, symname);
 
     if (!sym)
         return -1;

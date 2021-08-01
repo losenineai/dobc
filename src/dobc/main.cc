@@ -9,7 +9,7 @@
 static char help[] = {
     "dobc [-i filename] \r\n" 
     "       -o                      output filename\r\n"
-    "       -t                      ollvm | 360freevmp, default is ollvm"
+    "       -t                      ollvm | 360freevmp, default is ollvm\r\n"
     "       -sd                     dump new so to so directory or current directory\r\n"
     "       -da [hex address, ]     decode address list\r\n"
     "       --ghidra                ghidra config directory\r\n"
@@ -60,6 +60,7 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "-debug.zxw")) {
             print_level_set(PRINT_LEVEL_INFO);
 
+            d.debug.dump_cfg = 1;
             d.debug.dump_inst0 = 1;
             d.debug.dump_inst1 = 1;
             d.debug.dump_inst2 = 1;

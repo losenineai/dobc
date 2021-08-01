@@ -36,6 +36,8 @@ private:
 public:
     unsigned char*  filedata;
     int				filelen;
+    unsigned char*  mem;
+    int             memlen;
 
     ElfLoadImage(const string &filename);
     virtual ~ElfLoadImage();

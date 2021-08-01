@@ -149,6 +149,11 @@ typedef struct uc_runtime {
         struct ur_symbol *list;
     } symtab;
 
+    struct {
+        unsigned int trace : 1;
+        unsigned int trace_blk : 1;
+    } debug;
+
     char soname[1];
 } uc_runtime_t;
 

@@ -62,7 +62,8 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
 #define TEST_STATIC_TRACE       1
 
     do {
-        print_info("\tprocess flowblock sub_%llx", cur->get_start().getOffset());
+        printf("\t");
+        print_info("process flowblock sub_%llx", cur->get_start().getOffset());
 
         it = cur->ops.begin();
         inslot = cur->get_in_index(prev);
