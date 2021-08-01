@@ -2158,7 +2158,8 @@ public:
     map<Address, funcdata *> addrtab;
     map<string, funcdata *> nametab;
 
-    vector<intb>     decode_address_list;
+    vector<intb>    decode_address_list;
+    vector<string>  decode_symbol_list;
 
 #define SHELL_OLLVM           0
 #define SHELL_360FREE         1
@@ -2237,6 +2238,8 @@ public:
 
     void        add_inst_mnem(const Address &addr, const string &mnem);
     string&     get_inst_mnem(intb addr);
+    void        add_func(funcdata *fd);
+    funcdata*   add_func(const string &name);
     funcdata*   add_func(const Address &addr);
     string&     get_userop_name(int i) { return useroplist[i];  }
     void        set_shelltype(char *shelltype);

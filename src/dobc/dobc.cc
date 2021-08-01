@@ -327,7 +327,34 @@ string&     dobc::get_inst_mnem(intb addr)
     return it->second;
 }
 
-funcdata *dobc::add_func(const Address &a)
+void        dobc::add_func(funcdata *fd)
+{
+    if (fd->flags.thumb) {
+        addrtab[fd->startaddr + 1] = fd;
+    }
+
+    addrtab[fd->startaddr] = fd;
+    nametab[fd->name] = fd;
+}
+
+funcdata*   dobc::add_func(const string &name)
+{
+    funcdata *fd = NULL;
+
+    if ((fd = find_func(name))) return fd;
+
+    LoadImageSymbol *sym = loader->getSymbol(name);
+    if (!sym)
+        return NULL;
+
+    fd = new funcdata(name.c_str(), sym->address, 0, this);
+
+    add_func(fd);
+
+    return fd;
+}
+
+funcdata*   dobc::add_func(const Address &a)
 {
     char buf[128];
     funcdata *fd = NULL;
@@ -343,6 +370,8 @@ funcdata *dobc::add_func(const Address &a)
         sprintf(buf, "sub_%llx", a.getOffset());
         fd = new funcdata(buf, a, 0, this);
     }
+
+    add_func(fd);
 
     return fd;
 }
@@ -413,10 +442,16 @@ funcdata* test_vmp360_cond_inline(dobc *d, intb addr)
 
 void dobc::plugin_ollvm()
 {
-    for (int i = 0; i < decode_address_list.size(); i++) {
-        funcdata *fd_main = add_func(Address(trans->getDefaultCodeSpace(), decode_address_list[i]));
+    funcdata *fd;
 
-        fd_main->ollvm_deshell();
+    for (int i = 0; i < decode_symbol_list.size(); i++) {
+        if ((fd = add_func(decode_symbol_list[i])))
+            fd->ollvm_deshell();
+    }
+
+    for (int i = 0; i < decode_address_list.size(); i++) {
+        if ((fd = add_func(Address(trans->getDefaultCodeSpace(), decode_address_list[i]))))
+            fd->ollvm_deshell();
     }
 
     loader->saveFile(out_dir + out_filename);
@@ -5363,7 +5398,7 @@ bool        funcdata::process_instruction(const Address &curaddr, bool &startbas
         emitter.exit_itblock();
     }
 
-    if (flags.dump_inst)
+    //if (flags.dump_inst)
         d->trans->printAssembly(assem, curaddr);
 
     assem.set_mnem(1);
@@ -7916,8 +7951,7 @@ void dobc::init(DocumentStorage &store)
         if (noreturn_func_tab.find(strip__(sym->name)) != noreturn_func_tab.end())
             fd->set_noreturn(1);
 
-        addrtab[sym->address] = fd;
-        nametab[sym->name] = fd;
+        add_func(fd);
     }
 }
 

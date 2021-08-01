@@ -12,6 +12,7 @@ static char help[] = {
     "       -t                      ollvm | 360freevmp, default is ollvm\r\n"
     "       -sd                     dump new so to so directory or current directory\r\n"
     "       -da [hex address, ]     decode address list\r\n"
+    "       -ds [symbol name, ]     decode symbol list\r\n"
     "       --ghidra                ghidra config directory\r\n"
     "\n\n"
     "       -debug.cfg              dump static trace cfg\r\n"
@@ -51,6 +52,12 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "-da")) {
             while (((i+ 1) < argc) && argv[i + 1][0] != '-') {
                 d.decode_address_list.push_back(strtoul(argv[i + 1], NULL, 16));
+                i++;
+            }
+        }
+        else if (!strcmp(argv[i], "-ds")) {
+            while (((i+ 1) < argc) && argv[i + 1][0] != '-') {
+                d.decode_symbol_list.push_back(argv[i + 1]);
                 i++;
             }
         }
