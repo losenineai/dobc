@@ -48,7 +48,7 @@ void ElfLoadImage::init_plt()
 
     int i, imm;
     int count = relplt->sh_size / relplt->sh_entsize;
-    char buf[128];
+    char buf[512];
 
     for (i = 0; i < count; i++) {
         rel = ((ElfW(Rel) *)(filedata + relplt->sh_offset)) + i;
