@@ -719,6 +719,7 @@ struct flowblock {
         /* 
         1. 在cbranch中被分析为不可达，确认为死 */
         unsigned f_dead : 1; 
+        unsigned f_no_cmp : 1;
 
         unsigned f_switch_case : 1;
         unsigned f_switch_default : 1;
@@ -1783,6 +1784,17 @@ public:
 #define F_OPEN_COPY             0x01
 #define F_OPEN_PHI              0x02
     int         ollvm_detect_propchain3(flowblock *&from, blockedge *&outedge);
+
+    /*
+
+    @return     0           success
+                -1          no cmp node
+                -2          need heritage again
+    */
+#define ERR_OK                      0
+#define ERR_NOT_DETECT_PROPCHAIN    -1
+#define ERR_NEED_REDETECT           -2
+#define ERR_NO_CMP_PCODE            -3
     int         ollvm_detect_propchain4(ollvmhead *oh, flowblock *&from, blockedge *&outedge, uint32_t flags);
 
     void        ollvm_collect_safezone(pcodeop *phi, pcodeop_set &visit, pcodeop_set &pos_set, int depth);

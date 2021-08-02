@@ -74,7 +74,7 @@ int main(int argc, char **argv)
         }
     }
 
-    if (d.ghidra.empty() || d.filename.empty() || d.decode_address_list.empty()) {
+    if (d.ghidra.empty() || d.filename.empty() || (d.decode_address_list.empty() && d.decode_symbol_list.empty())) {
         puts(help);
         return -1;
     }

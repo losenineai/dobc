@@ -62,8 +62,7 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
 #define TEST_STATIC_TRACE       1
 
     do {
-        printf("\t");
-        print_info("process flowblock sub_%llx", cur->get_start().getOffset());
+        print_info("\tprocess flowblock sub_%llx", cur->get_start().getOffset());
 
         it = cur->ops.begin();
         inslot = cur->get_in_index(prev);
@@ -1103,7 +1102,7 @@ int         funcdata::ollvm_detect_propchains2(flowblock *&from, blockedge *&out
     for (i = 0; i < ollvm.heads.size(); i++) {
         oh = ollvm.heads[i];
 
-        if (oh->h->flags.f_dead) continue;
+        if (oh->h->flags.f_dead || oh->h->flags.f_no_cmp) continue;
 
         ret = ollvm_detect_propchain4(oh, from, outedge, 0);
         if (!ret)
@@ -1114,10 +1113,10 @@ int         funcdata::ollvm_detect_propchains2(flowblock *&from, blockedge *&out
     for (i = 0; i < ollvm.heads.size(); i++) {
         oh = ollvm.heads[i];
 
-        if (oh->h->flags.f_dead) continue;
+        if (oh->h->flags.f_dead || oh->h->flags.f_no_cmp) continue;
 
         /* lcs 或者拷贝传递 */
-        while ((ret = ollvm_detect_propchain4(oh, from, outedge, F_OPEN_COPY)) > 0);
+        while ((ret = ollvm_detect_propchain4(oh, from, outedge, F_OPEN_COPY)) == ERR_NEED_REDETECT);
 
         if (ret == 0)
             goto success_label;
@@ -1180,15 +1179,30 @@ int         funcdata::ollvm_detect_propchain4(ollvmhead *oh, flowblock *&from, b
     varnode *vn;
     blockedge *e;
     vector<blockedge *> invec;
+    /*
+    当我们搜索一个混淆的循环头(vmhead)时，一般我们都假定:
+
+    1. vmhead中有一个cmp指令，cmp指令中的其中一个是主状态寄存器
+    2. 主状态reg在vmhead中都有一个对应的def指令，这个指令一般都是 phi
+
+    但是有一些特殊情况下是没有def指令的。这个一般是最后的快要脱出vmhead的阶段
+    */
     if (!p) {
-        if ((p = h->get_cbranch_sub_from_cmp())
-            && (p1 = p->get_in(0)->def)
-            && (p1->opcode == CPUI_MULTIEQUAL)
-            && p1->all_inrefs_is_constant()
-            && (pre = p1->parent) && h->is_in(pre)) {
+        if ((p = h->get_cbranch_sub_from_cmp())) {
+            /* libmakeurl:sub_15521 */
+            if ((p1 = p->get_in(0)->def)
+                && (p1->opcode == CPUI_MULTIEQUAL)
+                && p1->all_inrefs_is_constant()
+                && (pre = p1->parent) && h->is_in(pre)) {
+            }
+            else {
+                throw LowlevelError("not expected error");
+            }
         }
-        else
-            return -1;
+        else {
+            h->flags.f_no_cmp = 1;
+            return ERR_NO_CMP_PCODE;
+        }
     }
     else if (p->opcode != CPUI_MULTIEQUAL)
         return -1;
@@ -1231,16 +1245,17 @@ int         funcdata::ollvm_detect_propchain4(ollvmhead *oh, flowblock *&from, b
                     heritage_clear();
                     heritage();
                     dump_cfg(name, "lcts", 1);
-                    return 2;
+                    return ERR_NEED_REDETECT;
                 }
             }
 
+            /* 这里的规则有点问题，实际上算是跑各种corner case了 */
             if ((p1->opcode == CPUI_MULTIEQUAL) && p1->all_inrefs_is_top() && p1->parent->is_empty(1)) {
                 remove_empty_block(p1->parent);
                 structure_reset();
                 heritage_clear();
                 heritage();
-                return 2;
+                return ERR_NEED_REDETECT;
             }
 
             flowblock *bb = p1->parent;
@@ -1271,12 +1286,12 @@ cond_copy_label:
                 heritage_clear();
                 heritage();
                 dump_cfg(name, "cond_copy_expand", 1);
-                return 1;
+                return ERR_NEED_REDETECT;
             }
         }
     }
 
-    return -1;
+    return ERR_NOT_DETECT_PROPCHAIN;
 }
 
 void        funcdata::ollvm_collect_safezone(pcodeop *phi, pcodeop_set &visit, pcodeop_set &safeset, int depth)
