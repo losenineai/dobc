@@ -865,6 +865,16 @@ void _mov_reg(int rd, int rm, int s)
         o(0xea4f0000 | (s << 20) | (rd << 8) | rm);
 }
 
+/* A8.8.116 */
+void _mvn_reg(int rd, int rm, SRType shtype, int shift, int setflags)
+{
+    if (setflags && (rd < 8) && (rm < 8) && (shtype == SRType_LSL) && (shift == 0))
+        o(0x43c0 | (rm << 3) | rd);
+    else
+        o(0xea6f0000 | (setflags << 20) | (rd << 8) | rm | (shtype << 4) | imm_map(shift, 3, 2, 12) | imm_map(shift, 2, 0, 6));
+}
+
+
 /* A8.8.101 */
 void _mls(int rd, int rn, int rm, int ra)
 {
@@ -1523,6 +1533,10 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 if (isreg(p1->output)) {
                     it = retrieve_orig_inst(b, it, 1);
                 }
+            }
+            else if (isreg(p->output)) {
+                _mvn_reg(reg2i(poa(p)), reg2i(pi0a(p)), SRType_LSL, 0, follow_by_set_cpsr(p1));
+                it = advance_to_inst_end(it);
             }
             break;
 
