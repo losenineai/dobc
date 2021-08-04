@@ -49,6 +49,15 @@
             i >>= 8; \
     } while (0)
 
+enum SRType {
+    SRType_LSL,
+    SRType_LSR,
+    SRType_ASR,
+    SRType_ROR
+};
+
+#define SR4_IMM_MAP5(sr,imm)                 ((sr << 4) | imm_map(imm, 2, 3, 12) | imm_map(imm, 0, 2, 6))
+
 uint32_t bitcount(uint32_t x)
 {
     x = (x & 0x55555555) + ((x >> 1) & 0x55555555);
@@ -455,22 +464,15 @@ void _teq_reg(int rn, int rm, int shift)
 }
 
 /* A8.8.123 */
-void _or_reg(int rd, int rn, int rm, int setflags)
+void _orr_reg(int rd, int rn, int rm, SRType sht, int shval, int setflags)
 {
-    if (setflags && (rd == rn) && rm < 8 && rn < 8)
+    if (setflags && (rd == rn) && rm < 8 && rn < 8 && (sht == SRType_LSL) && !shval)
         o(0x4300 | (rm << 3) | rd);
     else if (rd != 13 && rd != 15 && rn != 13 && rm != 13 && rm != 15) 
-        o(0xea400000 | (rn << 16) | (rd << 8) | rm | (setflags << 20));
+        o(0xea400000 | (rn << 16) | (rd << 8) | rm | (setflags << 20) | SR4_IMM_MAP5(sht,shval));
 	else
 		vm_error ("internal error: th_orr_reg invalid parameters\n");
 }
-
-enum SRType {
-    SRType_LSL,
-    SRType_LSR,
-    SRType_ASR,
-    SRType_ROR
-};
 
 void _adr(int rd, int imm)
 {
@@ -521,7 +523,7 @@ void _and_reg(int rd, int rn, int rm, enum SRType sh_type, int shift, int setfla
     if ((rd == rn) && (rd < 8) && (rm < 8) && setflags && (sh_type == SRType_LSL) && !shift) // T1
         o(0x4000 | (rm << 3) | rd);
     else
-        o(0xea000000 | (setflags << 20) | (rn << 16) | (rd << 8) | rm | (sh_type << 4) | imm_map(shift, 3, 2, 12) | imm_map(shift, 2, 0, 6));
+        o(0xea000000 | (setflags << 20) | (rn << 16) | (rd << 8) | rm | SR4_IMM_MAP5(sh_type, shift));
 }
 
 int thumb_gen::_add_sp_imm(int rd, int rn, uint32_t imm)
@@ -1587,7 +1589,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
 
         case CPUI_INT_OR:
             if (isreg(p->output)) {
-                _or_reg(reg2i(poa(p)), reg2i(pi0a(p)), reg2i(pi1a(p)), follow_by_set_cpsr(p1));
+                _orr_reg(reg2i(poa(p)), reg2i(pi0a(p)), reg2i(pi1a(p)), SRType_LSL, 0, follow_by_set_cpsr(p1));
                 it = advance_to_inst_end(it);
             }
             break;
@@ -1621,6 +1623,9 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 else if (isreg(p1->output)) {
                     if (p1->opcode == CPUI_INT_AND) {
                         _and_reg(reg2i(poa(p1)), reg2i(pi0a(p1)), reg2i(pi0a(p)), SRType_LSL, pi1(p)->get_val(), follow_by_set_cpsr(p2));
+                    }
+                    else if (p1->opcode == CPUI_INT_OR) {
+                        _orr_reg(reg2i(poa(p1)), reg2i(pi0a(p1)), reg2i(pi0a(p)), SRType_LSL, pi1(p)->get_val(), follow_by_set_cpsr(p2));
                     }
                 }
             }
