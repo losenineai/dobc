@@ -1173,10 +1173,9 @@ int         funcdata::ollvm_detect_propchain4(ollvmhead *oh, flowblock *&from, b
 {
     if (oh->h->flags.f_dead) return -1;
 
-    flowblock *h = oh->h, *pre, *cur, *h1;
-    int i,  top, dfnum;
+    flowblock *h = oh->h, *pre, *cur;
+    int i;
     pcodeop *p = h->find_pcode_def(oh->st1), *p1, *p2;
-    varnode *vn;
     blockedge *e;
     vector<blockedge *> invec;
     /*
@@ -1185,16 +1184,37 @@ int         funcdata::ollvm_detect_propchain4(ollvmhead *oh, flowblock *&from, b
     1. vmhead中有一个cmp指令，cmp指令中的其中一个是主状态寄存器
     2. 主状态reg在vmhead中都有一个对应的def指令，这个指令一般都是 phi
 
-    但是有一些特殊情况下是没有def指令的。这个一般是最后的快要脱出vmhead的阶段
+    但是有一些特殊情况下是没有def指令的。这个一般是最后的快要脱出vmhead的阶段。
+
+    这个时候我们先处理其中一种情况:
+
+    1. 获取vmhead中的cmp
+    2. 直接取了第一个操作数寄存器（这里有问题，理论上应该取第一个状态寄存器，可能是第一个，也可能是第2个）
+    3. 取这个操作数寄存器的def
+    4. 判断这个def是否是phi
+    5. 判断这个phi的所有输入是否是常量
     */
     if (!p) {
         if ((p = h->get_cbranch_sub_from_cmp())) {
+            p1 = p->get_in(0)->def;
             /* libmakeurl:sub_15521 */
-            if ((p1 = p->get_in(0)->def)
-                && (p1->opcode == CPUI_MULTIEQUAL)
-                && p1->all_inrefs_is_constant()
-                && (pre = p1->parent) && h->is_in(pre)) {
+#if 0
+            if ((p1->opcode == CPUI_MULTIEQUAL)
+                //&& p1->all_inrefs_is_constant()
+                && h->is_in((pre = p1->parent))) {
+                if (b_is_flag(flags, F_OPEN_COPY))
+                    return ollvm_on_unconst_def(p1, pre, h);
+                else
+                    return ERR_NOT_DETECT_PROPCHAIN;
             }
+#else
+            if (h->is_in((pre = p1->parent))) {
+                if (b_is_flag(flags, F_OPEN_COPY))
+                    return ollvm_on_unconst_def(p1, pre, h);
+                else
+                    return ERR_NOT_DETECT_PROPCHAIN;
+            }
+#endif
             else {
                 throw LowlevelError("not expected error");
             }
@@ -1204,9 +1224,11 @@ int         funcdata::ollvm_detect_propchain4(ollvmhead *oh, flowblock *&from, b
             return ERR_NO_CMP_PCODE;
         }
     }
+    /* FIXME:这个分支我忘记是个什么情况了 */
     else if (p->opcode != CPUI_MULTIEQUAL)
         return -1;
 
+    /* 把所有的入节点按照dfnum进行排序 */
     h->get_inlist_on_dfsort(invec);
 
     /* 调试用 */
@@ -1219,76 +1241,84 @@ int         funcdata::ollvm_detect_propchain4(ollvmhead *oh, flowblock *&from, b
         return 0;
     }
 
+    if (!b_is_flag(flags, F_OPEN_COPY))
+        return ERR_NOT_DETECT_PROPCHAIN;
+
     p1 = p;
     for (i = 0; i < invec.size(); i++) {
         e = invec[i];
         pre = e->point;
         cur = h;
-        vn = p->get_in(e->index);
-
-        p1 = vn->def;
-        h1 = p1->parent;
+        p1 = p->get_in(e->index)->def;
 
         /* 饶了一圈形成回环 */
         if ((p2 = p1->output->search_copy_chain(CPUI_MULTIEQUAL, h)) && (p2->parent == h))
             continue;
 
-        if (!p1->flags.mark_cond_copy_prop && b_is_flag(flags,F_OPEN_COPY)) {
-            vector<varnode *> defs;
+        int ret = ollvm_on_unconst_def(p1, pre, cur);
+        if (ret == ERR_NEED_REDETECT)
+            return ret;
+    }
 
-            if ((p1->opcode == CPUI_LOAD) && !p1->have_virtualnode())
-                throw LowlevelError("alias analysis error");
+    return ERR_NOT_DETECT_PROPCHAIN;
+}
 
-            if (p1->opcode == CPUI_COPY) {
-                if (ollvm_combine_lcts(p1)) {
-                    printf("ollvm detect propchains do lcts\n");
-                    heritage_clear();
-                    heritage();
-                    dump_cfg(name, "lcts", 1);
-                    return ERR_NEED_REDETECT;
-                }
-            }
+int         funcdata::ollvm_on_unconst_def(pcodeop *p1, flowblock *pre, flowblock *cur)
+{
+    if (p1->flags.mark_cond_copy_prop) return  ERR_NOT_DETECT_PROPCHAIN;
 
-            /* 这里的规则有点问题，实际上算是跑各种corner case了 */
-            if ((p1->opcode == CPUI_MULTIEQUAL) && p1->all_inrefs_is_top() && p1->parent->is_empty(1)) {
-                remove_empty_block(p1->parent);
-                structure_reset();
-                heritage_clear();
-                heritage();
-                return ERR_NEED_REDETECT;
-            }
+    pcodeop *p2;
+    vector<varnode *> defs;
+    int top, dfnum;
 
-            flowblock *bb = p1->parent;
-            if ((bb->out.size() == 1) && h->is_adjacent(bb)) {
-                varnode *vn1 = p1->output;
+    if (p1->opcode == CPUI_COPY) {
+        if (ollvm_combine_lcts(p1)) {
+            printf("ollvm detect propchains do lcts\n");
+            heritage_clear();
+            heritage();
+            dump_cfg(name, "lcts", 1);
+            return ERR_NEED_REDETECT;
+        }
+    }
 
-                if (p1->opcode != CPUI_MULTIEQUAL) {
-                    p2 = p1->output->search_copy_chain(CPUI_MULTIEQUAL, bb);
+    /* 这里的规则有点问题，实际上算是跑各种corner case了 */
+    if ((p1->opcode == CPUI_MULTIEQUAL) && p1->all_inrefs_is_top() && p1->parent->is_empty(1)) {
+        remove_empty_block(p1->parent);
+        structure_reset();
+        heritage_clear();
+        heritage();
+        return ERR_NEED_REDETECT;
+    }
 
-                    if (p2->opcode != CPUI_MULTIEQUAL)
-                        goto cond_copy_label;
+    flowblock *bb = p1->parent;
+    if ((bb->out.size() == 1) && cur->is_adjacent(bb)) {
+        varnode *vn1 = p1->output;
 
-                    p1 = p2;
-                }
+        if (p1->opcode != CPUI_MULTIEQUAL) {
+            p2 = p1->output->search_copy_chain(CPUI_MULTIEQUAL, bb);
 
-                p1 = p1->get_in(0)->def;
-                pre = p1->parent;
-                cur = bb;
-            }
+            if (p2->opcode != CPUI_MULTIEQUAL)
+                goto cond_copy_label;
+
+            p1 = p2;
+        }
+
+        p1 = p1->get_in(0)->def;
+        pre = p1->parent;
+        cur = bb;
+    }
 
 cond_copy_label:
-            top = collect_all_const_defs(p1, defs, dfnum);
-            p1->flags.mark_cond_copy_prop = 1;
+    top = collect_all_const_defs(p1, defs, dfnum);
+    p1->flags.mark_cond_copy_prop = 1;
 
-            if (defs.size() > 1) {
-                cond_copy_expand(p1, pre, pre->get_out_index(cur));
-                printf("ollvm detect propchains do copy_expand\n");
-                heritage_clear();
-                heritage();
-                dump_cfg(name, "cond_copy_expand", 1);
-                return ERR_NEED_REDETECT;
-            }
-        }
+    if (defs.size() > 1) {
+        cond_copy_expand(p1, pre, pre->get_out_index(cur));
+        printf("ollvm detect propchains do copy_expand\n");
+        heritage_clear();
+        heritage();
+        dump_cfg(name, "cond_copy_expand", 1);
+        return ERR_NEED_REDETECT;
     }
 
     return ERR_NOT_DETECT_PROPCHAIN;
@@ -1330,7 +1360,7 @@ void        funcdata::ollvm_collect_safezone(pcodeop *phi, pcodeop_set &visit, p
     }
 }
 
-bool        funcdata::ollvm_find_first_const_def(pcodeop *p, int outslot, flowblock *&from, blockedge *&outedge, pcodeop_set visit)
+bool        funcdata::ollvm_find_first_const_def(pcodeop *p, int outslot, flowblock *&from, blockedge *&outedge, pcodeop_set &visit)
 {
     pcodeop *op;
     vector<blockedge *> invec;

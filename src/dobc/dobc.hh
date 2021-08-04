@@ -1805,7 +1805,9 @@ public:
     @return     true    找到
                 false   未找到
     */
-    bool        ollvm_find_first_const_def(pcodeop *p, int outslot, flowblock *&from, blockedge *&edge, pcodeop_set visit);
+    bool        ollvm_find_first_const_def(pcodeop *p, int outslot, flowblock *&from, blockedge *&edge, pcodeop_set &visit);
+
+    int         ollvm_on_unconst_def(pcodeop *p1, flowblock *pre, flowblock *cur);
 
     int         ollvm_detect_propchains2(flowblock *&from, blockedge *&outedge);
     int         ollvm_detect_fsm2(ollvmhead *oh);
