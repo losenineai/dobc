@@ -28,6 +28,7 @@ typedef list<pcodeop *>::iterator pit;
 #define ZR          17
 #define CY          18
 #define OV          19
+#define BITSET_CPSR ((1 << NG) | (1 << ZR) | (1 << CY) | (1 << OV))
 
 #define COND_EQ         0
 #define COND_NE         1
@@ -216,7 +217,7 @@ public:
     /* 收集p指向的instruction中所访问的ldr位置和大小，后面坐重定位用  */
     int get_load_addr_size(pcodeop *p, intb &addr, int &size);
     int follow_by_set_cpsr(pcodeop *p1);
-    void _mov_imm(int rd, uint32_t imm, int setflags);
+    void _mov_imm(int rd, uint32_t imm, int setflags, int cpsr_dead);
 };
 
 #endif

@@ -19,6 +19,8 @@
 #define isreg(vn)           d->is_greg(vn->get_addr())
 #define as(st)              d->trans->getRegister(st).getAddr()
 
+#define pcode_cpsr_out_dead(p)      !(p->live_out[NG] | p->live_out[ZR] | p->live_out[CY]| p->live_out[OV])
+
 #define ANDNEQ(r1, r2)      ((r1 & ~r2) == 0)
 #define ANDEQ(r1, r2)      ((r1 & r2) == r2)
 #define in_imm3(a)          ANDNEQ(a, 0x07)
@@ -640,7 +642,7 @@ void thumb_gen::_cmp_imm(int rn, uint32_t imm)
         o(0xf1b00f00 | x | (rn << 16));
     else {
         rm = regalloc(curp);
-        _mov_imm(rm, imm, 0);
+        _mov_imm(rm, imm, 0, 0);
         _cmp_reg(rn, rm);
     }
 }
@@ -839,12 +841,12 @@ _mov_imm一般的情况，就是参照arm_arch_ref进行对照即可，但是有
 3. 填充数的逻辑是 T1 -> T3 -> T2 -> ldr搜索 -> 2指令填充，看代码即可
 4. ldr搜索是指，搜索原先的代码填入的一些DATA，假如没有被擦，那么尝试用ldr访问
 */
-void thumb_gen::_mov_imm(int rd, uint32_t v, int setflags)
+void thumb_gen::_mov_imm(int rd, uint32_t v, int setflags, int out_cpsr_dead)
 {
     const_item *item;
 
     /* A8.8.102 */
-    if (setflags && in_imm8(v) && in_imm3(rd)) 
+    if ((setflags || out_cpsr_dead) && in_imm8(v) && in_imm3(rd)) 
         o(0x2000 | (rd << 8) | v); // T1
     else if (!setflags && (v < 65536)) { // T3
         o(stuff_constw(0xf2400000 | (rd << 8), v, 16));
@@ -1079,7 +1081,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     _bl_x_imm(0, imm);
                 }
                 else if (pi0(p)->is_constant()) {
-                    _mov_imm(LR, pi0(p)->get_val(), 0);
+                    _mov_imm(LR, pi0(p)->get_val(), 0, 0);
                 }
                 else if (isreg(pi0(p))) {
                     _mov_reg(reg2i(poa(p)), reg2i(pi0a(p)), follow_by_set_cpsr(p));
@@ -1088,12 +1090,12 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
             }
             else if (pi0(p)->is_hard_constant()) {
                 if (isreg(p->output))
-                    _mov_imm(reg2i(poa(p)), pi0(p)->get_val(), 0);
+                    _mov_imm(reg2i(poa(p)), pi0(p)->get_val(), 0, pcode_cpsr_out_dead(p));
                 else if (istemp(p->output)){
                     if (isreg(p1->output)) {
                         switch (p1->opcode) {
                         case CPUI_COPY:
-                            _mov_imm(reg2i(poa(p1)), pi0(p)->get_val(), 0);
+                            _mov_imm(reg2i(poa(p1)), pi0(p)->get_val(), 0, 0);
                             advance(it, 1);
                             break;
 
@@ -1104,7 +1106,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                             /*
                             pc - (ind) - 4
                             */
-                            _mov_imm(rn, imm - (ind + 4 * (stuff_const(0, imm) ? 1:2)) - 4, 0);
+                            _mov_imm(rn, imm - (ind + 4 * (stuff_const(0, imm) ? 1:2)) - 4, 0, 0);
 
                             _add_reg(rn, rn, PC, SRType_LSL, 0);
                             _ldr_imm(rn, rn, 0, 0);
@@ -1158,7 +1160,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     if (poa(p) == as("tmpZR") && poa(p1) == azr) {
                         int rd = regalloc(p);
                         imm = pi1(p)->get_val();
-                        _mov_imm(rd, !imm, 1);
+                        _mov_imm(rd, !imm, 1, 0);
                     }
 
                     it = advance_to_inst_end(it);
@@ -1204,14 +1206,14 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
             FIXME:要从代码段加载的数据才是有意义的
             */
             else if (isreg(p->output) && pi0(p)->in_ram() && p->output->is_constant()) {
-                _mov_imm(reg2i(poa(p)),  p->output->get_val(), 0);
+                _mov_imm(reg2i(poa(p)),  p->output->get_val(), 0, 0);
             }
             break;
 
         case CPUI_LOAD:
             if (isreg(p->output) && pi1(p)->is_constant()) {
                 rd = reg2i(poa(p));
-                _mov_imm(rd, pi1(p)->get_val(), 0);
+                _mov_imm(rd, pi1(p)->get_val(), 0, 0);
                 o(0xf8d00000 | (rd << 12) | (rd << 16) | 0);
             }
             break;
@@ -1386,7 +1388,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                             if (pi2(p2)->size == 1) {
                                 if (!d->is_greg(pi0a(p1))) {
                                     rt = regalloc(p1);
-                                    _mov_imm(rt, pi0(p1)->get_val(), 0);
+                                    _mov_imm(rt, pi0(p1)->get_val(), 0, 0);
                                 }
                                 else
                                     rt = d->reg2i(pi0a(p1));
@@ -1505,7 +1507,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     if (pi0(p)->flags.from_pc && isreg(p1->output)) {
                         rd = reg2i(poa(p1));
                         imm = p1->output->get_val();
-                        _mov_imm(rd, imm - (ind + 4 * (stuff_const(0, imm) ? 1:2)) - 4, 0);
+                        _mov_imm(rd, imm - (ind + 4 * (stuff_const(0, imm) ? 1:2)) - 4, 0, 0);
                         _add_reg(rd, rd, PC, SRType_LSL, 0);
                     }
                     else if (istemp(p1->output) && isreg(p2->output) && (p2->opcode == CPUI_LOAD)) {
@@ -1759,7 +1761,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
             rm = regalloc(p);
 
             _ldr_imm(rn, SP, pi0(p1)->get_sp_offset() - pi0(p)->get_val(), 0);
-            _mov_imm(rm, pi1(p1)->get_val(), 0);
+            _mov_imm(rm, pi1(p1)->get_val(), 0, 0);
             _cmp_reg(rn, rm);
             it = advance_to_inst_end(it);
             break;
