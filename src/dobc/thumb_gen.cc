@@ -773,9 +773,10 @@ void _rsb_imm(int rd, int imm, int rn)
         o(0xf1c00000 | x | (rn << 16) | (rd << 8));
 }
 
-void _rsb_reg(int rd, int rn, int rm, SRType shtype, int shift)
+/* A8.8.153 */
+void _rsb_reg(int rd, int rn, int rm, SRType shtype, int shift, int setflags)
 {
-    o(0xebc00000 | (rn << 16) | (rd << 8) | rm | (shtype << 4) | imm_map(shift, 2, 3, 12) | imm_map(shift, 0, 2, 6));
+    o(0xebc00000 | (rn << 16) | (rd << 8) | rm | (setflags << 20)| SR4_IMM_MAP5(shtype, shift));
 }
 
 void _str_reg(int rt, int rn, int rm, int lsl)
@@ -1131,6 +1132,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                         case CPUI_INT_XOR:
                         case CPUI_INT_AND:
                         case CPUI_INT_OR:
+                        case CPUI_INT_RIGHT:
                             it = retrieve_orig_inst(b, it, 1);
                             break;
                         }
@@ -1623,6 +1625,8 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                         else if (p2->opcode == CPUI_STORE) {
                             _str_reg(reg2i(pi2a(p2)), reg2i(pi0a(p1)), reg2i(pi0a(p)), pi1(p)->get_val());
                         }
+                        else if (p2->opcode == CPUI_SUBPIECE)
+                            it = retrieve_orig_inst(b, it, 1);
                     }
                     else if (p1->opcode == CPUI_COPY) {
                         if (p2->opcode == CPUI_INT_ADD) {
@@ -1634,7 +1638,6 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     }
                     else if (p1->opcode == CPUI_INT_NEGATE)
                         it = retrieve_orig_inst(b, it, 1);
-
                 }
                 else if (isreg(p1->output)) {
                     if (p1->opcode == CPUI_INT_AND) {
@@ -1670,6 +1673,8 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 else if (isreg(p1->output)) {
                     if (p1->opcode == CPUI_INT_AND)
                         _and_reg(reg2i(poa(p1)), reg2i(pi0a(p1)), reg2i(pi0a(p)), SRType_LSR, pi1(p)->get_val(), follow_by_set_cpsr(p2));
+                    else if (p1->opcode == CPUI_INT_SUB)
+                        _rsb_reg(reg2i(poa(p1)), reg2i(pi1a(p1)), reg2i(pi0a(p)), SRType_LSR, pi1(p)->get_val(), follow_by_set_cpsr(p2));
                 }
 
                 it = advance_to_inst_end(it);
