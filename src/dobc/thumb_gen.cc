@@ -614,6 +614,21 @@ void _cmp_reg(int rn, int rm)
         o(0x4500 | (rm << 3) | (rn & 7) | ((rn >> 3) << 7));
 }
 
+/* A8.8.46 */
+void _eor_imm(int rd, int rn, int imm, int setflags)
+{
+    o(0xf0800000 | (setflags << 20) | (rn << 16) | (rd << 8) | thumb_gen::stuff_const(0, imm));
+}
+
+/* A8.8.47 */
+void _eor_reg(int rd, int rn, int rm, SRType shtype, int shval, int setflags)
+{
+    if (setflags && (rd == rn) && (rd < 8) && (rn < 8) && (shtype == SRType_LSL) && !shval)
+        o(0x4040 | (rm << 3) | rd);
+    else
+        o(0xea800000 | (setflags << 20) | (rn << 16) | (rd << 8) | rm | SR4_IMM_MAP5(shtype, shval));
+}
+
 
 void thumb_gen::_cmp_imm(int rn, uint32_t imm)
 {
@@ -1113,6 +1128,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                             it = advance_to_inst_end(it);
                             break;
 
+                        case CPUI_INT_XOR:
                         case CPUI_INT_AND:
                         case CPUI_INT_OR:
                             it = retrieve_orig_inst(b, it, 1);
