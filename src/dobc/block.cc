@@ -60,6 +60,11 @@ void        blockgraph::collect_sideeffect_ops()
     }
 }
 
+flowblock*  blockgraph::find_post_dom(flowblock *f)
+{
+    return NULL;
+}
+
 void        blockgraph::compute_local_live_sets(void)
 {
     int i, j, r;

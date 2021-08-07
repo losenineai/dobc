@@ -1198,26 +1198,29 @@ int         funcdata::ollvm_detect_propchain4(ollvmhead *oh, flowblock *&from, b
         if ((p = h->get_cbranch_sub_from_cmp())) {
             p1 = p->get_in(0)->def;
             /* libmakeurl:sub_15521 */
-#if 0
-            if ((p1->opcode == CPUI_MULTIEQUAL)
-                //&& p1->all_inrefs_is_constant()
-                && h->is_in((pre = p1->parent))) {
-                if (b_is_flag(flags, F_OPEN_COPY))
-                    return ollvm_on_unconst_def(p1, pre, h);
-                else
-                    return ERR_NOT_DETECT_PROPCHAIN;
-            }
-#else
+#if 1
             if (h->is_in((pre = p1->parent))) {
                 if (b_is_flag(flags, F_OPEN_COPY))
                     return ollvm_on_unconst_def(p1, pre, h);
                 else
                     return ERR_NOT_DETECT_PROPCHAIN;
             }
-#endif
             else {
                 throw LowlevelError("not expected error");
             }
+#else
+            if (b_is_flag(flags, F_OPEN_COPY)) {
+                if (h->is_in((pre = p1->parent)))
+                    return ollvm_on_unconst_def(p1, pre, h);
+
+                if (h->is_in(h->immed_dom))
+                    return ollvm_on_unconst_def(p1, h->immed_dom, h);
+
+                throw LowlevelError("not expected error");
+            }
+            else
+                return ERR_NOT_DETECT_PROPCHAIN;
+#endif
         }
         else {
             h->flags.f_no_cmp = 1;

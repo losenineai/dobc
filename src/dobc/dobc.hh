@@ -762,6 +762,7 @@ struct flowblock {
 
     blockgraph *parent = NULL;
     flowblock *immed_dom = NULL;
+    flowblock *post_immed_dom = NULL;
     /* 
     1. 标明自己属于哪个loop
     2. 假如自己哪个loop都不属于，就标空
@@ -1125,6 +1126,8 @@ public:
     void        collect_no_cmp_cbranch_block(vector<flowblock *> &blks);
     flowblock*  get_it_end_block(flowblock *b);
     void        collect_sideeffect_ops();
+    flowblock*  find_post_dom(flowblock *f);
+    void        calc_post_dominator();
 };
 
 typedef struct priority_queue   priority_queue;
