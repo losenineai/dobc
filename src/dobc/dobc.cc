@@ -2047,20 +2047,6 @@ int             pcodeop::compute(int inslot, flowblock **branch)
             ) {
             out->set_val(1);
         }
-        /* 
-        rn = ((x * (x - 1)) & 1
-        rn = 0;
-        */
-        else if (in1->is_constant() && (in1->get_val() == 1)
-            && (op = in0->def)
-            && (op->opcode == CPUI_INT_MULT)
-            && (op1 = op->get_in(0)->def)
-            && (op1->opcode == CPUI_INT_SUB)
-            && (op1->get_in(0) == op->get_in(1))
-            && (op1->get_in(1)->is_constant())
-            && (op1->get_in(1)->get_val() == 1)) {
-            out->set_val(0);
-        }
         /* (sp - even) & 0xfffffffe == sp - even
         因为sp一定是偶数，减一个偶数，也一定还是偶数，所以他和 0xfffffffe 相与值不变
         */
@@ -2074,6 +2060,36 @@ int             pcodeop::compute(int inslot, flowblock **branch)
         /* 相与时，任意一个数为0，则为0 */
         else if ((in0->is_constant() && (in0->get_val() == 0)) || (in1->is_constant() && (in1->get_val() == 0))) {
             out->set_val(0);
+        }
+        else if ((op = in0->def)
+            && (op->opcode == CPUI_INT_MULT)
+            && (op1 = op->get_in(0)->def)
+            && (op1->opcode == CPUI_INT_SUB)
+            && (op1->get_in(0) == op->get_in(1))
+            && (op1->get_in(1)->is_constant())
+            && (op1->get_in(1)->get_val() == 1)) 
+        {
+#define VAL_MASK(v,m)      (v & (((uintb)1 << (m * 8)) - 1))
+            /* 
+            rn = ((x * (x - 1)) & 1
+            rn = 0;
+            */
+            if (in1->is_constant() && in1->get_val() == 1) {
+                out->set_val(0);
+            }
+            /*
+            rn = (x * (x - 1)) & ((x * (x - 1)) ^ 0xfffffffe)
+            rn is 0
+            */
+            else if ((op = in1->def) && (op->opcode == CPUI_INT_XOR)
+                && op->get_in(0)->is_constant() 
+                && (VAL_MASK(op->get_in(0)->get_val(), op->get_in(0)->size) == 0xfffffffe)
+                && (op->get_in(1) == in0)) {
+                out->set_val(0);
+            }
+            else {
+                out->set_top();
+            }
         }
         else
             out->type.height = a_top;
