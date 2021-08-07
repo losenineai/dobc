@@ -4,9 +4,10 @@
 /* Sample code to demonstrate how to emulate ARM code */
 
 #include <unicorn/unicorn.h>
-#include <string.h>
 #include "mcore/mcore.h"
 #include "uc_util.h"
+#include "test.h"
+#include "test_base64.h"
 
 int arm_general_regs[16] = {
     UC_ARM_REG_R0,
@@ -27,88 +28,10 @@ int arm_general_regs[16] = {
     UC_ARM_REG_PC
 };
 
-static void dump_regs(uc_engine *uc);
-
 struct base64_test {
     int regs[count_of_array(arm_general_regs)];
     struct uc_runtime *ur;
 };
-
-void base64_test_on_main_exit()
-{
-}
-
-int uc_reg_read_batch2(uc_engine *uc, int *ids, int *vals, int count)
-{
-    int i;
-
-    for (i = 0; i < count; i++) {
-        uc_reg_read(uc, ids[i], vals + i);
-    }
-
-    return 0;
-}
-
-void base64_test_on_exit(struct base64_test *test)
-{
-    struct uc_runtime *ur = test->ur;
-    int r0;
-    char buf[128];
-
-    uc_emu_stop(ur->uc);
-
-    uc_reg_read(ur->uc, UC_ARM_REG_R0,  &r0);
-
-    uc_mem_read(ur->uc, test->regs[1], buf, sizeof (buf));
-
-    if (strcmp(buf, "aGVsbG8sIHdvcmxk")) {
-        printf("base64_encode test failure\n");
-    }
-    else {
-        printf("base64_encode test success\n");
-    }
-}
-
-int base64_test_init(struct base64_test *test, struct uc_runtime *ur)
-{
-    int sp, r0, r1;
-    uc_engine *uc = ur->uc;
-    struct uc_hook_func *f;
-
-    test->ur = ur;
-
-    sp = (int)ur_stack_end(ur) + 1;
-    uc_reg_write(uc, UC_ARM_REG_SP, &sp);
-
-    r0 = ur_string32(ur, "hello, world");
-    uc_reg_write(uc, UC_ARM_REG_R0, &r0);
-
-    r1 = (int)ur_malloc(ur, 100);
-    uc_reg_write(uc, UC_ARM_REG_R1, &r1);
-
-    f = ur_alloc_func(ur, "main_exit", base64_test_on_exit, test);
-    uc_reg_write(uc, UC_ARM_REG_LR, &f->address);
-
-    uc_reg_read_batch2(ur->uc, arm_general_regs, test->regs, count_of_array(test->regs));
-
-    dump_regs(uc);
-
-    printf("start run====================================");
-
-    return 0;
-}
-
-static void dump_regs(uc_engine *uc)
-{
-    int regs[16];
-
-    uc_reg_read_batch2(uc, arm_general_regs, regs, 16);
-
-    printf("\tr0=%08x, r1=%08x, r2=%08x,   r3=%08x,  r4=%08x, r5=%08x, r6=%08x, r7=%08x\n"
-           "\tr8=%08x, r9=%08x, r10=%08x, r11=%08x, r12=%08x, sp=%08x, lr=%08x, pc=%08x\n",
-        regs[0], regs[1], regs[2], regs[3], regs[4], regs[5], regs[6], regs[7],
-        regs[8], regs[9], regs[10], regs[11], regs[12], regs[13], regs[14], regs[15]);
-}
 
 static void hook_block(uc_engine *uc, uint64_t address, uint32_t size, void *user_data)
 {
@@ -133,7 +56,7 @@ static void hook_code(uc_engine *uc, uint64_t address, uint32_t size, void *user
             printf("%02x ", buf[i]);
         printf("\n");
 
-        dump_regs(uc);
+        test_dump_regs(t);
     }
 
     if ((hook = ur_hook_func_find_by_addr(t, address))) {
@@ -142,14 +65,6 @@ static void hook_code(uc_engine *uc, uint64_t address, uint32_t size, void *user
         }
     }
 }
-
-static void main_exit(struct uc_runtime *ur, void *user_data)
-{
-    uc_emu_stop(ur->uc);
-}
-
-
-#define MEM_MAP_SIZE        (2 * MB)
 
 static void thumb_test_base64(const char *soname)
 {
@@ -169,9 +84,7 @@ static void thumb_test_base64(const char *soname)
     if (!ur)
         return;
 
-    struct base64_test test;
-
-    base64_test_init(&test, ur);
+    test_base64_encode_init(ur);
 
     uc_hook_add(uc, &trace1, UC_HOOK_BLOCK, hook_block, ur, 1, 0);
     uc_hook_add(uc, &trace2, UC_HOOK_CODE, hook_code, ur, ur_text_start(ur), ur_text_end(ur));

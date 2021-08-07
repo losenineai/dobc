@@ -318,3 +318,24 @@ struct uc_hook_func*    ur_alloc_func(uc_runtime_t *t, const char *name, void (*
 
     return f;
 }
+
+void            ur_set_priv_data(uc_runtime_t *r, void *priv)
+{
+    r->priv_data = priv;
+}
+
+void*           ur_get_priv_data(uc_runtime_t *r)
+{
+    return r->priv_data;
+}
+
+int ur_reg_read_batch(uc_runtime_t *r, int *ids, int *vals, int count)
+{
+    int i;
+
+    for (i = 0; i < count; i++) {
+        uc_reg_read(r->uc, ids[i], vals + i);
+    }
+
+    return 0;
+}

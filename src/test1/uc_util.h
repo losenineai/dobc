@@ -79,6 +79,25 @@ struct uc_hook_func {
     void(*cb)(void *user_data);
 };
 
+/* 各平台通用寄存器列表 */
+typedef union ur_gen_regs {
+    struct {
+        int regs[16];
+    } arm;
+
+    struct {
+        int regs[16];
+    } aarch64;
+
+    struct {
+        int regs[8];
+    } x86;
+
+    struct {
+        int regs[8];
+    } x64;
+} ur_gen_regs_t;
+
 /*
 High Addresses ---> .----------------------.
                     |      Environment     |
@@ -154,6 +173,8 @@ typedef struct uc_runtime {
         unsigned int trace_blk : 1;
     } debug;
 
+    void    *priv_data;
+
     char soname[1];
 } uc_runtime_t;
 
@@ -204,6 +225,13 @@ void*           uc_vir2phy(uc_pos_t t);
 struct uc_hook_func*    ur_hook_func_find(uc_runtime_t *r, const char *name);
 struct uc_hook_func*    ur_hook_func_find_by_addr(uc_runtime_t *r, uint64_t addr);
 
+void            ur_set_priv_data(uc_runtime_t *r, void *priv);
+void*           ur_get_priv_data(uc_runtime_t *r);
+
+/* 压通用寄存器 */
+void            ur_push_regs(uc_runtime_t *r);
+void            ur_pop_regs(uc_runtime_t *r);
+
 /*
 分配一个函数
 
@@ -212,6 +240,6 @@ struct uc_hook_func*    ur_hook_func_find_by_addr(uc_runtime_t *r, uint64_t addr
 */
 struct uc_hook_func*    ur_alloc_func(uc_runtime_t *r, const char *name, void (* cb)(void *user_data), void *user_data);
 
-
+int ur_reg_read_batch(uc_runtime_t *r, int *ids, int *vals, int count);
 
 #endif
