@@ -84,7 +84,7 @@ static void thumb_test_base64(const char *soname)
     if (!ur)
         return;
 
-    test_base64_encode_init(ur);
+    test_base64_encode_init1(ur);
 
     uc_hook_add(uc, &trace1, UC_HOOK_BLOCK, hook_block, ur, 1, 0);
     uc_hook_add(uc, &trace2, UC_HOOK_CODE, hook_code, ur, ur_text_start(ur), ur_text_end(ur));
@@ -115,7 +115,6 @@ int main(int argc, char **argv, char **envp)
     }
 #endif
 
-#if 1
     char buf[128];
     if (argc != 2) {
         puts(help);
@@ -124,13 +123,9 @@ int main(int argc, char **argv, char **envp)
 
     //test_thumb2();
 
-    sprintf(buf, "%s/unittests/base64/libs/armeabi-v7a/libbase64.so", argv[1]);
+    //sprintf(buf, "%s/unittests/base64/libs/armeabi-v7a/libbase64.so", argv[1]);
+    sprintf(buf, "%s/unittests/base64/libs/armeabi-v7a/libbase64.so.decode", argv[1]);
     thumb_test_base64(buf);
-#else
-    test_arm();
-    test_thumb();
-    test_thumb_ite();
-#endif
 
     // dynamically free shared library
 #ifdef DYNLOAD
