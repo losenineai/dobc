@@ -11,6 +11,7 @@
 #define strdup _strdup 
 
 #define NOP             0xe1a00000
+#define VAL_MASK(v,m)      (v & (((uintb)1 << (m * 8)) - 1))
 
 #define GEN_SH          \
     "#!/bin/bash\n" \
@@ -2017,6 +2018,26 @@ int             pcodeop::compute(int inslot, flowblock **branch)
             intb v = in0->get_val();
             out->set_val(~v);
         }
+        /* peephole 
+        a = 0 - b
+        c = ~a
+        ==> 
+        a = ~b + 1
+        c = ~a
+        ==>
+        c = b - 1
+        */
+        else if ((op = in0->def) && (op->opcode == CPUI_INT_SUB) 
+            && (_in0 = op->get_in(0))->is_constant()
+            && (_in0->get_val() == 0)
+            && (_in1 = op->get_in(1))->in_liverange(this)) {
+            while (inrefs.size() > 0)
+                fd->op_remove_input(this, 0);
+
+            fd->op_set_opcode(this, CPUI_INT_SUB);
+            fd->op_set_input(this, _in1, 0);
+            fd->op_set_input(this, fd->create_constant_vn(1, output->size), 1);
+        }
         else
             out->type.height = a_top;
         break;
@@ -2087,14 +2108,14 @@ int             pcodeop::compute(int inslot, flowblock **branch)
             out->set_val(0);
         }
         else if ((op = in0->def)
-            && (op->opcode == CPUI_INT_MULT)
+            && ((op->opcode == CPUI_INT_MULT) 
+                || ((op->opcode == CPUI_INT_AND) && (_in1 = op->get_in(1)) && _in1->is_constant() && _in1->get_val() == 0xffffffffffffffff) && (op = op->get_in(0)->def))
             && (op1 = op->get_in(0)->def)
             && (op1->opcode == CPUI_INT_SUB)
             && (op1->get_in(0) == op->get_in(1))
             && (op1->get_in(1)->is_constant())
             && (op1->get_in(1)->get_val() == 1)) 
         {
-#define VAL_MASK(v,m)      (v & (((uintb)1 << (m * 8)) - 1))
             /* 
             rn = ((x * (x - 1)) & 1
             rn = 0;
@@ -2117,7 +2138,7 @@ int             pcodeop::compute(int inslot, flowblock **branch)
             }
         }
         else
-            out->type.height = a_top;
+            out->set_top();
         break;
 
     case CPUI_INT_OR:

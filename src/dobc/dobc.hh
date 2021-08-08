@@ -653,6 +653,7 @@ public:
     假如pos1 == pos2，那返回 pcodeop 2
     */
     pcodeop*        find_same_pos_load(vector<pcodeop *> &store);
+    void            compute_on_and(void);
 };
 
 typedef struct blockedge            blockedge;
