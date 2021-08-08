@@ -896,7 +896,7 @@ add_library(unicorn SHARED ${UNICORN_SRCS})
 
 if(WIN32)
     if(BUILD_SHARED_LIBS)
-        #list(APPEND UNICORN_COMPILE_OPTIONS -DUNICORN_SHARED)
+        list(APPEND UNICORN_COMPILE_OPTIONS -DUNICORN_SHARED)
     endif()
 
     set_target_properties(unicorn PROPERTIES

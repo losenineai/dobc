@@ -780,8 +780,10 @@ struct flowblock {
     */
     flowblock *copymap = NULL;
 
-    /* 这个index是 反后序遍历的索引，用来计算支配节点数的时候需要用到 */
+    /* 这个index是 后序遍历的索引，用来计算支配节点数的时候需要用到 */
     int index = 0;
+    /* 这个index是 把树翻转以后，计算的 post-order index */
+    int rindex = 0;
     int dfnum = 0;
     int numdesc = 1;        // 在 spaning tree中的后代数量，自己也是自己的后代，所以假如正式计算后代数量，自己起始为1
 
@@ -809,6 +811,7 @@ struct flowblock {
         set<varnode *>  livein;
     } memflow;
 
+    flowblock(void);
     flowblock(funcdata *fd);
     ~flowblock();
 
@@ -1036,6 +1039,8 @@ public:
     /* 识别所有的循环头 */
     vector<flowblock *> loopheaders;
 
+    flowblock exit;
+
     int index = 0;
 
     //--------------------
@@ -1128,6 +1133,14 @@ public:
     void        collect_sideeffect_ops();
     flowblock*  find_post_dom(flowblock *f);
     void        calc_post_dominator();
+    /*
+    计算 post-dominator 时，必须得把尾部节点做为跟节点，然后计算它的post-order
+
+    在重新应用支配节点计算算法
+    */
+    void        post_order_on_rtree(flowblock *root, vector<flowblock *> &postorder, vector<char> &mark);
+    void        add_exit();
+    void        del_exit();
 };
 
 typedef struct priority_queue   priority_queue;

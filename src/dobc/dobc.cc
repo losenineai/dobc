@@ -2357,6 +2357,10 @@ void            pcodeop::to_nop(void)
     fd->op_set_opcode(this, CPUI_COPY);
 }
 
+flowblock::flowblock(void)
+{
+}
+
 flowblock::flowblock(funcdata *f)
 {
     fd = f;
@@ -2485,6 +2489,7 @@ void blockgraph::find_spanning_tree(vector<flowblock *> &preorder, vector<flowbl
     preorder.push_back(blist[0]);
     blist[0]->dfnum = 0;
 
+    /* 整个*/
     while (!state.empty()) {
         flowblock *bl = state.back();
 
@@ -2643,31 +2648,59 @@ void  blockgraph::calc_forward_dominator(const vector<flowblock *> &rootlist)
     postorder.back()->immed_dom = NULL;
 }
 
+void blockgraph::post_order_on_rtree(flowblock *root, vector<flowblock *> &postorder, vector<char> &mark)
+{
+    int i;
+
+    if (mark[root->index]) return;
+    mark[root->index] = 1;
+
+    for (i = 0; i < root->in.size(); i++)
+        post_order_on_rtree(root->get_in(i), postorder, mark);
+
+    root->rindex = postorder.size();
+    postorder.push_back(root);
+}
+
+void   blockgraph::add_exit()
+{
+    int i;
+
+    for (i = 0; i < exitlist.size(); i++)
+        add_edge(exitlist[i], &exit);
+}
+
+void    blockgraph::del_exit()
+{
+    int i;
+    for (i = 0; i < exitlist.size(); i++)
+        remove_edge(exitlist[i], &exit);
+}
+
 void  blockgraph::calc_post_dominator()
 {
     vector<flowblock *>     postorder;
+    vector<char> mark;
     flowblock *b, *new_idom, *rho;
     bool changed;
     int i, j, finger1, finger2;
 
-    if (blist.empty())
-        return;
+    add_exit();
 
-    int numnodes = blist.size() - 1;
-    postorder.resize(blist.size());
-    for (i = 0; i < blist.size(); i++) {
-        blist[i]->immed_dom = NULL;
-        postorder[numnodes - i] = blist[i];
-    }
+    mark.resize(blist.size() + 1);
+    post_order_on_rtree(&exit, postorder, mark);
+
+    /* 由于我们的图中，默认没有统一的出口节点，所以不需要计算 */
+    int numnodes = postorder.size();
+
+    for (i = 0; i < postorder.size(); i++)
+        postorder[i]->post_immed_dom = NULL;
 
     b = postorder.back();
-    if (b->in.size()) {
-        throw LowlevelError("entry node in edge error");
-    }
+    b->post_immed_dom = &exit;
 
-    b->immed_dom = b;
-    for (i = 0; i < b->out.size(); i++)
-        b->get_out(i)->immed_dom = b;
+    for (i = 0; i < b->in.size(); i++)
+        b->get_in(i)->post_immed_dom = b;
 
     changed = true;
     new_idom = NULL;
@@ -2678,39 +2711,39 @@ void  blockgraph::calc_post_dominator()
             b = postorder[i];
 
             /* 感觉这个判断条件是不需要的，但是Ghdira源代码里有 */
-            if (b->immed_dom == postorder.back()) {
+            if (b->post_immed_dom == postorder.back()) 
                 continue;
-            }
 
-            for (j = 0; j < b->in.size(); j++) {
-                new_idom = b->get_in(j);
-                if (new_idom->immed_dom)
+            for (j = 0; j < b->out.size(); j++) {
+                new_idom = b->get_out(j);
+                if (new_idom->post_immed_dom)
                     break;
             }
 
             j += 1;
-            for (; j < b->in.size(); j++) {
-                rho = b->get_in(j);
-                if (rho->immed_dom) {
-                    finger1 = numnodes - rho->index;
-                    finger2 = numnodes - new_idom->index;
+            for (; j < b->out.size(); j++) {
+                rho = b->get_out(j);
+                if (rho->post_immed_dom) {
+                    finger1 = numnodes - rho->rindex;
+                    finger2 = numnodes - new_idom->rindex;
                     while (finger1 != finger2) {
                         while (finger1 < finger2)
-                            finger1 = numnodes - postorder[finger1]->immed_dom->index;
+                            finger1 = numnodes - postorder[finger1]->post_immed_dom->rindex;
                         while (finger2 < finger1)
-                            finger2 = numnodes - postorder[finger2]->immed_dom->index;
+                            finger2 = numnodes - postorder[finger2]->post_immed_dom->rindex;
                     }
                     new_idom = postorder[finger1];
                 }
             }
-            if (b->immed_dom != new_idom) {
-                b->immed_dom = new_idom;
+            if (b->post_immed_dom!= new_idom) {
+                b->post_immed_dom= new_idom;
                 changed = true;
             }
         }
     }
 
-    postorder.back()->immed_dom = NULL;
+    postorder.back()->post_immed_dom = NULL;
+    del_exit();
 }
 
 blockbasic* blockgraph::new_block_basic(void)
