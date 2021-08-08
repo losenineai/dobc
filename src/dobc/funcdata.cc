@@ -1198,7 +1198,7 @@ int         funcdata::ollvm_detect_propchain4(ollvmhead *oh, flowblock *&from, b
         if ((p = h->get_cbranch_sub_from_cmp())) {
             p1 = p->get_in(0)->def;
             /* libmakeurl:sub_15521 */
-#if 1
+#if 0
             if (h->is_in((pre = p1->parent))) {
                 if (b_is_flag(flags, F_OPEN_COPY))
                     return ollvm_on_unconst_def(p1, pre, h);
@@ -1213,8 +1213,10 @@ int         funcdata::ollvm_detect_propchain4(ollvmhead *oh, flowblock *&from, b
                 if (h->is_in((pre = p1->parent)))
                     return ollvm_on_unconst_def(p1, pre, h);
 
-                if (h->is_in(h->immed_dom))
-                    return ollvm_on_unconst_def(p1, h->immed_dom, h);
+                bblocks.calc_post_dominator();
+                pre = pre->post_immed_dom;
+                if (h->is_in(pre))
+                    return ollvm_on_unconst_def(p1, pre, h);
 
                 throw LowlevelError("not expected error");
             }

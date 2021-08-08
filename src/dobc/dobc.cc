@@ -2724,13 +2724,13 @@ void  blockgraph::calc_post_dominator()
             for (; j < b->out.size(); j++) {
                 rho = b->get_out(j);
                 if (rho->post_immed_dom) {
-                    finger1 = numnodes - rho->rindex;
-                    finger2 = numnodes - new_idom->rindex;
+                    finger1 = rho->rindex;
+                    finger2 = new_idom->rindex;
                     while (finger1 != finger2) {
                         while (finger1 < finger2)
-                            finger1 = numnodes - postorder[finger1]->post_immed_dom->rindex;
+                            finger1 = postorder[finger1]->post_immed_dom->rindex;
                         while (finger2 < finger1)
-                            finger2 = numnodes - postorder[finger2]->post_immed_dom->rindex;
+                            finger2 = postorder[finger2]->post_immed_dom->rindex;
                     }
                     new_idom = postorder[finger1];
                 }
@@ -4345,6 +4345,8 @@ int         funcdata::ollvm_deshell()
     ollvm_detect_frameworkinfo();
 
     dump_cfg(name, "orig", 1);
+
+    //bblocks.calc_post_dominator();
 
     //dump_alias_info(stdout);
 
