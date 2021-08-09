@@ -1507,7 +1507,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     if (pi0(p)->flags.from_pc && isreg(p1->output)) {
                         rd = reg2i(poa(p1));
                         imm = p1->output->get_val();
-                        _mov_imm(rd, imm - (ind + 4 * (stuff_const(0, imm) ? 1:2)) - 4, 0, 0);
+                        _mov_imm(rd, imm - (ind + 4 * ((stuff_const(0, imm) || stuff_constw(0, imm, 16)) ? 1:2)) - 4, 0, 0);
                         _add_reg(rd, rd, PC, SRType_LSL, 0);
                     }
                     else if (istemp(p1->output) && isreg(p2->output) && (p2->opcode == CPUI_LOAD)) {
