@@ -54,7 +54,7 @@ int test_base64_encode_init(struct uc_runtime *ur)
 
     test_dump_regs(ur);
 
-    printf("start run====================================");
+    printf("start run====================================\n");
 
     return 0;
 }
@@ -110,7 +110,7 @@ int test_base64_encode_init1(struct uc_runtime *ur)
 
     test_dump_regs(ur);
 
-    printf("start run====================================");
+    printf("start run====================================\n");
 
     return 0;
 }
@@ -128,7 +128,7 @@ int test_base64_encode_on_exit1(struct uc_runtime *r)
     uc_mem_read(r->uc, test->regs[1], buf, sizeof (buf));
 
     if (strcmp(buf, "aA==")) {
-        printf("base64_encode test failure\n");
+        printf("base64_encode test failure[%d:%s]\n", r0, buf);
     }
     else {
         printf("base64_encode test success, out[%s]\n", buf);

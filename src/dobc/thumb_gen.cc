@@ -579,6 +579,11 @@ void _bl_x_imm(int arm, int to)
 /* A8.8.221 */
 void thumb_gen::_sub_imm(int rd, int rn, uint32_t imm, int setflags)
 {
+    if ((rd == rn) && (rn == SP)) {
+        _sub_sp_imm(imm, setflags);
+        return;
+    }
+
     if (setflags && (imm < 8) && (rd < 8) && (rn < 8)) // t1
         o(0x1e00 | (imm << 6) | (rn << 3) | rd);
     else if (setflags && imm < 256 && (rd == rn) && (rn < 8)) // t2
@@ -590,7 +595,7 @@ void thumb_gen::_sub_imm(int rd, int rn, uint32_t imm, int setflags)
         stuff_const_harder(0xf1a00000 | (rn << 16) | (rd << 8), imm);
 }
 
-void thumb_gen::_sub_sp_imm(int imm)
+void thumb_gen::_sub_sp_imm(int imm, int setflags)
 {
     if (!(imm & 3)) /* ALIGN 4 */
         o(0xb080 | (imm >> 2));
@@ -830,7 +835,15 @@ void _strb_imm(int rt, int rn, int imm, int w)
         /* op | P | */
         o(0xf8000800 | (1 << 10) | (rn << 16) | (rt << 12) | x | (w << 8) | (u << 9));
     }
+}
 
+/* A8.8.208 */
+void _strb_reg(int rt, int rn, int rm, int shval)
+{
+    if (rt < 8 && rn < 8 && rm < 8 && !shval)
+        o(0x5400 | (rm << 6) | (rn << 3) | rt);
+    else
+        o(0xf8000000 | (rn << 16) | (rt << 12) | rm | (shval << 4));
 }
 
 /*
@@ -1360,7 +1373,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                                 it = g_vpush(b, it);
                                 goto inst_label;
                             }
-                            _sub_sp_imm(pi1(p)->get_val());
+                            _sub_sp_imm(pi1(p)->get_val(), 0);
                         }
                         else {
                             _sub_imm(rd, rn, pi1(p)->get_val(), follow_by_set_cpsr(p));
@@ -1494,7 +1507,10 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     if (istemp(p1->output) && (p2->opcode == CPUI_STORE)) {
                         rt = reg2i(pi0a(p1));
                         rn = reg2i(pi0a(p));
-                        _strb_imm(rt, rn, pi1(p)->get_val(), 0);
+                        if (pi1(p)->is_constant())
+                            _strb_imm(rt, rn, pi1(p)->get_val(), 0);
+                        else
+                            _strb_reg(rt, rn, reg2i(pi1a(p)), 0);
                         advance(it, 2);
                     }
                     break;
@@ -2198,7 +2214,7 @@ pit thumb_gen::g_vpush(flowblock *b, pit pit)
         p = *pit;
     }
 
-    _sub_sp_imm(size - dsize);
+    _sub_sp_imm(size - dsize, 0);
     _vpush(single, reglist);
 
     return pit;

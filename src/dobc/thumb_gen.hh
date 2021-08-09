@@ -208,7 +208,7 @@ public:
     static uint32_t thumb_gen::stuff_const(uint32_t op, uint32_t c);
     static void stuff_const_harder(uint32_t op, uint32_t v);
     static int _add_sp_imm(int rd, int rn, uint32_t imm);
-    static void _sub_sp_imm(int imm);
+    static void _sub_sp_imm(int imm, int setflags);
     void collect_const();
     void _sub_imm(int rd, int rn, uint32_t imm, int setflags);
     void _cmp_imm(int rn, uint32_t imm);

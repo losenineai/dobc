@@ -46,6 +46,8 @@ static void hook_code(uc_engine *uc, uint64_t address, uint32_t size, void *user
     int i;
 
     if (t->debug.trace) {
+        test_dump_regs(t);
+
         printf("%llx ", address);
 
         uint8_t buf[128];
@@ -55,8 +57,6 @@ static void hook_code(uc_engine *uc, uint64_t address, uint32_t size, void *user
         for (i = 0; i < (int)size; i++)
             printf("%02x ", buf[i]);
         printf("\n");
-
-        test_dump_regs(t);
     }
 
     if ((hook = ur_hook_func_find_by_addr(t, address))) {
@@ -83,6 +83,8 @@ static void thumb_test_base64(const char *soname)
     uc_runtime_t *ur = uc_runtime_new(uc, soname, 0, 0);
     if (!ur)
         return;
+
+    ur->debug.trace = 1;
 
     test_base64_encode_init1(ur);
 
