@@ -1404,3 +1404,75 @@ void        flowblock::remove_op(pcodeop *inst)
     ops.erase(inst->basiciter);
 }
 
+bool        flowblock::is_rel_cbranch()
+{
+    pcodeop *op = last_op();
+
+    if (op && (op->opcode == CPUI_CBRANCH) && (op->get_in(0)->is_hard_constant())) return true;
+
+    return false;
+}
+
+bool        flowblock::is_rel_branch()
+{
+    pcodeop *op = last_op();
+
+    if (op && (op->opcode == CPUI_BRANCH) && (op->get_in(0)->is_hard_constant())) return true;
+
+    return false;
+}
+
+Address    flowblock::get_return_addr()
+{
+    pcodeop *p = last_op();
+    dobc *d = parent->fd->d;
+
+    if ((p->opcode == CPUI_RETURN))
+        return Address(d->getDefaultCodeSpace(), p->get_in(0)->get_val());
+
+    if (p->output->get_addr() != d->pc_addr)
+        throw LowlevelError("inline block last op output must be pc address");
+
+    return Address(d->getDefaultCodeSpace(), p->output->get_val());
+}
+
+void        blockgraph::clear_all_unsplice()
+{
+    for (int i = 0; i < blist.size(); i++) {
+        get_block(i)->flags.f_unsplice = 0;
+    }
+}
+
+void        blockgraph::clear_all_vminfo()
+{
+    for (int i = 0; i < blist.size(); i++) {
+        flowblock *b = get_block(i);
+        b->vm_byteindex = -1;
+        b->vm_caseindex = -1;
+    }
+}
+
+bool        blockgraph::in_loop(flowblock *lheader, flowblock *node)
+{
+    return (node->loopheader == lheader) || (node == lheader);
+}
+
+pcodeop*    flowblock::find_pcode_def(const Address &outaddr)
+{
+    list<pcodeop *>::iterator it;
+    pcodeop *p;
+
+    for (it = ops.begin(); it != ops.end(); it++) {
+        p = *it;
+        if (p->output && p->output->get_addr() == outaddr)
+            return p;
+    }
+
+    return NULL;
+}
+
+void        flowblock::dump()
+{
+    printf("flowblock[addr:0x%llx, index:%d, dfnum:%d]\n", get_start().getOffset(), index, dfnum);
+}
+
