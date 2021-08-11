@@ -2650,3 +2650,64 @@ flowblock*    funcdata::loop_pre_get(flowblock *h, int index)
 
     return NULL;
 }
+
+void        funcdata::dump_phi_placement(int bid, int pid)
+{
+    flowblock *b = bblocks.get_block_by_index(bid);
+    pcodeop *p = b->get_pcode(pid);
+
+    if (!p) return;
+
+    vector<varnode *> writevars;
+
+    writevars.push_back(p->output);
+
+    calc_phi_placement(writevars);
+    printf("p%d merge point:", p->start.getTime());
+    for (int i = 0; i < merge.size(); i++) {
+        printf("%d ", merge[i]->index);
+    }
+    printf("\n");
+}
+
+bool        funcdata::is_out_live(pcodeop *op)
+{
+    pcodeop_def_set::iterator it = topname.find(op);
+    if ((it != topname.end()))
+        return true;
+
+    return false;
+}
+
+varnode*    funcdata::detect_induct_variable(flowblock *h, flowblock * &exit)
+{
+    list<pcodeop *>::const_reverse_iterator it;
+    flowblock *true1;
+
+    if (NULL == (exit = bblocks.detect_whiledo_exit(h))) 
+        throw LowlevelError("h:%d whiledo loop not found exit node");
+
+    true1 = h->get_true_edge()->point;
+
+    for (it = h->ops.rbegin(); it != h->ops.rend(); it++) {
+        pcodeop *p = *it;
+
+        /* 这个地方有点硬编码了，直接扫描sub指令，这个是因为当前的测试用例中的核心VM，用了cmp指令以后
+        生成了sub，这个地方可能更好的方式是匹配更复杂的pattern */
+        if (p->opcode == CPUI_INT_SUB) {
+            varnode *in0 = p->get_in(0);
+            varnode *in1 = p->get_in(1);
+
+            /* 假如前面是cmp指令，而且节点节点等于真值出口，那么我们认为in1是归纳变量 */
+            return  (exit == true1) ? in1:in0;
+        }
+    }
+
+    throw LowlevelError("loop header need CPUI_INT_SUB");
+}
+
+bool        funcdata::can_analysis(flowblock *b)
+{
+    return true;
+}
+
