@@ -86,7 +86,7 @@ static void thumb_test_base64(const char *soname)
 
     ur->debug.trace = 1;
 
-    test_base64_encode_init1(ur);
+    test_base64_encode_init(ur);
 
     uc_hook_add(uc, &trace1, UC_HOOK_BLOCK, hook_block, ur, 1, 0);
     uc_hook_add(uc, &trace2, UC_HOOK_CODE, hook_code, ur, ur_text_start(ur), ur_text_end(ur));

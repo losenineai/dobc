@@ -8,23 +8,20 @@
 #include "types.h"
 #include "heritage.hh"
 #include "pcodefunc.hh"
+#include "pcodeop.hh"
+#include "block.hh"
 #include "funcdata.hh"
 #include <bitset>
 
-typedef struct flowblock    flowblock, blockbasic;
-typedef struct jmptable     jmptable;
 typedef struct funcproto    funcproto;
 typedef struct rangenode    rangenode;
 typedef struct func_call_specs  func_call_specs;
 typedef map<Address, vector<varnode *> > variable_stack;
 typedef map<Address, int> version_map;
-typedef struct cover		cover;
-typedef struct coverblock	coverblock;
 typedef struct ollvmhead    ollvmhead;
 
-class pcodeop;
 class dobc;
-class valuetype;
+class flowblock;
 
 /* 重命名一些符号，做内部使用，我懒的改opcodes.hh了 */
 #define CPUI_USE        CPUI_CAST
@@ -68,9 +65,6 @@ class valuetype;
 #define BITN(b,n)           ((b) & (1 << n)) 
 #define BIT_TEST(b,n)       ((b) & n)
 
-/* 这里是因为Ghidra用Stackbase做 Space，offset都是负数，加了size以后，值被处理过以后不正确了 */
-#define STACK_BASE          0x10000
-
 class blockgraph;
 
 struct VisitStat {
@@ -78,73 +72,6 @@ struct VisitStat {
     int size;
 };
 
-enum height {
-    a_top,
-    /* 
-    普通常量:
-    mov r0, 1
-    这样的就是普通的常量, 1是常量, 赋给r0以后，当前的r0也成了常量 */
-
-    a_constant,
-    /*
-    相对常量
-
-    0x0001. add esp, 4
-    0x0002. ...
-    0x0003. ...
-    0x0004. sub esp, 16
-    
-    esp就是相对常量，我们在做一些分析的时候，会使用模拟的方式来计算esp，比如给esp一个初始值，这种方式在分析领域不能算错，
-    因为比如像IDA或者Ghidra，都有对错误的容忍能力，最终的结果还是需要开发人员自己判断，但是在编译还原领域，不能有这种模糊语义
-    的行为。
-
-    假设壳的开发人员，在某个代码中采取了判断esp值的方式来实现了部分功能，比如
-    if (esp > xxxxx)  {} else {}
-    很可能其中一个 condition_block 就会被判断成 unreachable code。这个是给esp强行赋值带来的结果，但是不赋值可能很多计算进行不下去
-
-    所以我们把 inst.0x0001 中的 esp设置为相对常量(rel_constant)，他的值为 esp.4, 0x0004中的esp 为  esp.16，在做常量传播时，有以下几个规则
-
-    1. const op const = const，      (常量和常量可以互相操作，比如 加减乘除之类)
-    2. sp.rel_const op const = sp.rel_const;   (非常危险，要判断这个操作不是在循环内)
-    3. sp.rel_const op sp.rel_const = sp.rel_const      (这种情况起始非常少见，)
-    4. sp.rel_const op rN.rel_const (top)   (不同地址的相对常量不能参与互相运算)
-    */ 
-    a_sp_constant,
-    /* 当某个数和pc寄存器相加的时候，这个值就是pc_constant */
-    a_pc_constant,
-    a_bottom,
-
-    /* */
-};
-
-class valuetype {
-public:
-    enum height height = a_top;
-
-    union {
-        char v1;
-        short v2;
-        int v4;
-        intb v = 0;
-    };
-
-    int cmp(const valuetype &b) const;
-    valuetype &operator=(const valuetype &op2);
-    bool operator<(const valuetype &b) const { return cmp(b) < 0; }
-    bool operator==(const valuetype &b) { return cmp(b) == 0;  }
-    bool operator!=(const valuetype &b) { return !operator==(b); }
-};
-
-struct varnode_cmp_loc_def {
-    bool operator()(const varnode *a, const varnode *b) const;
-};
-
-struct varnode_cmp_def_loc {
-    bool operator()(const varnode *a, const varnode *b) const;
-};
-
-typedef set<varnode *, varnode_cmp_loc_def> varnode_loc_set;
-typedef set<varnode *, varnode_cmp_def_loc> varnode_def_set;
 
 struct pcodeop_cmp_def {
     bool operator() ( const pcodeop *a, const pcodeop *b ) const;
@@ -175,524 +102,10 @@ typedef map<pcodeop *, valuetype, pcodeop_cmp> valuemap;
 
 typedef set<pcodeop *, pcodeop_cmp> pcodeop_set;
 
-struct coverblock {
-	short	version;
-	short	blk_index;
-	/* 这个结构主要参考自Ghidra的CoverBlock，之所以start和end，没有采用pcodeop结构是因为
-	我们在优化时，会删除大量的pcodeop，这个pcode很容易失效 */
-	int		start = -1;
-	int		end = -1;
-
-	coverblock() {}
-	~coverblock() {}
-
-	void set_begin(pcodeop *op);
-	void set_end(pcodeop *op);
-	void set_end(int);
-	bool empty() {
-		return (start == -1) && (end == -1);
-	}
-
-	bool contain(pcodeop *op);
-	void set_all() {
-		start = 0;
-		end = INT_MAX;
-	}
-	int dump(char *buf);
-};
-
-struct cover {
-	map<int, coverblock> c;
-
-	void clear() { c.clear(); }
-	void add_def_point(varnode *vn);
-	void add_ref_point(pcodeop *op, varnode *vn, int exclude);
-	void add_ref_recurse(flowblock *bl);
-    bool contain(const pcodeop *op);
-	int dump(char *buf);
-};
 
 int print_varnode(Translate *trans, char *buf, varnode *data);
+int print_udchain(char *buf, pcodeop *op, uint32_t flags);
 
-class varnode {
-public:
-    /* varnode的值类型和值，在编译分析过后就不会被改*/
-    valuetype   type;
-
-    struct {
-        unsigned    mark : 1;
-        unsigned    annotation : 1;
-        unsigned    input : 1;          // 没有祖先， 丄
-        unsigned    written : 1;       // 是def
-        unsigned    insert : 1;         // 这个
-        unsigned    implied : 1;        // 是一个临时变量
-        unsigned    exlicit : 1;        // 不是临时变量
-
-        unsigned    readonly : 1;
-
-        unsigned    covertdirty : 1;    // cover没跟新
-        unsigned    virtualnode : 1;     // 虚拟节点，用来做load store分析用
-        /* 一般的so中可能有类似如下的代码: 
-        ldr r2, [#xxxx]
-        add r2, pc
-        这样写代码有一个好处就是，当so映射到内存段中以后，不需要重新修复重定向表，即可正常使用
-        所以当我们发现所有值是来自于pc寄存器时，都要标注起来，任何使用pc寄存器参与的运算，都要传播开
-
-        举例:
-        r2 = r2 + pc，以后r2.from_pc = 1
-        r1 = r2 + r1，以后r1.from_pc = 1
-        */
-        unsigned    from_pc : 1;
-        /* 这个是给unique space上的临时变量用的，一般来说，临时变量只在当前block内活跃，但是有一种情况例外，
-        某些单条指令内自带指向自己的branch, cbranch， 比如:
-                                     - ? -
-        0002574c 63 f9 0f 28     vld2.8     {d18,d19},[param_4]
-                                                        $U25e0:4 = COPY 1:4
-                                                        mult_addr = COPY r3
-                                                        $U25e0:4 = COPY 1:4
-                                                        $U3780:4 = COPY 0x390:4
-                                                        $U3790:4 = INT_MULT 1:4, 8:4
-                                                        $U37b0:4 = INT_ADD 0x390:4, $U3790:4
-                                                        mult_dat8 = COPY 8:8
-                                                      <1>
-                                                        $U37c0:1 = LOAD ram(mult_addr)
-                                                        STORE register($U3780:4), $U37c0:1
-                                                        mult_addr = INT_ADD mult_addr, 1:4
-                                                        $U37e0:1 = LOAD ram(mult_addr)
-                                                        STORE register($U37b0:4), $U37e0:1
-                                                        mult_addr = INT_ADD mult_addr, 1:4
-                                                        mult_dat8 = INT_SUB mult_dat8, 1:8
-                                                        $U3810:1 = INT_EQUAL mult_dat8, 0:8
-                                                        CBRANCH <0>, $U3810:1
-                                                        $U3780:4 = INT_ADD $U3780:4, 1:4
-                                                        $U37b0:4 = INT_ADD $U37b0:4, 1:4
-                                                        BRANCH <1>
-                                                      <0>
-                                                        $U25e0:4 = COPY 1:4
-                                                        $U39f0:4 = COPY 2:4
-
-        U3780和U37b0，在<1>处是入口活跃的，正常情况下要插入phi节点，但是因为我们的优化不对uniq var做，为了兼容
-        这种情况，我们要标注一下这种特殊节点，强制让它生成phi
-        */
-        unsigned    outlive : 1;
-    } flags = { 0 };
-
-    short size = 0;
-    short baseindex = 0;
-    int create_index = 0;
-    Address loc;
-
-    pcodeop     *def = NULL;
-    uintb       nzm;
-    /* ssa的版本号，方便定位 */
-    int         version = -1;
-
-    varnode_loc_set::iterator lociter;  // sort by location
-    varnode_def_set::iterator defiter;  // sort by definition
-
-	cover				cover;
-	coverblock			simple_cover;
-    list<pcodeop *>     uses;    // descend, Ghidra把这个取名为descend，搞的我头晕，改成use
-
-    varnode(int s, const Address &m);
-    ~varnode();
-
-    const Address &get_addr(void) const { return (const Address &)loc; }
-    int             get_size() const { return size;  }
-    intb            get_offset() { return loc.getOffset(); }
-    bool            is_heritage_known(void) const { return (flags.insert | flags.annotation) || is_constant(); }
-    bool            has_no_use(void) { return uses.empty(); }
-    bool            has_use(void) { return uses.size() > 0; }
-
-    void            set_def(pcodeop *op);
-    pcodeop*        get_def() { return def; }
-    bool            is_constant(void) const { return type.height == a_constant; }
-    bool            is_top(void) const { return type.height == a_top;  }
-    bool            is_hard_constant(void) const { return (type.height == a_constant) && get_addr().isConstant(); }
-    bool            in_constant_space() { return get_addr().isConstant(); }
-    bool            is_pc_constant() { return type.height == a_pc_constant;  }
-    bool            is_hard_pc_constant() { return flags.from_pc; }
-#define MASK_SIZE(m,s)          (m & (((uintb)1 << (s * 8)) - 1))
-    void            set_val(intb v) { type.height = a_constant;  type.v = v; }
-    bool            in_ram();
-    intb            get_ram_val() { return get_addr().getOffset();  }
-    /* set_val1 会对传入的值，根据自身的size做裁剪，
-    这个从语义上比set_val更加标准，也更加的正确，但是由于工程实现的原因，暂时还有以下BUG:
-
-    c1:4 = -1;
-
-    c1.v = 0xffffffffffffffff;
-    虽然我们转成整数以后，变成8字节都是-1，但是裁剪以后
-    c1.v:4 = 0x00000000ffffffff;
-    变成了一个正数
-    这里我们在使用一个v同时兼容 int64,32,16,8的时候，没有处理后，后期要考虑如何处理
-
-    后面要逐渐切换到set_val1上来
-    */
-    void            set_val1(intb v) { 
-        type.height = a_constant;  
-        type.v = 0;
-        switch (size) {
-        case 1: type.v1 = (int8_t)v;    break;
-        case 2: type.v2 = (int16_t)v;   break;
-        case 4: type.v4 = (int32_t)v;   break;
-        case 8: type.v = (int64_t)v;    break;
-        }
-    }
-    void            set_top() { type.height = a_top;  }
-    void            set_sub_val(int insize, intb l, intb r) {
-        if (insize == 1)
-            set_val((int1)l - (int1)r);
-        else if (insize == 2)
-            set_val((int2)l - (int2)r);
-        else if (insize == 4)
-            set_val((int4)l - (int4)r);
-        else 
-            set_val(l - r);
-    }
-    bool            is_sp_constant(void) { return type.height == a_sp_constant; }
-    bool            is_sp_vn() const;
-    bool            is_input(void) { return flags.input; }
-    void            set_sp_constant(int v) { type.height = a_sp_constant; type.v = v;  }
-    void            set_pc_constant(intb v) { type.height = a_pc_constant; type.v = v; }
-    intb            get_val(void) const;
-    intb            get_sp_offset() { return get_addr().getOffset() - STACK_BASE; }
-
-    void            add_use(pcodeop *op);
-    void            del_use(pcodeop *op);
-    pcodeop*        lone_use();
-    bool            is_free() { return !flags.written && !flags.input; }
-    /* 实现的简易版本的，判断某条指令是否在某个varnode的活跃范围内 */
-    bool            in_liverange(pcodeop *p);
-	bool			in_liverange_simple(pcodeop *p);
-    /* 判断在某个start-end之间，这个varnode是否live, start, end必须得在同一个block内
-
-    这2个判断liverange的代码都要重新写
-    */
-    bool            in_liverange(pcodeop *start, pcodeop *end);
-	void			add_def_point() { cover.add_def_point(this);  }
-	void			add_ref_point(pcodeop *p) { cover.add_ref_point(p, this, 0); }
-	void			add_def_point_simple();
-	void			add_ref_point_simple(pcodeop *p);
-	void			clear_cover_simple();
-
-    /* 给定一个varnode，搜索拷贝链，到某个OpCode类型为止，现在只搜索3种类型:
-
-    1. copy
-    2. load
-    3. store
-
-    @return NULL                失败
-            ->opcode == until   成功
-            ->opcode != until   失败，返回最后赋值的pcode
-    */
-    pcodeop*        search_copy_chain(OpCode until, flowblock *until_blk);
-    /*
-
-    *ptr = 0;
-    label1:
-    %r0 = load ptr  ; r0 = T
-
-    store r0, xxx
-    goto label1;
-
-    本来要可以建立ptr的别名到r0，但是因为store，我们不确认%r0 是否等于 ptr，
-    所以也不确认%r0的值。
-
-    根据这个情况，我们假设:
-
-    1. 当ptr的值为sp+c时
-    
-    r0不等于ptr，因为ptr假设指向的是一个sp+c的值时，它大概率是可以被计算的
-
-    警告:这个属于pattern了，非常危险
-
-    libmakeurl: 171fc
-    */
-    bool            maystore_from_this(pcodeop *maystore);
-
-	void			clear_cover() { cover.clear();  }
-	int				dump_cover(char *buf) { 
-		int n = simple_cover.dump(buf);
-		return n + cover.dump(buf + n);
-	}
-};
-
-#define PCODE_DUMP_VAL              0x01
-#define PCODE_DUMP_UD               0x02
-#define PCODE_DUMP_DEAD             0x04
-/* 有些def的值被use的太多了，可能有几百个，导致整个cfg图非常的不美观，可以开启这个标记，打印cfg时，只打印部分use，
-具体多少，可以参考print_udchain的值
-*/
-
-#define PCODE_OMIT_MORE_USE         0x08            
-#define PCODE_OMIT_MORE_DEF         0x10            
-#define PCODE_OMIT_MORE_BUILD       0x20            
-#define PCODE_OMIT_MORE_IN          0x40
-#define PCODE_HTML_COLOR            0x80
-
-#define PCODE_DUMP_ALL              ~(PCODE_OMIT_MORE_USE | PCODE_OMIT_MORE_DEF | PCODE_OMIT_MORE_BUILD | PCODE_OMIT_MORE_IN)
-#define PCODE_DUMP_SIMPLE           0xffffffff
-
-class pcodeop {
-public:
-    struct {
-        unsigned startblock : 1;
-        unsigned branch : 1;
-        unsigned call : 1;
-        unsigned returns: 1;
-        unsigned nocollapse : 1;
-        unsigned dead : 1;
-        unsigned marker : 1;        // 特殊的站位符， (phi 符号 或者 间接引用 或 CPUI_COPY 对同一个变量的操作)，
-        unsigned boolouput : 1;     // 布尔操作
-
-        unsigned coderef : 1;
-        unsigned startinst : 1;     // instruction的第一个pcode
-        /* 临时算法有用:
-        1. compute_sp
-        */
-        unsigned mark : 1;          // 临时性标记，被某些算法拿过来做临时性处理，处理完都要重新清空
-
-        unsigned branch_call : 1;   // 一般的跳转都是在函数内进行的，但是有些壳的函数，会直接branch到另外一个函数里面去
-        unsigned exit : 1;          // 这个指令起结束作用
-        unsigned inlined : 1;       // 这个opcode已经被inline过了
-        unsigned changed : 1;       // 这个opcode曾经被修改过
-        unsigned input : 1;         // input有2种，一种是varnode的input，代表这个寄存器来自于
-        unsigned copy_from_phi : 1;           // 给opcode为cpy的节点使用，在删除只有2个入边的join node时，会导致这个节点的phi节点修改成
-                                    // copy，这里要标识一下
-        unsigned vm_vis : 1;        // 给vm做标记用的
-        unsigned vm_eip : 1;
-        unsigned zero_load : 1;         // 0地址访问
-        unsigned force_constant : 1;    // 强制常量，用来在某些地方硬编码时，不方便计算，人工计算后，强行填入
-        unsigned trace : 1;
-            /* 
-            FIXME:
-            会影响load行为的有2种opcode
-            1. store
-            2. sp = sp - xxx
-            后面一种opcode，我们假设alloc出的内存空间值都是0，这个是有问题的?
-            */
-        unsigned val_from_sp_alloc : 1;     // 这个load的值并非来自于store，而是来自于sp的内存分配行为
-		unsigned uncalculated_store : 1;	// 这个store节点是不可计算的
-        unsigned itblock : 1;
-        unsigned mark_cond_copy_prop: 1;    
-
-        unsigned store_on_dead_path : 1;
-    } flags = { 0 };
-
-    OpCode opcode;
-    /* 一个指令对应于多个pcode，这个是用来表示inst的 */
-    SeqNum start;
-    flowblock *parent;
-    /* 我们认为程序在分析的时候，sp的值是可以静态分析的，他表示的并不是sp寄存器，而是系统当前堆栈的深度 */
-    int     sp = 0;
-    Address *disaddr = NULL;
-
-    varnode *output = NULL;
-    vector<varnode *> inrefs;
-
-    funcdata *callfd = NULL;   // 当opcode为call指令时，调用的
-
-    bitset<32>      live_in;
-    bitset<32>      live_out;
-    bitset<32>      live_gen;
-    bitset<32>      live_kill;
-    /* 数据写入obj时的文件位置 */
-    int             ind = 0;
-
-    /* block 里的 */
-    list<pcodeop *>::iterator basiciter;
-    /* deadlist 里的 */
-    list<pcodeop *>::iterator insertiter;
-    /* 特殊操作类型里的，比如 store ,load, call */
-    list<pcodeop *>::iterator codeiter;
-
-    /* sideeffect_ops中的迭代器 */
-    list<pcodeop *>::iterator sideiter;
-    list<pcodeop *> mayuses;
-
-    pcodeop(int s, const SeqNum &sq);
-    ~pcodeop();
-
-    void            set_opcode(OpCode op);
-    varnode*        get_in(int slot) { return inrefs[slot];  }
-    varnode*        get_in(const Address &addr) {
-        for (int i = 0; i < inrefs.size(); i++) {
-            if (inrefs[i]->get_addr() == addr) return inrefs[i];
-        }
-
-        return NULL;
-    }
-    varnode*        get_out() { return output;  }
-    const Address&  get_addr() { return start.getAddr();  }
-    /* dissasembly 时用到的地址 */
-    const Address&  get_dis_addr(void) { return disaddr ? disaddr[0] : get_addr(); }
-
-    int             num_input() { return inrefs.size();  }
-    void            clear_input(int slot);
-    void            remove_input(int slot);
-    void            insert_input(int slot);
-
-    void            set_input(varnode *vn, int slot) { inrefs[slot] = vn; }
-    int             get_slot(const varnode *vn) { 
-        int i, n; n = inrefs.size(); 
-        for (i = 0; i < n; i++)
-            if (inrefs[i] == vn) return i;
-        return -1;
-    }
-    int             dump(char *buf, uint32_t flags);
-    /* trace compute 
-    这个compute_t 和传统的compute不一样，普通的comupte只能用来做常量传播，这个compute_t
-    是在循环展开时，沿某条路径开始计算
-
-    compute_t 和 模拟执行是完全不一样的， 模拟执行会给所有系统寄存器赋值，然后走入函数，
-    compute_t 不会做这样，compute_t是在某条路径上执行，假如可以计算，就计算，假如不能计算
-    就跳过
-
-@inslot         常量传播时，填-1，假如在做trace分析时，填从哪个快进入
-@return     
-            1       unknown bcond
-    */
-
-    /* 碰见了可以计算出的跳转地址 */
-#define         ERR_MEET_CALC_BRANCH            1
-#define         ERR_UNPROCESSED_ADDR            2
-#define         ERR_CONST_CBRANCH               4
-#define         ERR_FREE_SELF                   8
-    /* 
-
-    branch:         计算的时候发现可以跳转的地址
-    wlist:          工作表，当我们跟新某些节点的时候，发现另外一些节点也需要跟新，就把它加入到这个链表内
-    */
-    int             compute(int inslot, flowblock **branch);
-	int				compute_add_sub();
-    void            set_output(varnode *vn) { output = vn;  }
-    void            set_top() { if (output) output->type.height = a_top; }
-
-    bool            is_dead(void) { return flags.dead;  }
-    bool            have_virtualnode(void) { return inrefs.size() == 3;  }
-    varnode*        get_virtualnode(void) { return inrefs.size() == 3 ? inrefs[2]:NULL;  }
-    bool            is_call(void) { return (opcode == CPUI_CALL) || (opcode == CPUI_CALLIND) || callfd; }
-    bool            is_coderef(void) { return flags.coderef; }
-    void            set_input() { flags.input = 1;  }
-    intb            get_call_offset() { return get_in(0)->get_addr().getOffset(); }
-    /* 当自己的结果值为output时，把自己整个转换成copy形式的constant */
-    void            to_constant(void);
-    void            to_constant1(void);
-    void            to_rel_constant(void);
-    void            to_copy(varnode *in);
-    /* 转换成nop指令 */
-    void            to_nop(void);
-    void            add_mayuse(pcodeop *p) { mayuses.push_back(p);  }
-    bool            is_trace() { return flags.trace;  }
-    void            set_trace() { flags.trace = 1; }
-    void            clear_trace() { flags.trace = 0;  }
-    /* in的地址是否在sp alloc内存的位置 */
-    bool            in_sp_alloc_range(varnode *in);
-
-    void            on_MULTIEQUAL();
-    /*
-    识别以下pattern(里面的数可以替换):
-
-    v7 = y_72;
-    if ( y_72 > 9 )
-      v6 = 1;
-    v8 = 1467139458;
-    if ( y_72 > 9 )
-      v8 = -486874641;
-    if ( v6 )
-      v8 = 1467139458;
-
-
-    if ( v8 == 1467139458 ) {
-    }
-
-    转成ssa形式
-
-    =================== after ssa ====================================
-
-    v7.0 = y_72.0;
-    if ( y_72.0 > 9 )
-      v6.0 = 1;
-    v8.0 = 1467139458;
-    if ( y_72.0 > 9 )
-      v8.1 = -486874641;
-    v8.2 = phi(v8.0, v8.1)
-    if ( v6.0 )
-      v8.3 = 1467139458;
-
-    v8.4 = phi(v8.2, v8.3)  ==> v8.4 = 1467139458 
-    if ( v8 == 1467139458 ) {
-    }
-
-    v8必然等于1467139458 ，因为y_72 > 9 和 v6是等价的
-    */
-    int             on_cond_MULTIEQUAL();
-    bool            all_inrefs_is_constant(void);
-    bool            all_inrefs_is_adj(void);
-    bool            all_inrefs_is_top(void);
-    varnode*        get_const_in() {
-        for (int i = 0; i < inrefs.size(); i++)
-            if (inrefs[i]->is_constant()) return inrefs[i];
-        return NULL;
-    }
-    varnode*        get_top_in() {
-        for (int i = 0; i < inrefs.size(); i++)
-            if (inrefs[i]->is_top()) return inrefs[i];
-        return NULL;
-    }
-    void            loadram2out(Address &addr);
-    void            create_stack_virtual_vn();
-    /*
-    这个函数主要是为了检测，在load, store路径上，当前的store的原始值是否就是来自于从这个pos的load
-    比如:
-
-    1. a = *pos1;
-    2. *pos2 = a;
-
-    假如pos1 == pos2，那返回 pcodeop 2
-    */
-    pcodeop*        find_same_pos_load(vector<pcodeop *> &store);
-    void            compute_on_and(void);
-};
-
-typedef struct blockedge            blockedge;
-
-#define a_tree_edge             0x1
-#define a_forward_edge          0x2
-#define a_cross_edge            0x4
-#define a_back_edge             0x8
-#define a_loop_edge             0x10
-#define a_true_edge             0x20
-#define a_mark                  0x40
-#define a_unpropchain           0x80
-#define a_do_propchain          0x100
-
-struct blockedge {
-    uint32_t label;
-    flowblock *point;
-    int reverse_index;
-    /* 存临时变量的 */
-    int index;
-
-    blockedge(flowblock *pt, int lab, int rev) { point = pt, label = lab; reverse_index = rev; }
-    blockedge() {};
-    bool is_true() { return label & a_true_edge;  }
-    void set_true(void) { label |= a_true_edge; }
-    void set_false(void) { label &= a_true_edge;  }
-    void set_flag(uint32_t flag) { label |= flag;  }
-    void clear_flag(uint32_t flag) { label &= ~flag;  }
-    bool is(uint32_t flag) { return label & flag;  }
-};
-
-
-enum block_type{
-    a_condition,
-    a_if,
-    a_whiledo,
-    a_dowhile,
-    a_switch,
-};
 
 /* 模拟stack行为，*/
 struct mem_stack {
@@ -706,442 +119,6 @@ struct mem_stack {
     void    push(char *byte, int size);
     int     top(int size);
     int     pop(int size);
-};
-
-struct flowblock {
-    enum block_type     type;
-
-    struct {
-        unsigned f_goto_goto : 1;
-        unsigned f_break_goto : 1;
-        unsigned f_continue_goto : 1;
-        unsigned f_switch_out : 1;
-        unsigned f_entry_point : 1;
-        /* 
-        1. 在cbranch中被分析为不可达，确认为死 */
-        unsigned f_dead : 1; 
-        unsigned f_no_cmp : 1;
-
-        unsigned f_switch_case : 1;
-        unsigned f_switch_default : 1;
-
-        /* 在某些算法中，做临时性标记用 
-
-        1. reachable测试
-        2. reducible测试
-        3. augment dominator tree收集df
-        4. djgraph 收集df
-        */
-        unsigned f_mark : 1;
-
-        unsigned f_return : 1;
-
-        /* 这个block快内有call函数 */
-        unsigned f_call : 1;
-        /* 不允许合并 */
-        unsigned f_unsplice : 1;
-        /* 内联的时候碰到的cbranch指令 */
-        unsigned f_cond_cbranch : 1;
-        /* 我们假设节点 e 为结束节点，节点 a -> e，当且仅当e为a的唯一出节点，那么a在e的结束路径上，
-        e也在自己的路径上
-        */
-        unsigned f_exitpath : 1;
-        /* 这个循环*/
-        unsigned f_irreducible : 1;
-        unsigned f_loopheader : 1;
-
-    } flags = { 0 };
-
-    RangeList cover;
-    bitset<32>      live_gen;
-    bitset<32>      live_kill;
-    bitset<32>      live_in;
-    bitset<32>      live_out;
-
-    list<pcodeop*>      ops;
-    list<pcodeop *>     sideeffect_ops;
-
-    blockgraph *parent = NULL;
-    flowblock *immed_dom = NULL;
-    flowblock *post_immed_dom = NULL;
-    /* 
-    1. 标明自己属于哪个loop
-    2. 假如自己哪个loop都不属于，就标空
-    3. 假如一个循环内有多个节点，找dfnum最小的节点
-    4. 对于一个循环内的除了loopheader的节点，这个指针指向loopheader，loopheader自己本身的
-       loopheader指向的起始是外层的loop的loopheader，这个一定要记住
-    */
-    flowblock *loopheader = NULL;
-    /* 标明这个loop有哪些节点*/
-    vector<flowblock *> irreducibles;
-    vector<flowblock *> loopnodes;
-    /* 
-    1. 测试可规约性
-    2. clone web时有用
-    */
-    flowblock *copymap = NULL;
-
-    /* 这个index是 后序遍历的索引，用来计算支配节点数的时候需要用到 */
-    int index = 0;
-    /* 这个index是 把树翻转以后，计算的 post-order index */
-    int rindex = 0;
-    int dfnum = 0;
-    int numdesc = 1;        // 在 spaning tree中的后代数量，自己也是自己的后代，所以假如正式计算后代数量，自己起始为1
-
-    int vm_byteindex = -1;      
-    int vm_caseindex = -1;
-
-    jmptable *jmptable = NULL;
-    vector<blockedge>   in;
-    vector<blockedge>   out;
-    funcdata *fd;
-
-    /* code gen */
-    struct {
-        /* 自己的block生成的代码对应的具体位置 */
-        unsigned char *data = NULL;
-    }cg;
-
-    struct {
-        /* 这个block快中，是否有call指令 */
-        int             have_call;
-        /* 这个block快中，是否有maystore */
-        int             have_may_store;
-        /* 这里的liveout和livein，都是mem相关*/
-        set<varnode *>  liveout;
-        set<varnode *>  livein;
-    } memflow;
-
-    flowblock(void);
-    flowblock(funcdata *fd);
-    ~flowblock();
-
-    flowblock*  get_out(int i) { return out[i].point;  }
-    flowblock*  get_0out() { return (out.size() == 1) ? get_out(0) : NULL; }
-    flowblock*  get_in(int i) { return in[i].point;  }
-    flowblock*  get_0in() { return (in.size() == 1) ? get_in(0) : NULL;  }
-    flowblock*  get_max_dfnum_in() {
-        flowblock *max = get_in(0);
-
-        for (int i = 1; i < in.size(); i++) {
-            if (in[i].point->dfnum > max->dfnum) {
-                max = get_in(i);
-            }
-        }
-
-        return max;
-    }
-    flowblock*  get_min_dfnum_in() {
-        flowblock *min = get_in(0);
-
-        for (int i = 1; i < in.size(); i++) {
-            if (in[i].point->dfnum < min->dfnum) {
-                min = get_in(i);
-            }
-        }
-
-        return min;
-    }
-
-    bool        is_in(flowblock *b) {
-        return get_in_index(b) >= 0;
-    }
-    bool        is_out(flowblock *b) {
-        return get_out_index(b) >= 0;
-    }
-    pcodeop*    first_op(void) { return *ops.begin();  }
-    pcodeop*    last_op(void) { 
-		return ops.size() ? (*--ops.end()):NULL;  
-	}
-    list<pcodeop *>::iterator    last_it(void) { 
-        return ops.end();
-	}
-    int         last_order() { return last_op()->start.getOrder();  }
-
-    int         get_out_rev_index(int i) { return out[i].reverse_index;  }
-    /* 判断这个block是否指令为空
-
-    1. phi节点不算
-
-    @except_branch      计算指令总数时，不算branch
-    */
-    bool        is_empty(int except_branch);
-
-    /* 判断这个block指令为空后，能否删除，有几种情况不删除 
-    1. 有多个out边
-    2. 有一条out边，但是指向自己
-    */
-    bool        is_empty_delete(void);
-
-    void        set_initial_range(const Address &begin, const Address &end);
-    void        add_op(pcodeop *);
-    void        insert(list<pcodeop *>::iterator iter, pcodeop *inst);
-
-
-    Address     get_start(void);
-
-    bool        is_back_edge_in(int i) { return in[i].label & a_back_edge; }
-    void        set_mark() { flags.f_mark = 1;  }
-    void        clear_mark() { flags.f_mark = 0;  }
-    bool        is_mark() { return flags.f_mark;  }
-    bool        is_entry_point() { return flags.f_entry_point;  }
-    bool        is_switch_out(void) { return flags.f_switch_out;  }
-    int         get_in_index(const flowblock *bl);
-    int         get_out_index(const flowblock *bl);
-
-    void        add_in_edge(flowblock *b, int lab);
-    int         remove_in_edge(int slot);
-    void        remove_out_edge(int slot);
-    void        half_delete_out_edge(int slot);
-    void        half_delete_in_edge(int slot);
-    int         get_back_edge_count(void);
-    flowblock*  get_back_edge_node(void);
-    /* 当这个block的末尾节点为cbranch节点时，返回条件为真或假的跳转地址 */
-    blockedge*  get_true_edge(void);
-    blockedge*  get_false_edge(void);
-
-    void        set_out_edge_flag(int i, uint4 lab);
-    void        clear_out_edge_flag(int i, uint4 lab);
-
-
-    void        set_dead(void) { flags.f_dead = 1;  }
-    int         is_dead(void) { return flags.f_dead;  }
-    bool        is_irreducible() { return flags.f_irreducible;  }
-    void        remove_op(pcodeop *inst);
-    void        replace_in_edge(int num, flowblock *b);
-    list<pcodeop *>::reverse_iterator get_rev_iterator(pcodeop *op);
-    pcodeop*    first_callop();
-    void        mark_unsplice() { flags.f_unsplice = 1;  }
-    bool        is_unsplice() { return flags.f_unsplice; }
-    bool        is_end() { return out.size() == 0;  }
-    /* 尾部的cbranch是否是指令内的相对跳转 */
-    bool        is_rel_cbranch();
-    bool        is_rel_branch();
-    Address     get_return_addr();
-    pcodeop*    get_pcode(int pid) {
-        list<pcodeop *>::iterator it;
-        for (it = ops.begin(); it != ops.end(); it++) {
-            if ((*it)->start.getTime() == pid)
-                return *it;
-        }
-
-        return NULL;
-    }
-    /* 查找以这个变量为out的第一个pcode */
-    pcodeop*    find_pcode_def(const Address &out);
-    void        dump();
-    int         sub_id();
-
-    void        clear_loopinfo() {
-        loopheader = NULL;
-        loopnodes.clear();
-        irreducibles.clear();
-        flags.f_irreducible = 0;
-        flags.f_loopheader = 0;
-    }
-    bool noreturn(void);
-    /* 当一个block末尾是cbranch时， 一般它的比较条件是来自于cmp 
-    cmp指令会产生一个sub指令，返回这个sub指令，假如没有，就返回NULL
-    */
-    pcodeop*    get_cbranch_sub_from_cmp(void);
-    /* 寻找最后一个操作ZR寄存器的指令*/
-    pcodeop*    get_last_oper_zr(void);
-    /* FIXME:需要重调整个机制 */
-    bool        is_iv_in_normal_loop(pcodeop *op);
-    bool        is_eq_cbranch(void);
-    /* 不属于任何一个循环 */
-    bool        is_out_loop() {
-        return !loopheader && loopnodes.empty() && !flags.f_irreducible;
-    }
-    bool        is_adjacent(flowblock *adj) {
-        return get_in_index(adj) >= 0;
-    }
-    bool        is_cbranch() {
-        pcodeop *p = last_op();
-        return p ? (p->opcode == CPUI_CBRANCH) : false;
-    }
-    bool        is_it_cbranch() {
-        return is_cbranch() ? last_op()->flags.itblock : 0;
-    }
-    /* 获取输入节点中没有被标记过的数量 */
-    int         incoming_forward_branches();
-    /* 当flowblock是一个分支跳转节点时，给出除了b以外的另外一个节点 */
-    flowblock*  get_cbranch_xor_out(flowblock *b) {
-        return (b == get_out(0)) ? get_out(1) : get_out(0);
-    }
-    /* 某些指令内部有循环，比如: vld2.8 {d18,d19},[r3] 
-    
-    拆开循环以后，内部的pcode会分成多块，这个是判断当前的cfg节点，是否是首快 */
-    bool        is_rel_header() {
-        return ((out.size() == 1) && get_out(0)->is_rel_cbranch());
-    }
-
-    int         get_cbranch_cond();
-    bool        have_same_cmp_condition(flowblock *b);
-
-    /* 
-        cfgA(vn1)
-        /  \ 
-       vn0 /
-        \ /
-        phi
-    
-    当phi节点，是在一个if then 的交汇处产生时，尝试获取false边的vn
-    */
-    varnode*    get_false_vn(pcodeop *phi);
-    varnode*    get_true_vn(pcodeop *phi);
-
-    /* 对内接口
-    
-    -1: unknown
-    0: false
-    1: true
-    */
-    int         lead_to_edge(pcodeop *op, pcodeop *phi, varnode *vn);
-    /* 当某个phi节点，被其中的一个val定值时，op节点所在的块，会走向哪一边 */
-    bool        lead_to_false_edge(pcodeop *op, pcodeop *phi, varnode *val);
-    bool        lead_to_true_edge(pcodeop *op, pcodeop *phi, varnode *val);
-
-    /* 给定某个pcode，返回同一个地址的第一个pcode */
-    list<pcodeop*>::iterator    find_inst_first_op(pcodeop *p);
-
-    /*
-    return  1       changed
-            0       no changed
-    */
-    int             calc_memflow();
-    /* 把自己的输入节点，按dfnum排序 */
-    void           get_inlist_on_dfsort(vector<blockedge *> &inlist);
-    bool            is_11_branch() {
-        return ((ops.size() == 1) && (last_op()->opcode == CPUI_BRANCH) && (in.size() == 1) && (out.size() == 1));
-    }
-    /*
-    判断一个块是否可以直达另外一个块。
-
-    b1 -> b2 .. -> bn
-
-    [b1, bn) 的out.size()都为1
-    */
-    bool            is_direct_connect_to(flowblock *to);
-};
-
-class blockgraph {
-public:
-    vector<flowblock *> blist;
-    vector<flowblock *> deadblist;
-    /* 一个函数的所有结束节点 */
-    vector<flowblock *> exitlist;
-    /* 有些block是不可到达的，都放到这个列表内 */
-    vector<flowblock *> deadlist;
-
-    funcdata *fd;
-    dobc *d;
-
-    /* 识别所有的循环头 */
-    vector<flowblock *> loopheaders;
-
-    flowblock exit;
-
-    int index = 0;
-
-    //--------------------
-    blockgraph(funcdata *fd1);
-
-    flowblock*  get_block(int i) { return blist[i]; }
-    flowblock*  get_block_by_index(int index) {
-        for (int i = 0; i < blist.size(); i++)
-            if (blist[i]->index == index) return blist[i];
-
-        return NULL;
-    }
-    int         get_size(void) { return blist.size();  }
-    void        set_start_block(flowblock *bl);
-    flowblock*  get_entry_point(void);
-    void        clear_marks(void);
-
-    /*
-    1. 检测header是否为 while...do 形式的循环的头节点
-    2. 假如不是，返回NULL
-    3. 假如是，计算whiledo的结束节点是哪个
-    */
-    flowblock*  detect_whiledo_exit(flowblock *header);
-    void        add_block(flowblock *b);
-    blockbasic* new_block_basic(void);
-    blockbasic* new_block_basic(intb offset);
-
-    void        structure_loops(vector<flowblock *> &rootlist);
-    void        find_spanning_tree(vector<flowblock *> &preorder, vector<flowblock *> &rootlist);
-    void        dump_spanning_tree(const char *filename, vector<flowblock *> &rootlist);
-    void        calc_forward_dominator(const vector<flowblock *> &rootlist);
-    void        build_dom_tree(vector<vector<flowblock *> > &child);
-    int         build_dom_depth(vector<int> &depth);
-    /*
-    寻找一种trace流的反向支配节点，
-
-    一般的反向支配节点算法，就是普通支配节点算法的逆
-
-    而这个算法是去掉，部分节点的回边而生成反向支配节点，用来在trace流中使用
-    */
-    flowblock*  find_post_tdom(flowblock *h);
-    bool        find_irreducible(const vector<flowblock *> &preorder, int &irreduciblecount);
-
-    /* loop 处理 */
-    void        add_loopheader(flowblock *b) { 
-        b->flags.f_loopheader = 1;
-        loopheaders.push_back(b);  
-        b->loopnodes.push_back(b);
-    }
-    bool        in_loop(flowblock *lheader, flowblock *node);
-    void        clear_loopinfo() {
-        loopheaders.clear();
-    }
-
-    /* 边处理 */
-    void        clear(void);
-    int         remove_edge(flowblock *begin, flowblock *end);
-    void        add_edge(flowblock *begin, flowblock *end);
-    void        add_edge(flowblock *b, flowblock *e, int label);
-    void        calc_exitpath();
-    void        remove_block(flowblock *bl);
-
-    void        collect_reachable(vector<flowblock *> &res, flowblock *bl, bool un) const;
-    void        splice_block(flowblock *bl);
-    void        move_out_edge(flowblock *blold, int slot, flowblock *blnew);
-
-    void        clear_all_unsplice();
-    void        clear_all_vminfo();
-
-    flowblock*  add_block_if(flowblock *b, flowblock *cond, flowblock *tc);
-    bool        is_dowhile(flowblock *b);
-    /* 这个函数有点问题 */
-    flowblock*  find_loop_exit(flowblock *start, flowblock *end);
-    /* 搜索到哪个节点为止 */
-    pcodeop*    first_callop_vmp(flowblock *end);
-    void        remove_from_flow(flowblock *bl);
-    /* 计算每个blk 的live sets */
-    void        compute_local_live_sets(void);
-    void        compute_global_live_sets(void);
-
-    /* 计算每个pcode的live set*/
-    void        compute_local_live_sets_p(void);
-    void        compute_global_live_sets_p(void);
-    void        dump_live_sets();
-    void        dump_live_set(flowblock *b);
-    void        dump_live_set(pcodeop *p);
-    void        collect_cond_copy_sub(vector<pcodeop *> &subs);
-    void        collect_no_cmp_cbranch_block(vector<flowblock *> &blks);
-    flowblock*  get_it_end_block(flowblock *b);
-    void        collect_sideeffect_ops();
-    flowblock*  find_post_dom(flowblock *f);
-    void        calc_post_dominator();
-    /*
-    计算 post-dominator 时，必须得把尾部节点做为跟节点，然后计算它的post-order
-
-    在重新应用支配节点计算算法
-    */
-    void        post_order_on_rtree(flowblock *root, vector<flowblock *> &postorder, vector<char> &mark);
-    void        add_exit();
-    void        del_exit();
 };
 
 typedef struct priority_queue   priority_queue;
@@ -1158,10 +135,9 @@ struct priority_queue {
 };
 
 typedef map<SeqNum, pcodeop *>  pcodeop_tree;
-typedef struct op_edge      op_edge;
-typedef struct jmptable     jmptable;
 
-struct op_edge {
+class op_edge {
+public:
     pcodeop *from;
     pcodeop *to;
     int t = 0; // true flag
@@ -1189,7 +165,8 @@ struct funcproto {
     void set_side_effect(int v) { flags.side_effect = v;  }
 };
 
-struct jmptable {
+class jmptable {
+public:
     pcodeop *op;
     Address opaddr;
     int defaultblock;
@@ -1531,7 +508,7 @@ public:
     void        connect_basic();
 
     void        dump_inst();
-    void        dump_block(FILE *fp, blockbasic *b, int pcode);
+    void        dump_block(FILE *fp, flowblock *b, int pcode);
     /* flag: 1: enable pcode */
     void        dump_cfg(const string &name, const char *postfix, int flag);
     void        dump_pcode(const char *postfix);
@@ -1544,9 +521,9 @@ public:
 
     void        op_insert_before(pcodeop *op, pcodeop *follow);
     void        op_insert_after(pcodeop *op, pcodeop *prev);
-    void        op_insert(pcodeop *op, blockbasic *bl, list<pcodeop *>::iterator iter);
-    void        op_insert_begin(pcodeop *op, blockbasic *bl);
-    void        op_insert_end(pcodeop *op, blockbasic *bl);
+    void        op_insert(pcodeop *op, flowblock *bl, list<pcodeop *>::iterator iter);
+    void        op_insert_begin(pcodeop *op, flowblock *bl);
+    void        op_insert_end(pcodeop *op, flowblock *bl);
     void        inline_flow(funcdata *inlinefd, pcodeop *fd);
     void        inline_clone(funcdata *inelinefd, const Address &retaddr);
     void        inline_call(string name, int num);
@@ -1620,11 +597,11 @@ public:
             的大小是无意义的，Ghidra意识到了这一点，所以它的varnode本身不带版本号，所有的同版本varnode，就是同一个vn的指针。
             但是这个不方便我们调试，所以我加了一个vermap，硬给每个vn加了一个版本。
     */
-    void        rename_recurse(blockbasic *bl, variable_stack &varstack, version_map &vermap);
+    void        rename_recurse(flowblock *bl, variable_stack &varstack, version_map &vermap);
     /* 建立活跃链，这个活跃链非常耗时，有个 build_liverange_simple，比这个快100倍以上，假如你知道simple和这个的区别，就根据自己需要
        来使用不同的版本，假如不知道就用这个，这个就是标准的活跃链建立算法 */
 	void		build_liverange();
-    void        build_liverange_recurse(blockbasic *bl, variable_stack &varstack);
+    void        build_liverange_recurse(flowblock *bl, variable_stack &varstack);
 
     int         collect(Address addr, int size, vector<varnode *> &read,
         vector<varnode *> &write, vector<varnode *> &input, int &equal);
@@ -1705,7 +682,7 @@ public:
     8. 走到block出口，统计 {bool_may_store, bool_call, liveout_store_list}
     */
     int         mem_rename();
-    void        mem_rename_recurse(blockbasic *bl, variable_stack &varstack, version_map &vermap);
+    void        mem_rename_recurse(flowblock *bl, variable_stack &varstack, version_map &vermap);
 
     int         cond_constant_propagation();
     int         in_cbrlist(pcodeop *op) {
@@ -1832,13 +809,13 @@ public:
 
     bool        use_outside(varnode *vn);
     void        use2undef(varnode *vn);
-    void        branch_remove(blockbasic *bb, int num);
+    void        branch_remove(flowblock *bb, int num);
 	/* 把bb和第num个节点的关系去除 */
-    void        branch_remove_internal(blockbasic *bb, int num);
-    void        block_remove_internal(blockbasic *bb, bool unreachable);
+    void        branch_remove_internal(flowblock *bb, int num);
+    void        block_remove_internal(flowblock *bb, bool unreachable);
     bool        remove_unreachable_blocks(bool issuewarnning, bool checkexistence);
-    void        splice_block_basic(blockbasic *bl);
-    void        remove_empty_block(blockbasic *bl);
+    void        splice_block_basic(flowblock *bl);
+    void        remove_empty_block(flowblock *bl);
 
     void        redundbranch_apply();
     void        dump_store_info(const char *postfix);

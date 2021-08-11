@@ -468,7 +468,7 @@ void        funcdata::place_multiequal(void)
     vector<varnode *> inputvars;
     pcodeop *multiop, *p;
     varnode *vnin;
-    blockbasic *bl;
+    flowblock *bl;
     int max, i, j, flags, safevn;
 
     for (iter = disjoint.begin(); iter != disjoint.end(); ++iter) {
@@ -583,11 +583,11 @@ void        funcdata::rename()
     disjoint.clear();
 }
 
-void        funcdata::rename_recurse(blockbasic *bl, variable_stack &varstack, version_map &vermap)
+void        funcdata::rename_recurse(flowblock *bl, variable_stack &varstack, version_map &vermap)
 {
     /* 当前block内，被def过得varnode集合 */
     vector<varnode *> writelist;
-    blockbasic *subbl;
+    flowblock *subbl;
     list<pcodeop *>::iterator oiter, suboiter, next;
     pcodeop *op, *multiop;
     varnode *vnout, *vnin, *vnnew;
@@ -734,7 +734,7 @@ void		funcdata::build_liverange()
     build_liverange_recurse(bblocks.get_block(0), varstack);
 }
 
-void        funcdata::build_liverange_recurse(blockbasic *bl, variable_stack &varstack)
+void        funcdata::build_liverange_recurse(flowblock *bl, variable_stack &varstack)
 {
     /* 当前block内，被def过得varnode集合 */
     vector<varnode *> writelist;
@@ -1609,15 +1609,15 @@ void        funcdata::use2undef(varnode *vn)
     }
 }
 
-void        funcdata::branch_remove(blockbasic *bb, int num)
+void        funcdata::branch_remove(flowblock *bb, int num)
 {
     branch_remove_internal(bb, num);
     structure_reset();
 }
 
-void        funcdata::branch_remove_internal(blockbasic *bb, int num)
+void        funcdata::branch_remove_internal(flowblock *bb, int num)
 {
-    blockbasic *bbout;
+    flowblock *bbout;
     list<pcodeop *>::iterator iter;
     int blocknum;
 
@@ -1625,7 +1625,7 @@ void        funcdata::branch_remove_internal(blockbasic *bb, int num)
 	if (last && (last->opcode == CPUI_CBRANCH) && (bb->out.size() == 2))
 		op_destroy(last, 1);
 
-    bbout = (blockbasic *)bb->get_out(num);
+    bbout = (flowblock *)bb->get_out(num);
     blocknum = bbout->get_in_index(bb);
     bblocks.remove_edge(bb, bbout);
     clear_block_phi(bbout);
@@ -1641,7 +1641,7 @@ void        funcdata::branch_remove_internal(blockbasic *bb, int num)
 #endif
 }
 
-void        funcdata::block_remove_internal(blockbasic *bb, bool unreachable)
+void        funcdata::block_remove_internal(flowblock *bb, bool unreachable)
 {
     list<pcodeop *>::iterator iter;
     pcodeop *op;
@@ -1675,22 +1675,22 @@ bool        funcdata::remove_unreachable_blocks(bool issuewarnning, bool checkex
     }
 
     for (i = 0; i < list.size(); i++) {
-        blockbasic *bb = list[i];
+        flowblock *bb = list[i];
         while (bb->out.size() > 0)
             branch_remove_internal(bb, 0);
     }
 
     for (i = 0; i < list.size(); ++i) {
-        blockbasic *bb = list[i];
+        flowblock *bb = list[i];
         block_remove_internal(bb, true);
     }
     structure_reset();
     return true;
 }
 
-void        funcdata::splice_block_basic(blockbasic *bl)
+void        funcdata::splice_block_basic(flowblock *bl)
 {
-    blockbasic *outbl = NULL;
+    flowblock *outbl = NULL;
     if (bl->out.size() == 1) {
         outbl = bl->get_out(0);
         if (outbl->in.size() != 1)
@@ -1726,7 +1726,7 @@ void        funcdata::splice_block_basic(blockbasic *bl)
     structure_reset();
 }
 
-void        funcdata::remove_empty_block(blockbasic *bl)
+void        funcdata::remove_empty_block(flowblock *bl)
 {
     assert(bl->out.size() == 1);
     /* libmakeurl2.4.9.so 的 3648 出现了自己指向自己的情况，我们不允许删除这样的节点 */
@@ -1989,7 +1989,7 @@ varnode*        funcdata::concat_pieces(const vector<varnode *> &vnlist, pcodeop
     varnode *preexist = vnlist[0];
     bool isbigendian = preexist->get_addr().isBigEndian();
     Address opaddress;
-    blockbasic *bl;
+    flowblock *bl;
     list<pcodeop *>::iterator   insertiter;
 
     if (insertop == NULL) {
@@ -2073,7 +2073,7 @@ void        funcdata::split_pieces(const vector<varnode *> &vnlist, pcodeop *ins
     Address opaddress;
     uintb baseoff;
     bool isbigendian;
-    blockbasic *bl;
+    flowblock *bl;
     list<pcodeop *>::iterator insertiter;
 
     isbigendian = addr.isBigEndian();
