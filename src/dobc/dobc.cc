@@ -3913,6 +3913,31 @@ bool        funcdata::is_ifthenfi_structure(flowblock *a, flowblock *b, flowbloc
     return false;
 }
 
+bool        funcdata::is_ifthenfi_phi(pcodeop *phi, varnode *&top, varnode *&branch)
+{
+    if (phi->inrefs.size() != 2 || !phi->all_inrefs_is_adj())
+        return false;
+
+    varnode *in0 = phi->get_in(0);
+    varnode *in1 = phi->get_in(1);
+
+    flowblock *topb = in0->def->parent;
+    flowblock *branchb = in1->def->parent;
+
+    if (topb->dfnum > branchb->dfnum) {
+        topb = in1->def->parent;
+        branchb = in0->def->parent;
+    }
+
+    if ((branchb->out.size() == 1) && (branchb->in.size() == 1) && (branchb->get_in(0) == topb)) {
+        top = (topb == in0->def->parent) ? in0 : in1;
+        branch = (branchb == in0->def->parent) ? in0 : in1;
+        return true;
+    }
+
+    return false;
+}
+
 bool        funcdata::test_strict_alias(pcodeop *load, pcodeop *store)
 {
     if (load->parent != store->parent) {

@@ -1,6 +1,6 @@
 ﻿
 #include "sleigh.hh"
-#include "dobc.hh"
+#include "block.hh"
 #include "thumb_gen.hh"
 
 blockgraph::blockgraph(funcdata *fd1) 
@@ -1369,6 +1369,11 @@ blockedge*  flowblock::get_false_edge(void)
     }
 
     throw LowlevelError("not found false edge in flowblock");
+}
+
+int     flowblock::get_branch_cond(flowblock *branch, high_cond &cond)
+{
+    return 0;
 }
 
 void        flowblock::set_out_edge_flag(int i, uint4 lab)

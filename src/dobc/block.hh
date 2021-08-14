@@ -5,6 +5,7 @@
 #include "address.hh"
 #include "pcodeop.hh"
 #include <bitset>
+#include "high.hh"
 
 class varnode;
 class funcdata;
@@ -154,6 +155,8 @@ public:
         set<varnode *>  livein;
     } memflow;
 
+    high_cond   hi_cond;
+
     flowblock(void);
     flowblock(funcdata *fd);
     ~flowblock();
@@ -242,9 +245,20 @@ public:
     blockedge*  get_true_edge(void);
     blockedge*  get_false_edge(void);
 
+    flowblock*  get_true_block(void) {
+        return get_true_edge()->point;
+    }
+
+    flowblock*  get_false_block(void) {
+        return get_false_edge()->point;
+    }
+    /*
+    一个带cbranch的branch，走向其中一个branch时，它的条件
+    */
+    int         get_branch_cond(flowblock *branch, high_cond &cond);
+
     void        set_out_edge_flag(int i, uint4 lab);
     void        clear_out_edge_flag(int i, uint4 lab);
-
 
     void        set_dead(void) { flags.f_dead = 1;  }
     int         is_dead(void) { return flags.f_dead;  }
@@ -319,6 +333,10 @@ public:
     }
 
     int         get_cbranch_cond();
+    /*
+    计算当一个cbranch走向其中某个分支时，需要的条件
+    */
+    int         calc_cond(flowblock *to, high_cond &cond);
     bool        have_same_cmp_condition(flowblock *b);
 
     /* 

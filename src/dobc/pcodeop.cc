@@ -2,6 +2,7 @@
 #include "dobc.hh"
 #include "pcodeop.hh"
 #include "thumb_gen.hh"
+#include "high.hh"
 
 #define MSB4(a)                 (a & 0x80000000)
 #define MSB2(a)                 (a & 0x8000)
@@ -260,6 +261,93 @@ void            pcodeop::on_MULTIEQUAL()
 top_label:
     if (on_cond_MULTIEQUAL())
         output->set_top();
+}
+
+/*
+我们主要处理这么几种情况:
+
+情况1:
+      v15 = -1595496483;
+      if ( y >= 10 )
+        v15 = -294400669;
+      v16.0 = -294400669;
+      if ( y >= 10 )
+        v16.1 = v15;
+      v16.2=phi(v16.0, v16.1)
+      if ( v16.2 != -294400669 )
+
+      v16.2 的值一定等于 -294400669
+
+情况2:
+      v11.0 = 373666521;
+      if ( y >= 10 )
+        v11.1 = 44567630;
+      v11.2 = phi(v11.0, v11.1)
+      v14 = 0;
+      if ( y >= 10 )
+        v11.3 = 373666521;
+      v11.4 = phi(v11.2, v11.3)
+
+      v11的值等于 373666521
+
+情况3:
+      v18.0 = 2040621544;
+      v19.0 = 0;
+      if ( y.0 >= 10 )
+        v18.1 = -1595496483;
+      v18.2 = phi(v18.0, v18.1)
+      if ( y < 10 )
+        v19.1 = 1;
+      v19.2 = phi (v19.0, v19.1)
+      if ( v19.2 != 1 )
+        v18.3 = 2040621544;
+      v18.4 = phi(v18.2, v18.3)
+*/
+#define TOP             1
+int             pcodeop::on_cond_MULTIEQUAL2()
+{
+    funcdata *fd = parent->fd;
+    pcodeop *p;
+    vector<varnode *> defs;
+    int top, dfnum;
+
+    if ((parent->in.size() != 2) || all_inrefs_is_constant() || all_inrefs_is_top())
+        return TOP;
+
+    top = fd->collect_all_const_defs(this, defs, dfnum);
+    /* 假如当前phi节点的常量定义都是不一样的，则不计算  */
+    if (top || (defs.size() == dfnum))
+        return top;
+
+    /* 当phi节点的部分常量定义是一样的，则有可能去重 */
+    varnode *constvn = get_const_in();
+    varnode *topvn = get_top_in();
+    varnode *c2, *top1, *branch1;
+
+    high_cond topcond, cond;
+
+
+    p = topvn->def;
+    if (!fd->is_ifthenfi_phi(p, top1, branch1))
+        return TOP;
+
+    if (topcond.update(top1->def->parent, topvn->def->parent))
+        return TOP;
+
+    c2 = p->get_const_in(constvn);
+    if (!c2)
+        return TOP;
+
+    flowblock *b = top1->def->parent;
+
+    cond.update(b, c2->def->parent);
+
+    if (topcond == cond) {
+        output->set_val(c2->get_val());
+        return 0;
+    }
+
+    return TOP;
 }
 
 int             pcodeop::on_cond_MULTIEQUAL()

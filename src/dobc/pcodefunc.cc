@@ -2,6 +2,7 @@
 #include "vm.h"
 #include "sleigh.hh"
 #include "pcodefunc.hh"
+#include "dobc.hh"
 
 pcodefunc::pcodefunc(funcdata *f)
 {

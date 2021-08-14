@@ -222,9 +222,21 @@ public:
     v8必然等于1467139458 ，因为y_72 > 9 和 v6是等价的
     */
     int             on_cond_MULTIEQUAL();
+    /*
+    @return >0       top
+    */
+    int             on_cond_MULTIEQUAL2();
     bool            all_inrefs_is_constant(void);
+    /* 所有的输入节点，都是邻接节点 */
     bool            all_inrefs_is_adj(void);
     bool            all_inrefs_is_top(void);
+    /* 获取和自己第一个等于c的varnode */
+    varnode*        get_const_in(varnode *c) {
+        for (int i = 0; i < inrefs.size(); i++)
+            if (inrefs[i]->is_constant() && (inrefs[i]->type == c->type)) return inrefs[i];
+        return NULL;
+    }
+    /* 获取自己的第一个常量输入 */
     varnode*        get_const_in() {
         for (int i = 0; i < inrefs.size(); i++)
             if (inrefs[i]->is_constant()) return inrefs[i];
