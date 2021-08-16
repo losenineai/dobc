@@ -222,6 +222,9 @@ public:
     void            set_sp_constant(int v) { type.height = a_sp_constant; type.v = v;  }
     void            set_pc_constant(intb v) { type.height = a_pc_constant; type.v = v; }
     intb            get_val(void) const;
+    bool            is_val(intb v) {
+        return is_constant() && (get_val() == v);
+    }
     intb            get_sp_offset() { return get_addr().getOffset() - STACK_BASE; }
 
     void            add_use(pcodeop *op);

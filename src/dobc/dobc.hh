@@ -178,6 +178,7 @@ public:
         int dump_inst0;
         int dump_inst1;     
         int dump_inst2;
+        int open_phi2;
     } debug = { 0 };
 
     Address     sp_addr;
@@ -198,6 +199,8 @@ public:
     Address     lr_addr;
     Address     zr_addr;
     Address     cy_addr;
+    Address     ng_addr;
+    Address     ov_addr;
     Address     pc_addr;
     set<Address> cpu_regs;
 	/* r0-sp */

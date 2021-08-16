@@ -3045,7 +3045,7 @@ int         funcdata::collect_all_const_defs(pcodeop *start, vector<varnode *> &
                 cad_push_def(in);
             }
         }
-        else if ((p->opcode == CPUI_LOAD) && (in = p->get_virtualnode())) {
+        else if ((p->opcode == CPUI_LOAD) && (in = p->get_virtualnode()) && in->def) {
             in = in->def->get_in(2);
             cad_push_def(in);
         }
@@ -3379,7 +3379,7 @@ int         funcdata::ollvm_deshell()
     follow_flow();
     heritage();
 
-    //dump_cfg(name, "orig", 1);
+    dump_cfg(name, "orig0", 1);
 #if 1
     while (!cbrlist.empty() || !emptylist.empty()) {
         cond_constant_propagation();
@@ -3432,9 +3432,19 @@ int         funcdata::ollvm_deshell()
 
     combine_lcts_all();
 
+    dump_cfg(name, "final0", 1);
+#if 1
+    dobc::singleton()->debug.open_phi2 = 1;
+    heritage_clear();
+    heritage();
+
+    do {
+        cond_constant_propagation();
+        dead_code_elimination(bblocks.blist, 0);
+    } while (!cbrlist.empty() || !emptylist.empty());
+#endif
+
     dump_cfg(name, "final", 1);
-    dump_pcode("1");
-    dump_loop("1");
 
 	print_tag("de-ollvm spent %u ms\n", mtime_tick() - tick);
 

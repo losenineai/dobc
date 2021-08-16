@@ -4257,6 +4257,8 @@ void        dobc::build_arm()
 
     zr_addr = trans->getRegister("ZR").getAddr();
     cy_addr = trans->getRegister("CY").getAddr();
+    ng_addr = trans->getRegister("NG").getAddr();
+    ov_addr = trans->getRegister("OV").getAddr();
     pc_addr = trans->getRegister("pc").getAddr();
 
     argument_regs.push_back(&r0_addr);

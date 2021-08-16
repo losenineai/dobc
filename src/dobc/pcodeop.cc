@@ -259,7 +259,7 @@ void            pcodeop::on_MULTIEQUAL()
     }
 
 top_label:
-    if (on_cond_MULTIEQUAL())
+    if (on_cond_MULTIEQUAL2())
         output->set_top();
 }
 
@@ -306,12 +306,17 @@ top_label:
 #define TOP             1
 int             pcodeop::on_cond_MULTIEQUAL2()
 {
+    /* 调试用 */
+    if (!dobc::singleton()->debug.open_phi2)
+        return TOP;
+
     funcdata *fd = parent->fd;
     pcodeop *p;
+    varnode *c2, *top1, *branch1;
     vector<varnode *> defs;
     int top, dfnum;
 
-    if ((parent->in.size() != 2) || all_inrefs_is_constant() || all_inrefs_is_top())
+    if ((parent->in.size() != 2) || all_inrefs_is_constant() || all_inrefs_is_top() )
         return TOP;
 
     top = fd->collect_all_const_defs(this, defs, dfnum);
@@ -322,12 +327,15 @@ int             pcodeop::on_cond_MULTIEQUAL2()
     /* 当phi节点的部分常量定义是一样的，则有可能去重 */
     varnode *constvn = get_const_in();
     varnode *topvn = get_top_in();
-    varnode *c2, *top1, *branch1;
-
     high_cond topcond, cond;
 
-
     p = topvn->def;
+
+    if (fd->is_ifthenfi_phi(this, top1, branch1)) {
+        if (fd->is_ifthenfi_phi(p, top1, branch1)) {
+        }
+    }
+
     if (!fd->is_ifthenfi_phi(p, top1, branch1))
         return TOP;
 

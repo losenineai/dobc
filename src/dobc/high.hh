@@ -93,9 +93,25 @@ public:
     varnode *lhs;
     varnode *rhs;
 
+    /* 很多的条件具有等价性 
+    x.0 = 1234;
+    z.0 = 0;
+    if (y > 10)
+        z.1 = 1;
+    z.2 = phi(z.0, z.1)
+    if (z.2)
+        x.1 = 2345;
+    x.2 = phi(x.0, x.1)
+
+    在这里 y > 10 等于 z.1 == 1，我们认为这2个条件具有传递性
+
+    */
+    high_cond *link;
+
     high_cond();
     ~high_cond();
 
+    enum high_cond_type compute_cond(flowblock *b);
     int update(flowblock *t);
     int update(flowblock *t, flowblock *b);
     enum high_cond_type  get_type(void);
@@ -103,6 +119,7 @@ public:
     bool operator==(const high_cond &op2) const;
     bool operator!=(const high_cond &op2) const;
     high_cond &not(const high_cond &op2);
+    enum high_cond_type match(struct cond_node *root);
 };
 
 inline high_cond &high_cond::operator=(const high_cond &op2)
@@ -112,15 +129,20 @@ inline high_cond &high_cond::operator=(const high_cond &op2)
     type = op2.type;
     lhs = op2.lhs;
     rhs = op2.rhs;
+    link = op2.link;
 
     return *this;
 }
 
 inline bool high_cond::operator==(const high_cond &op2) const
 {
-    if (!lhs->is_constant() && !op2.lhs->is_constant() && (lhs == op2.lhs)) {
-        if (rhs->is_constant() && lhs->is_constant() && rhs->type == op2.rhs->type)
-            return true;
+    const high_cond *node = &op2;
+
+    for (; node; node = node->link) {
+        if (!lhs->is_constant() && !node->lhs->is_constant() && (lhs == node->lhs)) {
+            if (rhs->is_constant() && lhs->is_constant() && rhs->type == node->rhs->type)
+                return true;
+        }
     }
 
     return false;
