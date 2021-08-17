@@ -332,11 +332,11 @@ int             pcodeop::on_cond_MULTIEQUAL2()
     p = topvn->def;
 
     if (!fd->is_ifthenfi_structure(topb = b->get_min_dfnum_in(), b->get_max_dfnum_in(), b)
-        || !fd->is_ifthenfi_structure(topb1 = topb->get_min_dfnum_in(), topb->get_max_dfnum_in(), topb))
+        || !fd->is_ifthenfi_structure(topb1 = topb->get_min_dfnum_in(), topb->get_max_dfnum_in(), topb)
+        || topb->update_cond()
+        || topb1->update_cond())
         return TOP;
 
-    topb->update_cond();
-    topb1->update_cond();
     c1 = p->get_const_in(constvn);
     topcond.update(topb, topvn->def->parent);
 

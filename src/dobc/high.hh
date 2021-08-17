@@ -83,6 +83,9 @@ enum high_cond_type {
 
 class high_cond {
 
+private:
+    int     process_zr(varnode *zr);
+
 public:
     enum high_cond_type type = h_unkown;
     int version;

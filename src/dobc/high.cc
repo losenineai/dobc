@@ -34,10 +34,13 @@ enum high_cond_type high_cond::compute_cond(flowblock *b)
         switch (s[1]->opcode) {
         case CPUI_INT_EQUAL:
             if (in0a(s[1]) == d->zr_addr) {
-                if (in0(s[1])->is_val(0))
+                if (process_zr(in0(s[1])))
+                    return h_unkown;
+
+                if (in1(s[1])->is_val(0))
                     return h_eq;
 
-                if (in0(s[1])->is_val(1))
+                if (in1(s[1])->is_val(1))
                     return h_ne;
             }
             break;
@@ -57,13 +60,15 @@ enum high_cond_type high_cond::compute_cond(flowblock *b)
 int high_cond::update(flowblock *t)
 {
     type = compute_cond(t);
+    if (type == h_unkown)
+        return -1;
 
     return 0;
 }
 
 int high_cond::update(flowblock *from, flowblock *to)
 {
-    if (update(from) || (type == h_unkown))
+    if (update(from))
         return -1;
 
     this->to = to;
@@ -114,4 +119,24 @@ int     high_cond::linkto(high_cond &op2)
     link = &op2;
 
     return 0;
+}
+
+int     high_cond::process_zr(varnode *zr)
+{
+    pcodeop *p = zr->def, *p1;
+
+    switch (p->opcode) {
+    case CPUI_INT_EQUAL:
+        p1 = in0(p)->def;
+        if (in1(p)->is_constant() && in1(p)->get_val() == 0) {
+            if ((p1->opcode == CPUI_INT_XOR) && in1(p1)->is_constant() && (in1(p1)->get_val() == 1)) {
+                lhs = in0(p1);
+                rhs = in1(p1);
+                return 0;
+            }
+        }
+        break;
+    }
+
+    return -1;
 }
