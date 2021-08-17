@@ -114,12 +114,17 @@ public:
     enum high_cond_type compute_cond(flowblock *b);
     int update(flowblock *t);
     int update(flowblock *t, flowblock *b);
+    /*
+
+    @return     0   success
+                -1  error
+    */
+    int linkto(high_cond &op2);
     enum high_cond_type  get_type(void);
     high_cond &operator=(const high_cond &op2);
     bool operator==(const high_cond &op2) const;
     bool operator!=(const high_cond &op2) const;
     high_cond &not(const high_cond &op2);
-    enum high_cond_type match(struct cond_node *root);
 };
 
 inline high_cond &high_cond::operator=(const high_cond &op2)

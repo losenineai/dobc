@@ -312,46 +312,59 @@ int             pcodeop::on_cond_MULTIEQUAL2()
 
     funcdata *fd = parent->fd;
     pcodeop *p;
-    varnode *c2, *top1, *branch1;
     vector<varnode *> defs;
-    int top, dfnum;
+    int ret, dfnum;
 
     if ((parent->in.size() != 2) || all_inrefs_is_constant() || all_inrefs_is_top() )
         return TOP;
 
-    top = fd->collect_all_const_defs(this, defs, dfnum);
+    ret = fd->collect_all_const_defs(this, defs, dfnum);
     /* 假如当前phi节点的常量定义都是不一样的，则不计算  */
-    if (top || (defs.size() == dfnum))
-        return top;
+    if (ret || (defs.size() == dfnum))
+        return ret;
 
     /* 当phi节点的部分常量定义是一样的，则有可能去重 */
     varnode *constvn = get_const_in();
-    varnode *topvn = get_top_in();
+    varnode *topvn = get_top_in(), *c1;
     high_cond topcond, cond;
+    flowblock *b = this->parent, *topb, *topb1, *topb2;
 
     p = topvn->def;
 
-    if (fd->is_ifthenfi_phi(this, top1, branch1)) {
-        if (fd->is_ifthenfi_phi(p, top1, branch1)) {
+    if (!fd->is_ifthenfi_structure(topb = b->get_min_dfnum_in(), b->get_max_dfnum_in(), b)
+        || !fd->is_ifthenfi_structure(topb1 = topb->get_min_dfnum_in(), topb->get_max_dfnum_in(), topb))
+        return TOP;
+
+    topb->update_cond();
+    topb1->update_cond();
+    c1 = p->get_const_in(constvn);
+    topcond.update(topb, topvn->def->parent);
+
+    if (!c1)
+        return TOP;
+
+    if (topb->cond == topb1->cond) {
+        cond.update(topb1, c1->def->parent);
+
+        if (topcond == cond) {
+            output->set_val(c1->get_val());
+            return 0;
         }
+
+        return TOP;
     }
-
-    if (!fd->is_ifthenfi_phi(p, top1, branch1))
+    else if (!fd->is_ifthenfi_structure(topb2 = topb1->get_min_dfnum_in(), topb1->get_max_dfnum_in(), topb1))
         return TOP;
 
-    if (topcond.update(top1->def->parent, topvn->def->parent))
+    topb2->update_cond();
+
+    if ((topb1->cond != topb2->cond) && (topb1->cond.linkto(topb2->cond)))
         return TOP;
 
-    c2 = p->get_const_in(constvn);
-    if (!c2)
-        return TOP;
-
-    flowblock *b = top1->def->parent;
-
-    cond.update(b, c2->def->parent);
+    cond.update(p->parent->get_min_dfnum_in(), c1->def->parent);
 
     if (topcond == cond) {
-        output->set_val(c2->get_val());
+        output->set_val(c1->get_val());
         return 0;
     }
 

@@ -155,7 +155,7 @@ public:
         set<varnode *>  livein;
     } memflow;
 
-    high_cond   hi_cond;
+    high_cond   cond;
 
     flowblock(void);
     flowblock(funcdata *fd);
@@ -333,10 +333,6 @@ public:
     }
 
     int         get_cbranch_cond();
-    /*
-    计算当一个cbranch走向其中某个分支时，需要的条件
-    */
-    int         calc_cond(flowblock *to, high_cond &cond);
     bool        have_same_cmp_condition(flowblock *b);
 
     /* 
@@ -383,6 +379,7 @@ public:
     [b1, bn) 的out.size()都为1
     */
     bool            is_direct_connect_to(flowblock *to);
+    int             update_cond();
 };
 
 class blockgraph {
@@ -500,6 +497,7 @@ public:
     在重新应用支配节点计算算法
     */
     void        post_order_on_rtree(flowblock *root, vector<flowblock *> &postorder, vector<char> &mark);
+    /* 为了计算post-dom 树，需要临时增加结束节点，计算完毕以后，则删除exit节点 */
     void        add_exit();
     void        del_exit();
 };

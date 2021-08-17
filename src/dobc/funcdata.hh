@@ -804,20 +804,16 @@ public:
     /*
     判断是否是如下类型的结构
 
-        cfgA
+        top
         /  \
-      cfgB  \
+      middle \
         \   /
-         cfgC
-
-    cfgA -> cfgB
-    cfgA -> cfgC
-    cfgB -> cfgC
+        bottom 
 
     这个函数和判断是否cbranch是不一样的，那个只需要判断cfg节点是否已cbranch结尾，这个需要
     判断cfg节点出口的2个节点，能否立即在某个点汇合。
     */
-    bool        is_ifthenfi_structure(flowblock *a, flowblock *b, flowblock *c);
+    bool        is_ifthenfi_structure(flowblock *top, flowblock *middle, flowblock *bottom);
     /*
     v1.0 = c1
     if (xx)

@@ -69,10 +69,10 @@ int high_cond::update(flowblock *from, flowblock *to)
     this->to = to;
 
     if ((from->get_true_block() == to)) {
-        *this = from->hi_cond;
+        *this = from->cond;
     }
     else {
-        *this = not(from->hi_cond);
+        *this = not(from->cond);
     }
 
     return 0;
@@ -107,4 +107,11 @@ high_cond &high_cond::not(const high_cond &op2)
     }
 
     return *this;
+}
+
+int     high_cond::linkto(high_cond &op2)
+{
+    link = &op2;
+
+    return 0;
 }

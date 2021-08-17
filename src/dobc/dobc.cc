@@ -3905,10 +3905,10 @@ char*       funcdata::print_indent(void)
     return buf;
 }
 
-bool        funcdata::is_ifthenfi_structure(flowblock *a, flowblock *b, flowblock *c)
+bool        funcdata::is_ifthenfi_structure(flowblock *top, flowblock *middle, flowblock *bottom)
 {
-    if (!a->is_cbranch()) return false;
-    if ((b->get_0out() == c) && (b->get_0in() == a)) return true;
+    if (!top->is_cbranch()) return false;
+    if ((middle->get_0out() == bottom) && (middle->get_0in() == top)) return true;
 
     return false;
 }

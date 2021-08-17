@@ -1481,3 +1481,8 @@ void        flowblock::dump()
     printf("flowblock[addr:0x%llx, index:%d, dfnum:%d]\n", get_start().getOffset(), index, dfnum);
 }
 
+
+int         flowblock::update_cond()
+{
+    return cond.update(this);
+}
