@@ -114,7 +114,7 @@ public:
     high_cond();
     ~high_cond();
 
-    enum high_cond_type compute_cond(flowblock *b);
+    int compute_cond(flowblock *b);
     int update(flowblock *t);
     int update(flowblock *t, flowblock *b);
     /*
@@ -123,6 +123,7 @@ public:
                 -1  error
     */
     int linkto(high_cond &op2);
+    int detect_operands(pcodeop *op);
     enum high_cond_type  get_type(void);
     high_cond &operator=(const high_cond &op2);
     bool operator==(const high_cond &op2) const;

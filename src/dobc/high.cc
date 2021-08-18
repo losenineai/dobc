@@ -15,7 +15,7 @@ high_cond::~high_cond()
 #define in0a(_p)                in0(_p)->get_addr()
 #define in1a(_p)                in1(_p)->get_addr()
 
-enum high_cond_type high_cond::compute_cond(flowblock *b)
+int high_cond::compute_cond(flowblock *b)
 {
     dobc *d = dobc::singleton();
     vector<pcodeop *> s;
@@ -29,41 +29,44 @@ enum high_cond_type high_cond::compute_cond(flowblock *b)
             break;
     }
 
+    if (detect_operands(b->last_op()))
+        return -1;
+
     switch (s[0]->opcode) {
     case CPUI_BOOL_NEGATE:
         switch (s[1]->opcode) {
         case CPUI_INT_EQUAL:
             if (in0a(s[1]) == d->zr_addr) {
-                if (process_zr(in0(s[1])))
-                    return h_unkown;
 
-                if (in1(s[1])->is_val(0))
-                    return h_eq;
+                if (in1(s[1])->is_val(0)) {
+                    type = h_eq;
+                    return 0;
+                }
 
-                if (in1(s[1])->is_val(1))
-                    return h_ne;
+                if (in1(s[1])->is_val(1)) {
+                    type =  h_ne;
+                    return 0;
+                }
             }
             break;
 
         case CPUI_INT_NOTEQUAL:
-            if ((in0a(s[1]) == d->ng_addr) && (in0a(s[1]) == d->ov_addr))
+            if ((in0a(s[1]) == d->ng_addr) && (in0a(s[1]) == d->ov_addr)) {
+                type = h_ge;
                 return h_ge;
+            }
             break;
         }
 
         break;
     }
 
-    return h_unkown;
+    return -1;
 }
 
 int high_cond::update(flowblock *t)
 {
-    type = compute_cond(t);
-    if (type == h_unkown)
-        return -1;
-
-    return 0;
+    return compute_cond(t);
 }
 
 int high_cond::update(flowblock *from, flowblock *to)
@@ -136,6 +139,34 @@ int     high_cond::process_zr(varnode *zr)
             }
         }
         break;
+    }
+
+    return -1;
+}
+
+int high_cond::detect_operands(pcodeop *op)
+{
+    vector<pcodeop *> ops;
+
+    ops.push_back(op);
+    while (!ops.empty()) {
+        op = *(ops.erase(ops.begin()));
+
+        for (int i = 0; i < op->inrefs.size(); i++) {
+            varnode *vn = op->get_in(i);
+
+            if (dobc::singleton()->is_greg(vn->get_addr())) {
+                if (op->inrefs.size() == 2) {
+                    lhs = op->get_in(0);
+                    rhs = op->get_in(1);
+                    return 0;
+                }
+                else
+                    throw LowlevelError("only support 2 operands opcode");
+            }
+            else if (vn->def)
+                ops.push_back(vn->def);
+        }
     }
 
     return -1;
