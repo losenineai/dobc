@@ -29,6 +29,8 @@ int high_cond::compute_cond(flowblock *b)
             break;
     }
 
+    version = b->fd->reset_version;
+
     if (detect_operands(b->last_op()))
         return -1;
 
@@ -48,12 +50,16 @@ int high_cond::compute_cond(flowblock *b)
                     return 0;
                 }
             }
+            else if ((in0a(s[1]) == d->ng_addr) && (in1a(s[1]) == d->ov_addr)) {
+                type = h_lt;
+                return 0;
+            }
             break;
 
         case CPUI_INT_NOTEQUAL:
-            if ((in0a(s[1]) == d->ng_addr) && (in0a(s[1]) == d->ov_addr)) {
+            if ((in0a(s[1]) == d->ng_addr) && (in1a(s[1]) == d->ov_addr)) {
                 type = h_ge;
-                return h_ge;
+                return 0;
             }
             break;
         }
@@ -66,13 +72,15 @@ int high_cond::compute_cond(flowblock *b)
 
 int high_cond::update(flowblock *t)
 {
-    return compute_cond(t);
+    if (version != t->fd->reset_version)
+        return compute_cond(t);
+
+    return 0;
 }
 
 int high_cond::update(flowblock *from, flowblock *to)
 {
-    if (update(from))
-        return -1;
+    from->update_cond();
 
     this->to = to;
 
