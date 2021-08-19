@@ -72,24 +72,26 @@ int high_cond::compute_cond(flowblock *b)
 
 int high_cond::update(flowblock *t)
 {
+    from = t;
+
     if (version != t->fd->reset_version)
         return compute_cond(t);
 
     return 0;
 }
 
-int high_cond::update(flowblock *from, flowblock *to)
+int high_cond::update(flowblock *from, flowblock *to1)
 {
     from->update_cond();
 
-    this->to = to;
-
-    if ((from->get_true_block() == to)) {
+    if ((from->get_true_block() == to1)) {
         *this = from->cond;
     }
     else {
         *this = not(from->cond);
     }
+
+    to = to1;
 
     return 0;
 }
@@ -104,32 +106,59 @@ enum high_cond_type  high_cond::get_type(void)
     return type;
 }
 
-
 high_cond &high_cond::not(const high_cond &op2)
 {
     *this = op2;
-    switch (op2.type) {
-    case h_eq: type = h_ne; break;
-    case h_ne: type = h_eq; break;
-    case h_cs: type = h_cc; break;
-    case h_cc: type = h_cs; break;
-    case h_lt: type = h_ge; break;
-    case h_ge: type = h_lt; break;
-    case h_le: type = h_gt; break;
-    case h_gt: type = h_le; break;
+
+    type = nottype(op2.type);
+
+    return *this;
+}
+
+high_cond_type high_cond::nottype(high_cond_type t) const
+{
+    high_cond_type ret = h_unkown;
+    switch (t) {
+    case h_eq: ret = h_ne; break;
+    case h_ne: ret = h_eq; break;
+    case h_cs: ret = h_cc; break;
+    case h_cc: ret = h_cs; break;
+    case h_lt: ret = h_ge; break;
+    case h_ge: ret = h_lt; break;
+    case h_le: ret = h_gt; break;
+    case h_gt: ret = h_le; break;
     default:
         throw LowlevelError("high_cond not support type");
         break;
     }
 
-    return *this;
+    return ret;
 }
 
 int     high_cond::linkto(high_cond &op2)
 {
-    link = &op2;
+    pcodeop *p = op2.lhs->def;
+    funcdata *fd = from->fd;
+    flowblock *middle;
 
-    return 0;
+    if ((p->opcode != CPUI_MULTIEQUAL) && !p->all_inrefs_is_constant())
+        return -1;
+
+    if (!fd->is_ifthenfi_structure(from, middle = op2.from->get_max_dfnum_in(), op2.from))
+        return -1;
+
+    varnode *truevn = from->get_true_vn(p);
+
+    if (op2.type == h_eq) {
+        link = &op2;
+
+        if (!op2.rhs->is_val(truevn->get_val()))
+            link_not = 1;
+
+        return 0;
+    }
+
+    return -1;
 }
 
 int     high_cond::process_zr(varnode *zr)

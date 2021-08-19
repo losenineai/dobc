@@ -358,7 +358,9 @@ int             pcodeop::on_cond_MULTIEQUAL2()
 
     topb2->update_cond();
 
-    if ((topb1->cond != topb2->cond) && (topb1->cond.linkto(topb2->cond)))
+    if ((topb1->cond != topb2->cond) && (topb2->cond.linkto(topb1->cond)))
+        return TOP;
+    else if ((topb1->cond != topb->cond) && (topb1->cond.linkto(topb->cond)))
         return TOP;
 
     cond.update(p->parent->get_min_dfnum_in(), c1->def->parent);
