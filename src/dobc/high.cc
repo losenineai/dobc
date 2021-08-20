@@ -141,8 +141,22 @@ int     high_cond::linkto(high_cond &op2)
     funcdata *fd = from->fd;
     flowblock *middle;
 
-    if ((p->opcode != CPUI_MULTIEQUAL) && !p->all_inrefs_is_constant())
-        return -1;
+    if ((p->opcode != CPUI_MULTIEQUAL)) {
+        if (op2.lhs == lhs && op2.rhs == rhs) {
+            if (type == op2.type)
+                link = &op2;
+            else if (type == nottype(op2.type)) {
+                link = &op2;
+                link_not = 1;
+            }
+
+            return 0;
+        }
+
+        if (!p->all_inrefs_is_constant())
+            return -1;
+
+    }
 
     if (!fd->is_ifthenfi_structure(from, middle = op2.from->get_max_dfnum_in(), op2.from))
         return -1;

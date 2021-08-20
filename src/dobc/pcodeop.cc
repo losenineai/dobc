@@ -311,7 +311,7 @@ int             pcodeop::on_cond_MULTIEQUAL2()
         return TOP;
 
     funcdata *fd = parent->fd;
-    pcodeop *p;
+    pcodeop *topp;
     vector<varnode *> defs;
     int ret, dfnum;
 
@@ -327,18 +327,20 @@ int             pcodeop::on_cond_MULTIEQUAL2()
     varnode *constvn = get_const_in();
     varnode *topvn = get_top_in(), *c1;
     high_cond topcond, cond;
-    flowblock *b = this->parent, *topb, *topb1, *topb2;
+    flowblock *b = this->parent, *topb, *topb1, *topb2, *b1;
 
-    p = topvn->def;
+    topp = topvn->def;
 
-    if (!fd->is_ifthenfi_structure(topb = b->get_min_dfnum_in(), b->get_max_dfnum_in(), b)
+    if (!fd->is_ifthenfi_structure(topb = b->get_min_dfnum_in(), b1 = b->get_max_dfnum_in(), b)
         || !fd->is_ifthenfi_structure(topb1 = topb->get_min_dfnum_in(), topb->get_max_dfnum_in(), topb)
         || topb->update_cond()
         || topb1->update_cond())
         return TOP;
 
-    c1 = p->get_const_in(constvn);
-    topcond.update(topb, topvn->def->parent);
+    c1 = topp->get_const_in(constvn);
+
+    /* 我们确认top变量，是从哪个条件泄露进来的 */
+    topcond.update(topb, (b1 == topvn->def->parent) ? b1:b);
 
     if (!c1)
         return TOP;
@@ -358,12 +360,10 @@ int             pcodeop::on_cond_MULTIEQUAL2()
 
     topb2->update_cond();
 
-    if ((topb1->cond != topb2->cond) && (topb2->cond.linkto(topb1->cond)))
-        return TOP;
-    else if ((topb1->cond != topb->cond) && (topb1->cond.linkto(topb->cond)))
-        return TOP;
+    topb2->cond.linkto(topb1->cond);
+    topb1->cond.linkto(topb->cond);
 
-    cond.update(p->parent->get_min_dfnum_in(), c1->def->parent);
+    cond.update(topp->parent->get_min_dfnum_in(), c1->def->parent);
 
     if (topcond == cond) {
         output->set_val(c1->get_val());

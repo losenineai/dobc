@@ -3,8 +3,7 @@
 #define __high_h___
 
 #include "varnode.hh"
-
-class flowblock;
+#include "block.hh"
 
 /* 这个头文件是为了把低级的由cv, ov, zr, ng组合成的比较指令，转换成高级的比较指令 */
 
@@ -184,23 +183,35 @@ inline bool high_cond::operator==(const high_cond &op2) const
     varnode *left, *right;
     high_cond_type tmp_type;
 
+    int not;
+
     if ((type == h_unkown) || (op2.type == h_unkown))
         return false;
 
     if (to) {
-        for (; node; node = node->link) {
-            if (!node->to)
-                throw LowlevelError("high_cond type mismatch");
+        not = node->link_not;
 
-            tmp_type = op2.type;
+        if (!op2.to)
+            throw LowlevelError("high_cond type mismatch");
 
-            if (tmp_type != node->type)
-                continue;
+        while (node) {
+
+            tmp_type = node->type;
+            if (not)
+                tmp_type = nottype(tmp_type);
+
+            if (node->type != type)
+                goto cont_label;
 
             if (!lhs->is_constant() && !node->lhs->is_constant() && (lhs == node->lhs)) {
-                if (rhs->is_constant() && lhs->is_constant() && rhs->type == node->rhs->type)
+                if (rhs->is_constant() && node->rhs->is_constant() && rhs->type == node->rhs->type)
                     return true;
             }
+
+cont_label:
+            node = node->link;
+            if (node)
+                not = (not + node->link_not) % 2;
         }
     }
     else {
