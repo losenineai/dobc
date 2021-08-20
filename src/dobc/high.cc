@@ -142,7 +142,12 @@ int     high_cond::linkto(high_cond &op2)
     flowblock *middle;
 
     if ((p->opcode != CPUI_MULTIEQUAL)) {
-        if (op2.lhs == lhs && op2.rhs == rhs) {
+        /*
+        判断2个比较的结构是否相等 
+        */
+        if (op2.lhs == lhs 
+            && ((op2.rhs == rhs) 
+                || (op2.rhs->is_constant() && rhs->is_constant() && op2.rhs->get_val() == rhs->get_val()))) {
             if (type == op2.type)
                 link = &op2;
             else if (type == nottype(op2.type)) {
