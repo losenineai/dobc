@@ -91,9 +91,9 @@ private:
 
 public:
     high_cond_type type = h_unkown;
-    int version;
+    int version = 0;
 
-    flowblock *from;
+    flowblock *from = NULL;
     /* 条件比较有2种:
     
     1. 一种是条件结构比较
@@ -124,10 +124,10 @@ public:
 
     所以我们通过一个to来指明核心条件走的方向
     */
-    flowblock *to;
+    flowblock *to = NULL;
 
-    varnode *lhs;
-    varnode *rhs;
+    varnode *lhs = NULL;
+    varnode *rhs = NULL;
 
     /* 很多的条件具有等价性 
     x.0 = 1234;

@@ -307,7 +307,7 @@ top_label:
 int             pcodeop::on_cond_MULTIEQUAL2()
 {
     /* 调试用 */
-    //if (!dobc::singleton()->debug.open_phi2) return TOP;
+    if (!dobc::singleton()->debug.open_phi2) return TOP;
 
     funcdata *fd = parent->fd;
     pcodeop *topp;
@@ -1268,6 +1268,12 @@ int             pcodeop::compute(int inslot, flowblock **branch)
                 && (op->get_in(1) == in0)) {
                 out->set_val(0);
             }
+            else if ((op = in1->def) && (op->opcode == CPUI_INT_XOR)
+                && op->get_in(1)->is_constant() 
+                && (VAL_MASK(op->get_in(1)->get_val(), op->get_in(1)->size) == 0xfffffffe)
+                && (op->get_in(0) == in0)) {
+                out->set_val(0);
+            }
             else {
                 out->set_top();
             }
@@ -1280,6 +1286,21 @@ int             pcodeop::compute(int inslot, flowblock **branch)
         in1 = get_in(1);
         if (in0->is_constant() && in1->is_constant()) {
             out->set_val(in0->get_val() | in1->get_val());
+        }
+        /* 
+        y = ~(x * (x - 1)) | 0xfffffffe
+        y == -1
+        */
+        else if (in0->is_constant() && (in0->get_val() == -2)
+            && in1->def
+            && (in1->def->opcode == CPUI_INT_NEGATE)
+            && (op = in1->def->get_in(0)->def)
+            && (op->opcode == CPUI_INT_MULT)
+            && (op1 = op->get_in(1)->def)
+            && (op1->opcode == CPUI_INT_SUB)
+            && op1->get_in(1)->is_val(1)
+            && op1->get_in(0) == op->get_in(0)) {
+            out->set_val(-1);
         }
         else
             out->set_top();
