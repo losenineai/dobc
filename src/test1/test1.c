@@ -117,7 +117,7 @@ static void thumb_test_base64_decode(const char *soname)
     if (!ur)
         return;
 
-    ur->debug.trace = 1;
+    //ur->debug.trace = 1;
 
     test_base64_decode_init(ur);
 

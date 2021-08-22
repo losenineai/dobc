@@ -162,7 +162,7 @@ int test_base64_decode_init(struct uc_runtime *ur)
     r1 = (int)ur_malloc(ur, 100);
     uc_reg_write(uc, UC_ARM_REG_R1, &r1);
 
-    f = ur_alloc_func(ur, "main_exit", test_base64_encode_on_exit, ur);
+    f = ur_alloc_func(ur, "main_exit", test_base64_decode_on_exit, ur);
     uc_reg_write(uc, UC_ARM_REG_LR, &f->address);
 
     ur_reg_read_batch(ur, arm_general_regs, t->regs, count_of_array(t->regs));
