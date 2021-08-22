@@ -66,7 +66,7 @@ static void hook_code(uc_engine *uc, uint64_t address, uint32_t size, void *user
     }
 }
 
-static void thumb_test_base64(const char *soname)
+static void thumb_test_base64_encode(const char *soname)
 {
     uc_engine *uc;
     uc_err err;
@@ -100,39 +100,56 @@ static void thumb_test_base64(const char *soname)
     uc_close(uc);
 }
 
+static void thumb_test_base64_decode(const char *soname)
+{
+    uc_engine *uc;
+    uc_err err;
+    uc_hook trace1, trace2;
+
+    err = uc_open(UC_ARCH_ARM, UC_MODE_THUMB, &uc);
+    if (err) {
+        printf("Failed on uc_open() with error returned: %u (%s)\n",
+                err, uc_strerror(err));
+        return;
+    }
+
+    uc_runtime_t *ur = uc_runtime_new(uc, soname, 0, 0);
+    if (!ur)
+        return;
+
+    ur->debug.trace = 1;
+
+    test_base64_decode_init(ur);
+
+    uc_hook_add(uc, &trace1, UC_HOOK_BLOCK, hook_block, ur, 1, 0);
+    uc_hook_add(uc, &trace2, UC_HOOK_CODE, hook_code, ur, ur_text_start(ur), ur_text_end(ur));
+
+    uint64_t start = ur_symbol_addr(ur, "base64_decode");
+    err = uc_emu_start(uc, start, 0, 0, 0);
+    if (err) {
+        printf("Failed on uc_emu_start() with error returned: %s(%d)\n", uc_strerror(err), err);
+    }
+
+    uc_close(uc);
+}
+
 static const char *help = {
     "test1 [data_dir] \n"
 };
 
 int main(int argc, char **argv, char **envp)
 {
-    // dynamically load shared library
-#ifdef DYNLOAD
-    if (!uc_dyn_load(NULL, 0)) {
-        printf("Error dynamically loading shared library.\n");
-        printf("Please check that unicorn.dll/unicorn.so is available as well as\n");
-        printf("any other dependent dll/so files.\n");
-        printf("The easiest way is to place them in the same directory as this app.\n");
-        return 1;
-    }
-#endif
-
     char buf[128];
     if (argc != 2) {
         puts(help);
         return -1;
     }
 
-    //test_thumb2();
-
     //sprintf(buf, "%s/unittests/base64/libs/armeabi-v7a/libbase64.so", argv[1]);
     sprintf(buf, "%s/unittests/base64/libs/armeabi-v7a/libbase64.so.decode", argv[1]);
-    thumb_test_base64(buf);
+    //thumb_test_base64_encode(buf);
+    thumb_test_base64_decode(buf);
 
-    // dynamically free shared library
-#ifdef DYNLOAD
-    uc_dyn_free();
-#endif
 
     return 0;
 }
