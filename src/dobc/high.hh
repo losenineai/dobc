@@ -80,6 +80,10 @@ typedef enum high_cond_type {
     h_unkown = 15
 } high_cond_type;
 
+class high_cond_edge;
+
+class high_cond;
+
 class high_cond {
 
 private:
@@ -138,9 +142,12 @@ public:
     在这里 y > 10 等于 z.1 == 1，我们认为这2个条件具有传递性
 
     */
-    high_cond *link;
-    /* 反值link */
-    int link_not;
+    struct {
+        int not;
+        high_cond *next = NULL;
+        high_cond *prev = NULL;
+    } lnode;
+    vector<high_cond_edge *> outs;
 
     high_cond();
     ~high_cond();
@@ -157,10 +164,67 @@ public:
     int detect_operands(pcodeop *op);
     high_cond_type  get_type(void);
     high_cond &operator=(const high_cond &op2);
-    bool operator==(const high_cond &op2) const;
-    bool operator!=(const high_cond &op2) const;
+    bool operator==(high_cond &op2) const;
+    bool operator!=(high_cond &op2) const;
     high_cond &not(const high_cond &op2);
     high_cond_type nottype(high_cond_type t) const;
+
+    high_cond *get_cond_link_head(int &not);
+};
+
+class high_cond_edge {
+    high_cond *op2;
+    /* 反值link 
+
+    x = 1
+    if (y > 10)
+        x = 0;
+    z = 1;
+    if (x == 0)
+        z = 0
+
+    传递性:
+    R(y > 10) ==> R(x == 0) ==> !R(x == 1)
+
+    交换性
+    R(x == 1) ==> !R(y > 10) 
+    R(y > 10) ==> !R(x == 1)
+
+    R(x == 1) <!==> R(y > 10) 
+    */
+    int not;
+};
+
+
+struct high_cond_cmp_def {
+    bool operator() ( const high_cond *a, const high_cond *b ) const;
+};
+
+
+typedef set<high_cond *, high_cond_cmp_def> high_cond_set;
+
+/* 维护所有relation的表
+
+这个表要提供几项功能
+
+1. 给点一个 high_cond_A，查出所有和这个high_cond_A 等于 或者 反等于 的条件 high_cond_N
+2. 增加一对推导关系 high_cond_A (<==> || <!==>) high_cond_B
+*/
+class high_cond_table {
+    // 当这个version和fd里面的reset version对不上的时候，清空整个表 
+    int version;
+    funcdata *fd;
+
+    high_cond_set tabs;
+
+public:
+    high_cond_table(funcdata *fd);
+    ~high_cond_table();
+
+    int clear();
+
+    int add_relation(high_cond *op1, high_cond *op2, int not);
+    int get_relations(high_cond *op1, vector<high_cond *> &rels);
 };
 
 inline high_cond &high_cond::operator=(const high_cond &op2)
@@ -170,26 +234,24 @@ inline high_cond &high_cond::operator=(const high_cond &op2)
     type = op2.type;
     lhs = op2.lhs;
     rhs = op2.rhs;
-    link = op2.link;
-    link_not = op2.link_not;
+    lnode = op2.lnode;
 
     return *this;
 }
 
-inline bool high_cond::operator==(const high_cond &op2) const
+inline bool high_cond::operator==(high_cond &op2) const
 {
-    const high_cond *node = &op2;
+    int not;
+    high_cond *node = op2.get_cond_link_head(not);
 
     varnode *left, *right;
     high_cond_type tmp_type;
-
-    int not;
 
     if ((type == h_unkown) || (op2.type == h_unkown))
         return false;
 
     if (to) {
-        not = node->link_not;
+        not = node->lnode.not;
 
         if (!op2.to)
             throw LowlevelError("high_cond type mismatch");
@@ -209,13 +271,13 @@ inline bool high_cond::operator==(const high_cond &op2) const
             }
 
 cont_label:
-            node = node->link;
+            node = node->lnode.next;
             if (node)
-                not = (not + node->link_not) % 2;
+                not = (not + node->lnode.not) % 2;
         }
     }
     else {
-        for (; node; node = node->link) {
+        for (; node; node = node->lnode.next) {
             if (node->to)
                 throw LowlevelError("high_cond type mismatch");
 
@@ -241,7 +303,7 @@ cont_label:
     return false;
 }
 
-inline bool high_cond::operator!=(const high_cond &op2) const
+inline bool high_cond::operator!=(high_cond &op2) const
 {
     return !(*this == op2);
 }

@@ -330,6 +330,8 @@ int             pcodeop::on_cond_MULTIEQUAL2()
     flowblock *b = this->parent, *topb, *topb1, *topb2, *b1;
 
     topp = topvn->def;
+    if (topp->opcode == CPUI_COPY)
+        topp = topp->get_in(0)->def;
 
     if (!fd->is_ifthenfi_structure(topb = b->get_min_dfnum_in(), b1 = b->get_max_dfnum_in(), b)
         || !fd->is_ifthenfi_structure(topb1 = topb->get_min_dfnum_in(), topb->get_max_dfnum_in(), topb)

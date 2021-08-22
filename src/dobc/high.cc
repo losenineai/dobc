@@ -2,6 +2,16 @@
 #include "dobc.hh"
 #include "high.hh"
 
+#define clist_add(p1, p2, n) do { \
+        p1->lnode.not = n; \
+        high_cond *tmp = p1->lnode.next; \
+        p1->lnode.next = (p2); \
+        (p2)->lnode.next = tmp; \
+        (p2)->lnode.prev = p1; \
+        if (tmp) \
+            tmp->lnode.prev = (p2); \
+    } while (0)
+
 high_cond::high_cond()
 {
 }
@@ -148,11 +158,11 @@ int     high_cond::linkto(high_cond &op2)
         if (op2.lhs == lhs 
             && ((op2.rhs == rhs) 
                 || (op2.rhs->is_constant() && rhs->is_constant() && op2.rhs->get_val() == rhs->get_val()))) {
-            if (type == op2.type)
-                link = &op2;
+            if (type == op2.type) {
+                clist_add(this, &op2, 0);
+            }
             else if (type == nottype(op2.type)) {
-                link = &op2;
-                link_not = 1;
+                clist_add(this, &op2, 1);
             }
 
             return 0;
@@ -168,11 +178,13 @@ int     high_cond::linkto(high_cond &op2)
 
     varnode *truevn = from->get_true_vn(p);
 
+    int link_not = 0;
     if (op2.type == h_eq) {
-        link = &op2;
 
         if (!op2.rhs->is_val(truevn->get_val()))
             link_not = 1;
+
+        clist_add(this, &op2, link_not);
 
         return 0;
     }
@@ -227,3 +239,40 @@ int high_cond::detect_operands(pcodeop *op)
 
     return -1;
 }
+
+high_cond_table::high_cond_table(funcdata *fd1)
+{
+    fd = fd1;
+}
+
+high_cond_table::~high_cond_table()
+{
+}
+
+int high_cond_table::clear()
+{
+    high_cond_set::iterator it = tabs.begin();
+
+    for (; it != tabs.end(); it++) {
+    }
+
+    return 0;
+}
+
+bool high_cond_cmp_def::operator()(const high_cond *a, const high_cond *b) const
+{
+    return a->from->dfnum < b->from->dfnum;
+}
+
+high_cond *high_cond::get_cond_link_head(int &not)
+{
+    high_cond *n = this;
+    not = 0;
+
+    while (n->lnode.prev) {
+        n = n->lnode.prev;
+    }
+
+    return n;
+}
+
