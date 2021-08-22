@@ -1300,12 +1300,21 @@ int             pcodeop::compute(int inslot, flowblock **branch)
             && in1->def
             && (in1->def->opcode == CPUI_INT_NEGATE)
             && (op = in1->def->get_in(0)->def)
-            && (op->opcode == CPUI_INT_MULT)
-            && (op1 = op->get_in(1)->def)
-            && (op1->opcode == CPUI_INT_SUB)
-            && op1->get_in(1)->is_val(1)
-            && op1->get_in(0) == op->get_in(0)) {
-            out->set_val(-1);
+            && (op->opcode == CPUI_INT_MULT)) {
+            if ((op1 = op->get_in(1)->def)
+                && (op1->opcode == CPUI_INT_SUB)
+                && op1->get_in(1)->is_val(1)
+                && op1->get_in(0) == op->get_in(0)) {
+                out->set_val(-1);
+            }
+            else if ((op1 = op->get_in(0)->def)
+                && (op1->opcode == CPUI_INT_SUB)
+                && op1->get_in(1)->is_val(1)
+                && op1->get_in(0) == op->get_in(1)) {
+                out->set_val(-1);
+            }
+            else
+                out->set_top();
         }
         else
             out->set_top();
