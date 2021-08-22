@@ -23,3 +23,14 @@ base64_clean: FORCE
 	cd base64; \
 	$(ndkbuild) clean; \
 	cd -
+
+crc32: FORCE
+	cd crc32 ; \
+	$(ndkbuild) ; \
+	cp libs/armeabi-v7a/libcrc32.so  libs/armeabi-v7a/libcrc32.so.decode; \
+	cd -
+
+crc32_clean: FORCE
+	cd crc32; \
+	$(ndkbuild) clean; \
+	cd -

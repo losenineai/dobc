@@ -98,7 +98,7 @@ void md5Update(MD5Context *ctx, uint8_t *input_buffer, size_t input_len) __attri
  * Pad the current input to get to 448 bytes, append the size in bits to the very end,
  * and save the result of the final iteration into digest.
  */
-void md5Finalize(MD5Context *ctx) 
+void md5Finalize(MD5Context *ctx) __attribute((__annotate__(("bcf,fla,sub"))))
 {
 	uint32_t input[16];
 	unsigned int offset = ctx->size % 64;
