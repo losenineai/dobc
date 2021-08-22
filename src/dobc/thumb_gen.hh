@@ -160,7 +160,7 @@ public:
     void add_fix_list(int ind, flowblock *b, int op);
     void topologsort();
 
-    uint32_t reg2i(const Address &a);
+    int reg2i(const Address &a);
 
     /* 确认simd指令是否需要修复，有些simd指令，访问了pc寄存器，无法从原始obj文件中抽取 */
     bool simd_need_fix(pit it);

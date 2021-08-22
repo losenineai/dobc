@@ -150,9 +150,14 @@ void thumb_gen::resort_blocks()
 
 #define UNPREDICITABLE()        vm_error("not support");
 
-uint32_t thumb_gen::reg2i(const Address &a)
+int thumb_gen::reg2i(const Address &a)
 {
-    return d->reg2i(a);
+    int ret = d->reg2i(a);
+
+    if (ret == -1)
+        throw LowlevelError("un-support reg2i address");
+
+    return ret;
 }
 
 bool thumb_gen::simd_need_fix(pit it)
@@ -806,7 +811,7 @@ void _str_imm(int rt, int rn, int imm, int wback)
     else if (add && imm < 4096) // t3
         o(0xf8c00000 | (rn << 16) | (rt << 12) | imm);
     else if (pos < 256)
-        o(0xf8400800 | imm | (rt << 12) | (rn << 16) | (p << 10) | (add << 9) | (wback << 8));
+        o(0xf8400800 | pos | (rt << 12) | (rn << 16) | (p << 10) | (add << 9) | (wback << 8));
 }
 
 void _strd(int rt, int rt2, int rn, int imm, int w)
@@ -1322,7 +1327,12 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     else if (p2->get_addr() != p1->get_addr()) {
                         _ldr_imm(reg2i(poa(p1)), reg2i(pi0a(p)), - pi1(p)->get_val(), 0);
                     }
-                    it = advance_to_inst_end(it);
+                    break;
+
+                case CPUI_STORE:
+                    if (p1->output->size == 4) {
+                        _str_imm(reg2i(pi2a(p1)), reg2i(pi0a(p)), -pi1(p)->get_val(), 0);
+                    }
                     break;
 
                 case CPUI_INT_EQUAL:
@@ -1334,8 +1344,6 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                         rm = d->reg2i(pi1a(p));
                         _cmp_reg(rn, rm);
                     }
-
-                    it = advance_to_inst_end(it);
                     break;
 
                 case CPUI_INT_SLESS:
@@ -1345,10 +1353,10 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 case CPUI_SUBPIECE:
                     if (istemp(p1->output) && p2->opcode == CPUI_STORE) {
                         _strb_imm(reg2i(pi0a(p1)), rn, -pi1(p)->get_val(), 0);
-                        advance(it, 2);
                     }
                     break;
                 }
+                it = advance_to_inst_end(it);
             }
             else if (isreg(p->output)) {
                 if (pi0(p)->is_hard_constant()) {
