@@ -32,6 +32,9 @@ int high_cond::compute_cond(flowblock *b)
     list<pcodeop *>::reverse_iterator rit = b->ops.rbegin();
     const Address &last_addr = (*rit)->get_addr();
 
+    lnode.next = lnode.prev = NULL;
+    lnode.not = 0;
+
     for (++rit; rit != b->ops.rend(); rit++) {
         if ((*rit)->get_addr() == last_addr)
             s.push_back(*rit);

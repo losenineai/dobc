@@ -143,7 +143,7 @@ public:
 
     */
     struct {
-        int not;
+        int not = 0;
         high_cond *next = NULL;
         high_cond *prev = NULL;
     } lnode;

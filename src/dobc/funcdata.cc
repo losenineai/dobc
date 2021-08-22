@@ -3431,7 +3431,7 @@ int         funcdata::ollvm_deshell()
     combine_lcts_all();
 
     dump_cfg(name, "final0", 1);
-#if 1
+#if 0
     dobc::singleton()->debug.open_phi2 = 1;
     heritage_clear();
     heritage();

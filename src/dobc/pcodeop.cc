@@ -307,7 +307,7 @@ top_label:
 int             pcodeop::on_cond_MULTIEQUAL2()
 {
     /* 调试用 */
-    if (!dobc::singleton()->debug.open_phi2) return TOP;
+    //if (!dobc::singleton()->debug.open_phi2) return TOP;
 
     funcdata *fd = parent->fd;
     pcodeop *topp;
@@ -346,6 +346,10 @@ int             pcodeop::on_cond_MULTIEQUAL2()
     if (!c1)
         return TOP;
 
+    /* FIXME:调试用 */
+    static int trace = 0;
+    trace++;
+
     if (topb->cond == topb1->cond) {
         cond.update(topb1, c1->def->parent);
 
@@ -363,6 +367,7 @@ int             pcodeop::on_cond_MULTIEQUAL2()
 
     topb2->cond.linkto(topb1->cond);
     topb1->cond.linkto(topb->cond);
+
 
     cond.update(topp->parent->get_min_dfnum_in(), c1->def->parent);
 
