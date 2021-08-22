@@ -1324,7 +1324,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     if ((p1->output->size == 1) && istemp(p1->output)) {
                         _ldrb_imm(reg2i(poa(p2)), reg2i(pi0a(p)), - pi1(p)->get_val(), 0);
                     }
-                    else if (p2->get_addr() != p1->get_addr()) {
+                    else if (!p2 || (p2->get_addr() != p1->get_addr())) {
                         _ldr_imm(reg2i(poa(p1)), reg2i(pi0a(p)), - pi1(p)->get_val(), 0);
                     }
                     break;
