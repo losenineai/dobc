@@ -1187,30 +1187,29 @@ int         funcdata::ollvm_detect_propchain4(ollvmhead *oh, flowblock *&from, b
 
     但是有一些特殊情况下是没有def指令的。这个一般是最后的快要脱出vmhead的阶段。
 
-    这个时候我们先处理其中一种情况:
-
     1. 获取vmhead中的cmp
     2. 直接取了第一个操作数寄存器（这里有问题，理论上应该取第一个状态寄存器，可能是第一个，也可能是第2个）
     3. 取这个操作数寄存器的def
     4. 判断这个def是否是phi
-    5. 判断这个phi的所有输入是否是常量
+    5. 假如不是，搜索拷贝链，到phi为止
+    6. 判断这个phi是否在混淆头内(必须不在，否则p不为空)
+    7. 判断这个phi的block，和当前混淆头的关系
+    8. 假如邻接，直接做条件展开
+    9. 假如不邻接，判断phi的block的post-dom，是否和vmhead邻接，是的话，在post-dom上做展开
+
+
+    2021年8月22日:
+    1. 下面的if没有完全实现上文中的算法
+    2. 我感觉 整个大的if块，可能和非if阶段的逻辑合并到一起，但是我还没完全理顺
     */
     if (!p) {
         if ((p = h->get_cbranch_sub_from_cmp())) {
             p1 = p->get_in(0)->def;
             /* libmakeurl:sub_15521 */
-#if 0
-            if (h->is_in((pre = p1->parent))) {
-                if (b_is_flag(flags, F_OPEN_COPY))
-                    return ollvm_on_unconst_def(p1, pre, h);
-                else
-                    return ERR_NOT_DETECT_PROPCHAIN;
-            }
-            else {
-                throw LowlevelError("not expected error");
-            }
-#else
             if (b_is_flag(flags, F_OPEN_COPY)) {
+                if ((p1->parent == h) && p1->opcode == CPUI_COPY)
+                    p1 = p1->get_in(0)->def;
+
                 if (h->is_in((pre = p1->parent)))
                     return ollvm_on_unconst_def(p1, pre, h);
 
@@ -1223,7 +1222,6 @@ int         funcdata::ollvm_detect_propchain4(ollvmhead *oh, flowblock *&from, b
             }
             else
                 return ERR_NOT_DETECT_PROPCHAIN;
-#endif
         }
         else {
             h->flags.f_no_cmp = 1;
@@ -3433,7 +3431,7 @@ int         funcdata::ollvm_deshell()
     combine_lcts_all();
 
     dump_cfg(name, "final0", 1);
-#if 1
+#if 0
     dobc::singleton()->debug.open_phi2 = 1;
     heritage_clear();
     heritage();

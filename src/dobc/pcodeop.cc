@@ -307,8 +307,7 @@ top_label:
 int             pcodeop::on_cond_MULTIEQUAL2()
 {
     /* 调试用 */
-    if (!dobc::singleton()->debug.open_phi2)
-        return TOP;
+    //if (!dobc::singleton()->debug.open_phi2) return TOP;
 
     funcdata *fd = parent->fd;
     pcodeop *topp;
