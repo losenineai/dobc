@@ -19,6 +19,48 @@ struct uc_area  default_areas[] = {
     { UC_AREA_STACK,0,  0x500000,   0, 128 * KB, UC_PROT_READ | UC_PROT_WRITE, 12, 1 << 12, 0 },
 };
 
+
+void malloc_cb(uc_runtime_t *t)
+{
+    int r0;
+
+    uc_reg_read(t->uc, UC_ARM_REG_R0,  &r0);
+
+    r0 = (int)ur_malloc(t, r0);
+
+    uc_reg_write(t->uc, UC_ARM_REG_R0, &r0);
+}
+
+void free_cb(uc_runtime_t *t)
+{
+    int r0;
+
+    uc_reg_read(t->uc, UC_ARM_REG_R0,  &r0);
+
+    ur_free((void *)r0);
+}
+
+void memcpy_cb(uc_runtime_t *t)
+{
+    int r0, r1, r2;
+    char buf[512];
+
+    uc_reg_read(t->uc, UC_ARM_REG_R0, &r0);
+    uc_reg_read(t->uc, UC_ARM_REG_R1, &r1);
+    uc_reg_read(t->uc, UC_ARM_REG_R2, &r2);
+
+    uc_mem_read(t->uc, r1, buf, r2);
+    uc_mem_write(t->uc, r0, buf, r2);
+}
+
+int             ur_stdlib_regist(uc_runtime_t *t)
+{
+    t->hooktab._malloc = ur_alloc_func(t, "malloc",  malloc_cb, t);
+    t->hooktab._free = ur_alloc_func(t, "free",  malloc_cb, t);
+    t->hooktab._memcpy = ur_alloc_func(t, "memcpy",  malloc_cb, t);
+    return 0;
+}
+
 uc_runtime_t*   uc_runtime_new(uc_engine *uc, const char *soname, int stack_size, int heap_size)
 {
     uc_runtime_t *ur;
@@ -63,6 +105,7 @@ uc_runtime_t*   uc_runtime_new(uc_engine *uc, const char *soname, int stack_size
 
     int stack_guard = rand();
     ur_symbol_add(ur, "__stack_chk_guard", UR_SYMBOL_DATA, &stack_guard, sizeof (stack_guard));
+    ur_stdlib_regist(ur);
 
     ur_elf_addr_fix(ur);
 

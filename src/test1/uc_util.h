@@ -161,6 +161,10 @@ typedef struct uc_runtime {
     struct {
         int     counts;
         struct uc_hook_func *list;
+
+        struct uc_hook_func     *_memcpy;
+        struct uc_hook_func     *_malloc;
+        struct uc_hook_func     *_free;
     } hooktab;
 
     struct {

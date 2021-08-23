@@ -133,6 +133,39 @@ static void thumb_test_base64_decode(const char *soname)
     uc_close(uc);
 }
 
+static void thumb_test_md5(const char *soname)
+{
+    uc_engine *uc;
+    uc_err err;
+    uc_hook trace1, trace2;
+
+    err = uc_open(UC_ARCH_ARM, UC_MODE_THUMB, &uc);
+    if (err) {
+        printf("Failed on uc_open() with error returned: %u (%s)\n",
+                err, uc_strerror(err));
+        return;
+    }
+
+    uc_runtime_t *ur = uc_runtime_new(uc, soname, 0, 0);
+    if (!ur)
+        return;
+
+    ur->debug.trace = 1;
+
+    test_md5_init(ur);
+
+    uc_hook_add(uc, &trace1, UC_HOOK_BLOCK, hook_block, ur, 1, 0);
+    uc_hook_add(uc, &trace2, UC_HOOK_CODE, hook_code, ur, ur_text_start(ur), ur_text_end(ur));
+
+    uint64_t start = ur_symbol_addr(ur, "md5String");
+    err = uc_emu_start(uc, start, 0, 0, 0);
+    if (err) {
+        printf("Failed on uc_emu_start() with error returned: %s(%d)\n", uc_strerror(err), err);
+    }
+
+    uc_close(uc);
+}
+
 static const char *help = {
     "test1 [data_dir] \n"
 };
@@ -146,9 +179,11 @@ int main(int argc, char **argv, char **envp)
     }
 
     //sprintf(buf, "%s/unittests/base64/libs/armeabi-v7a/libbase64.so", argv[1]);
-    sprintf(buf, "%s/unittests/base64/libs/armeabi-v7a/libbase64.so.decode", argv[1]);
+    //sprintf(buf, "%s/unittests/base64/libs/armeabi-v7a/libbase64.so.decode", argv[1]);
+    sprintf(buf, "%s/unittests/md5/libs/armeabi-v7a/libmd5.so", argv[1]);
     //thumb_test_base64_encode(buf);
-    thumb_test_base64_decode(buf);
+    //thumb_test_base64_decode(buf);
+    thumb_test_md5(buf);
 
 
     return 0;

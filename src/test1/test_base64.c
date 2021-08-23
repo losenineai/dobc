@@ -195,3 +195,56 @@ int test_base64_decode_on_exit(struct uc_runtime *r)
 
     return 0;
 }
+
+int test_md5_on_exit(struct uc_runtime *r)
+{
+    struct test_base64 *test = ur_get_priv_data(r);
+    int r0;
+    char buf[128];
+
+    uc_emu_stop(r->uc);
+
+    uc_reg_read(r->uc, UC_ARM_REG_R0,  &r0);
+
+    uc_mem_read(r->uc, test->regs[1], buf, sizeof (buf));
+
+    if (strcmp(buf, "5d41402abc4b2a76b9719d911017c592")) {
+        printf("md5 test failure, out[%s]\n", buf);
+    }
+    else {
+        printf("md5 test success, out[%s]\n", buf);
+    }
+
+    return 0;
+}
+
+int test_md5_init(struct uc_runtime *ur)
+{
+    int sp, r0;
+    uc_engine *uc = ur->uc;
+    struct uc_hook_func *f;
+
+    struct test_base64 *t = calloc(1, sizeof (t[0]));
+
+    if (!t)
+        return -ENOMEM;
+
+    ur_set_priv_data(ur, t);
+
+    sp = (int)ur_stack_end(ur) + 1;
+    uc_reg_write(uc, UC_ARM_REG_SP, &sp);
+
+    r0 = ur_string32(ur, "hello");
+    uc_reg_write(uc, UC_ARM_REG_R0, &r0);
+
+    f = ur_alloc_func(ur, "main_exit", test_md5_on_exit, ur);
+    uc_reg_write(uc, UC_ARM_REG_LR, &f->address);
+
+    ur_reg_read_batch(ur, arm_general_regs, t->regs, count_of_array(t->regs));
+
+    test_dump_regs(ur);
+
+    printf("start run====================================\n");
+
+    return 0;
+}
