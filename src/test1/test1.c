@@ -28,14 +28,9 @@ int arm_general_regs[16] = {
     UC_ARM_REG_PC
 };
 
-struct base64_test {
-    int regs[count_of_array(arm_general_regs)];
-    struct uc_runtime *ur;
-};
-
 static void hook_block(uc_engine *uc, uint64_t address, uint32_t size, void *user_data)
 {
-    printf(">>> Tracing basic block at 0x%"PRIx64 ", block size = 0x%x\n", address, size);
+    // printf(">>> Tracing basic block at 0x%"PRIx64 ", block size = 0x%x\n", address, size);
 }
 
 static void hook_code(uc_engine *uc, uint64_t address, uint32_t size, void *user_data)
@@ -61,7 +56,8 @@ static void hook_code(uc_engine *uc, uint64_t address, uint32_t size, void *user
 
     if ((hook = ur_hook_func_find_by_addr(t, address))) {
         if (hook->cb) {
-            hook->cb(hook->user_data);
+            ur_set_cur_func(t, hook);
+            hook->cb(t);
         }
     }
 }

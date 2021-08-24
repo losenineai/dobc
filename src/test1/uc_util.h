@@ -165,6 +165,9 @@ typedef struct uc_runtime {
         struct uc_hook_func     *_memcpy;
         struct uc_hook_func     *_malloc;
         struct uc_hook_func     *_free;
+
+        /* 当前调用的函数，函数调用前设置，当前函数调用完以后，不会清空 */
+        struct uc_hook_func *cur;
     } hooktab;
 
     struct {
@@ -231,6 +234,9 @@ struct uc_hook_func*    ur_hook_func_find_by_addr(uc_runtime_t *r, uint64_t addr
 
 void            ur_set_priv_data(uc_runtime_t *r, void *priv);
 void*           ur_get_priv_data(uc_runtime_t *r);
+
+void                    ur_set_cur_func(uc_runtime_t *r, struct uc_hook_func *f);
+struct uc_hook_func*    ur_get_cur_func(uc_runtime_t *r);
 
 /* 压通用寄存器 */
 void            ur_push_regs(uc_runtime_t *r);

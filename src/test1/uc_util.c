@@ -19,6 +19,7 @@ struct uc_area  default_areas[] = {
     { UC_AREA_STACK,0,  0x500000,   0, 128 * KB, UC_PROT_READ | UC_PROT_WRITE, 12, 1 << 12, 0 },
 };
 
+static struct uc_hook_func*    ur_relocate_func(uc_runtime_t *t, const char *name, uint32_t offset);
 
 void malloc_cb(uc_runtime_t *t)
 {
@@ -51,6 +52,15 @@ void memcpy_cb(uc_runtime_t *t)
 
     uc_mem_read(t->uc, r1, buf, r2);
     uc_mem_write(t->uc, r0, buf, r2);
+}
+
+void default_cb(uc_runtime_t *t)
+{
+    struct uc_hook_func *cur = ur_get_cur_func(t);
+
+    printf("function %s not implemtation", cur->name);
+
+    exit(0);
 }
 
 int             ur_stdlib_regist(uc_runtime_t *t)
@@ -254,28 +264,6 @@ struct uc_hook_func*    ur_hook_func_find_by_addr(uc_runtime_t *r, uint64_t addr
     return NULL;
 }
 
-struct uc_hook_func*    ur_relocate_func(uc_runtime_t *t, const char *name, uint32_t offset)
-{
-    struct uc_hook_func *f;
-    if (f = ur_hook_func_find(t, name))
-        return f;
-
-    uint32_t v = (uint32_t)ur__alloc(t, ur_area_text(t), 4, 4);
-    if (!v) {
-        assert(0);
-    }
-
-    f = calloc(1, sizeof (f[0]) + strlen(name));
-    strcpy(f->name, name);
-    f->address = v;
-    mlist_add(t->hooktab, f, node);
-
-    uc_mem_write(t->uc, offset, &v, sizeof (v));
-
-    printf("hook func = %s\n", name);
-    return f;
-}
-
 void            ur_elf_do_rel_sym_fix(uc_runtime_t *t, Elf32_Rel *rel)
 {
     Elf32_Shdr *dynsymsh = elf32_shdr_get((Elf32_Ehdr *)t->fdata, SHT_DYNSYM);
@@ -338,11 +326,29 @@ static void            ur_elf_addr_fix(uc_runtime_t *t)
     }
 }
 
+struct uc_hook_func*    ur_relocate_func(uc_runtime_t *t, const char *name, uint32_t offset)
+{
+    struct uc_hook_func *f = ur_alloc_func(t, name, default_cb, NULL);
+
+    int v = (int)f->address;
+
+    uc_mem_write(t->uc, offset, &v, sizeof (v));
+
+    printf("hook func = %s\n", name);
+    return f;
+}
+
+
 struct uc_hook_func*    ur_alloc_func(uc_runtime_t *t, const char *name, void (* cb)(void *user_data), void *user_data)
 {
     struct uc_hook_func *f;
-    if (f = ur_hook_func_find(t, name)) 
+    if ((f = ur_hook_func_find(t, name))) {
+        if (cb && (f->cb == default_cb)) {
+            f->cb = cb;
+            f->user_data = user_data;
+        }
         return f;
+    }
 
     f = calloc(1, sizeof (f[0]) + strlen(name));
     if (!f)
@@ -381,4 +387,14 @@ int ur_reg_read_batch(uc_runtime_t *r, int *ids, int *vals, int count)
     }
 
     return 0;
+}
+
+void                    ur_set_cur_func(uc_runtime_t *r, struct uc_hook_func *f)
+{
+    r->hooktab.cur = f;
+}
+
+struct uc_hook_func*    ur_get_cur_func(uc_runtime_t *r)
+{
+    return r->hooktab.cur;
 }
