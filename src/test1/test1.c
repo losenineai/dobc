@@ -157,6 +157,7 @@ static void thumb_test_md5(const char *soname)
     err = uc_emu_start(uc, start, 0, 0, 0);
     if (err) {
         printf("Failed on uc_emu_start() with error returned: %s(%d)\n", uc_strerror(err), err);
+        test_dump_regs(ur);
     }
 
     uc_close(uc);

@@ -87,13 +87,13 @@ plt section的头，都有20个字节的头，这20个字节的头不知道是�
 
         if (!MATCH_INST(ent->adr, 0xe28f0000)   // A8.8.12 A1
             || !MATCH_INST(ent->add, 0xe28c0000) // A8.8.5 A1
-            || !MATCH_INST(ent->ldr, 0xe4100000))  { // A8.8.63 A1 
+            || !MATCH_INST(ent->ldr, 0xe4100000))  { // A8.8.63 A1
             vm_error("un-expect plt entry pattern");
         }
 
         offset = ((unsigned char *)ent - filedata) + 8;
         /* A5.2.4 ARMExpandIMM，
-        
+
         因为我没有去完整实现这个函数，所以这里直接简单处理了下
         */
         imm = ent->add & 0xfff;
@@ -111,14 +111,20 @@ plt section的头，都有20个字节的头，这20个字节的头不知道是�
         addSymbol(Address(codespace, (unsigned char *)ent - filedata), sizeof (plt_entry_t), ptrsym->pltname, SYM_IMPORT);
     }
 }
- 
+
 ElfLoadImage::ElfLoadImage(const string &filename):LoadImageB(filename)
 {
+    /*
+    FIXME: 这里说明下，为什么不用elf_load_binary，而是直接用了file_load，这个是因为假如这里做了展开
+    那么在数据写回以后，要重新做一个合并，我嫌麻烦。
+
+    后期可能必须得用elf_load_binary才可以，但是在写回以后，得重新做segment合并
+    */
     //mem = (unsigned char *)elf_load_binary(filename.c_str(), (int *)&memlen);
     filedata = (unsigned char *)file_load(filename.c_str(), (int *)&filelen);
     hdr = (Elf32_Ehdr *)filedata;
 
-    if (!filedata) 
+    if (!filedata)
         vm_error("ElfLoadImage() failed open [%s]", filename);
 
     cur_sym = -1;
@@ -129,7 +135,7 @@ ElfLoadImage::~ElfLoadImage()
     file_unload((char *)filedata);
 }
 
-int ElfLoadImage::loadFill(uint1 *ptr, int size, const Address &addr) 
+int ElfLoadImage::loadFill(uint1 *ptr, int size, const Address &addr)
 {
     unsigned start = (unsigned)addr.getOffset();
     Elf32_Shdr *sh;
@@ -150,7 +156,7 @@ int ElfLoadImage::loadFill(uint1 *ptr, int size, const Address &addr)
     return 0;
 }
 
-bool ElfLoadImage::getNextSymbol(LoadImageFunc &record) 
+bool ElfLoadImage::getNextSymbol(LoadImageFunc &record)
 {
     Elf32_Shdr *dynsymsh, *link_sh;
     Elf32_Sym *sym;
@@ -161,7 +167,7 @@ bool ElfLoadImage::getNextSymbol(LoadImageFunc &record)
     cur_sym++;
 
     dynsymsh = elf32_shdr_get((Elf32_Ehdr *)filedata, SHT_DYNSYM);
-    if (!dynsymsh) 
+    if (!dynsymsh)
         vm_error("file[%s] have not .dymsym section", filename.c_str());
 
     link_sh = (Elf32_Shdr *)(filedata + hdr->e_shoff) + dynsymsh->sh_link;

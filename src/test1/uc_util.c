@@ -54,6 +54,25 @@ void memcpy_cb(uc_runtime_t *t)
     uc_mem_write(t->uc, r0, buf, r2);
 }
 
+void strlen_cb(uc_runtime_t *t)
+{
+    int r0, i = 0, lr;
+    char buf[128], *p, *end = buf + sizeof (buf);
+
+    uc_reg_read(t->uc, UC_ARM_REG_R0, &r0);
+    uc_reg_read(t->uc, UC_ARM_REG_LR, &lr);
+
+    do {
+        uc_mem_read(t->uc, r0 + i, p = buf, sizeof (buf));
+
+        for (; *p && p != end; p++, i++);
+    } while (p == end);
+
+    r0 = i;
+    uc_reg_write(t->uc, UC_ARM_REG_R0, &r0);
+    uc_reg_write(t->uc, UC_ARM_REG_PC, &lr);
+}
+
 void default_cb(uc_runtime_t *t)
 {
     struct uc_hook_func *cur = ur_get_cur_func(t);
@@ -68,6 +87,7 @@ int             ur_stdlib_regist(uc_runtime_t *t)
     t->hooktab._malloc = ur_alloc_func(t, "malloc",  malloc_cb, t);
     t->hooktab._free = ur_alloc_func(t, "free",  malloc_cb, t);
     t->hooktab._memcpy = ur_alloc_func(t, "memcpy",  malloc_cb, t);
+    t->hooktab._strlen = ur_alloc_func(t, "strlen",  strlen_cb, t);
     return 0;
 }
 

@@ -711,11 +711,34 @@ uint8_t*        elf_load_binary(const char *filename, int *len)
 
     /*
     ?: 为什么load的有些段，它的filesiz和memsiz是不等的
+
+    根据load的段大小，进行展开
     */
     for (i = 0, phdr = elf_phdr(hdr); i < hdr->e_phnum; i++, phdr++) {
         if (phdr->p_type != PT_LOAD)  continue;
 
         memcpy(mem + phdr->p_vaddr, fdata + phdr->p_offset, phdr->p_memsz);
+    }
+
+    /* 填充 got 表 */
+    Elf32_Shdr *dynsymsh = elf32_shdr_get(hdr, SHT_DYNSYM);
+    Elf32_Shdr *sh = elf32_shdr_get_by_name(hdr, ".rel.dyn");
+    Elf32_Rel *rel;
+    int count;
+
+    count = sh->sh_size / sh->sh_entsize;
+    for (i = 0; i < count; i++) {
+        rel = ((Elf32_Rel *)(fdata + sh->sh_offset)) + i;
+    }
+
+    sh = elf32_shdr_get_by_name(hdr, ".rel.plt");
+    if (sh->sh_type != SHT_REL) {
+        assert(0);
+    }
+
+    count = sh->sh_size / sh->sh_entsize;
+    for (i = 0; i < count; i++) {
+        rel = ((Elf32_Rel *)(fdata + sh->sh_offset)) + i;
     }
 
 exit_label:

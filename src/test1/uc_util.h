@@ -74,9 +74,9 @@ struct uc_hook_func {
         struct uc_hook_func     *prev;
     } node;
     uc_pos_t    address;
-    char        name[1];
     void*       user_data;
     void(*cb)(void *user_data);
+    char        name[1];
 };
 
 /* 各平台通用寄存器列表 */
@@ -165,6 +165,7 @@ typedef struct uc_runtime {
         struct uc_hook_func     *_memcpy;
         struct uc_hook_func     *_malloc;
         struct uc_hook_func     *_free;
+        struct uc_hook_func     *_strlen;
 
         /* 当前调用的函数，函数调用前设置，当前函数调用完以后，不会清空 */
         struct uc_hook_func *cur;
