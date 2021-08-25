@@ -3446,6 +3446,14 @@ NOTE2:
 */
 uint8_t*        elf_load_binary(const char *filename, int *len);
 
+/* 
+@hdr    elf头
+@p      内存写入位置，这个位置，看你自己的需求，可以和elf区域重叠，也可以不重叠，看是否打算展开它
+@data   写入的int数据
+*/
+void elf32_write_int(Elf32_Ehdr *hdr, char *p, int data);
+int elf32_read_int(Elf32_Ehdr *hdr, char *p, int offset);
+
 #if defined(__cplusplus)
 }
 #endif

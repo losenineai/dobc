@@ -4,6 +4,8 @@
 #include <string.h>
 #include "elf.h"
 #include "file.h"
+#include "mbytes.h"
+#include <assert.h>
 
 /* 
 elf: https://refspecs.linuxfoundation.org/elf/elf.pdf
@@ -30,6 +32,9 @@ elf.c中的内容都参考自上文，一般的页码和章节都是指此spec
 #define SHT_RELX    SHT_REL
 #define REL_SECTION_FMT     ".rel%s"
 #endif /* PTR_SIZE */
+
+#define is_le(hdr)                  (hdr->e_ident[EI_DATA] == 1)
+#define is_be(hdr)                  (hdr->e_ident[EI_DATA] == 2)
 
 const char *osabistr[] = {
     "UNIX System V ABI",    /* 0 */
@@ -682,6 +687,61 @@ char *elf_arm_rel_type(int type)
 
 #define elf_phdr(hdr)               ((Elf32_Phdr *)((unsigned char *)hdr + hdr->e_phoff))
 
+void elf32_write_int(Elf32_Ehdr *hdr, char *p, int data)
+{
+    if (is_le(hdr)) {
+        mbytes_write_int_little_endian_4b(p, data);
+    }
+    else if (is_be(hdr)) {
+        mbytes_write_int_big_endian_4b(p, data);
+    }
+    else {
+        printf("unknown elf header endian");
+        exit(-1);
+    }
+}
+
+int elf32_read_int(Elf32_Ehdr *hdr, char *p, int offset)
+{
+    int v;
+
+    if (is_le(hdr)) {
+        v = mbytes_read_int_little_endian_4b((char *)hdr + offset);
+    }
+    else if (is_be(hdr)) {
+        v = mbytes_read_int_big_endian_4b((char *)hdr + offset);
+    }
+    else {
+        printf("unknown elf header endian");
+        exit(-1);
+    }
+
+    return v;
+}
+
+void elf32_upate_rel(Elf32_Ehdr *hdr, char *mem, Elf32_Rel *rel)
+{
+    Elf32_Shdr *dynsymsh = elf32_shdr_get(hdr, SHT_DYNSYM);
+
+    int type, symind;
+    Elf32_Sym *sym;
+    const char *name;
+
+    type = ELF32_R_TYPE(rel->r_info);
+    symind = ELF32_R_SYM(rel->r_info);
+    sym = ((Elf32_Sym *)((char *)hdr + dynsymsh->sh_offset)) + symind;
+    name = elf32_sym_name(hdr, sym);
+
+    if (!sym->st_value) return;
+
+    if (ELF32_ST_TYPE(sym->st_info) == STT_OBJECT) {
+        elf32_write_int(hdr, mem + rel->r_offset, sym->st_value);
+    }
+    else if (ELF32_ST_TYPE(sym->st_info) == STT_FUNC) {
+        elf32_write_int(hdr, mem + rel->r_offset, sym->st_value);
+    }
+}
+
 uint8_t*        elf_load_binary(const char *filename, int *len)
 {
     int i, flen, size, alignsiz;
@@ -729,6 +789,7 @@ uint8_t*        elf_load_binary(const char *filename, int *len)
     count = sh->sh_size / sh->sh_entsize;
     for (i = 0; i < count; i++) {
         rel = ((Elf32_Rel *)(fdata + sh->sh_offset)) + i;
+        elf32_upate_rel(hdr, mem, rel);
     }
 
     sh = elf32_shdr_get_by_name(hdr, ".rel.plt");
@@ -739,6 +800,7 @@ uint8_t*        elf_load_binary(const char *filename, int *len)
     count = sh->sh_size / sh->sh_entsize;
     for (i = 0; i < count; i++) {
         rel = ((Elf32_Rel *)(fdata + sh->sh_offset)) + i;
+        elf32_upate_rel(hdr, mem, rel);
     }
 
 exit_label:

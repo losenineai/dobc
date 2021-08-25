@@ -196,23 +196,44 @@ int test_base64_decode_on_exit(struct uc_runtime *r)
     return 0;
 }
 
+
+static char hextab[] = {
+    '0', '1', '2', '3',
+    '4', '5', '6', '7',
+    '8', '9', 'a', 'b',
+    'c', 'd', 'e', 'f'
+};
+
+uint8_t* bin2hex(uint8_t *bin, int binsiz, uint8_t *obuf)
+{
+    int i, j;
+
+    for (i = j = 0; i < binsiz; i++) {
+        obuf[j++] = hextab[bin[i] >> 4];
+        obuf[j++] = hextab[bin[i] & 0xf];
+    }
+    obuf[j++] = 0;
+
+    return obuf;
+}
+
 int test_md5_on_exit(struct uc_runtime *r)
 {
     struct test_base64 *test = ur_get_priv_data(r);
     int r0;
-    char buf[128];
+    char buf[128], hex[128];
 
     uc_emu_stop(r->uc);
 
     uc_reg_read(r->uc, UC_ARM_REG_R0,  &r0);
 
-    uc_mem_read(r->uc, test->regs[1], buf, sizeof (buf));
+    uc_mem_read(r->uc, r0, buf, sizeof (buf));
 
-    if (strcmp(buf, "5d41402abc4b2a76b9719d911017c592")) {
+    if (strcmp(bin2hex(buf, 16, hex), "5d41402abc4b2a76b9719d911017c592")) {
         printf("md5 test failure, out[%s]\n", buf);
     }
     else {
-        printf("md5 test success, out[%s]\n", buf);
+        printf("md5 test success, out[%s]\n", hex);
     }
 
     return 0;

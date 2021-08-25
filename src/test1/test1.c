@@ -80,7 +80,7 @@ static void thumb_test_base64_encode(const char *soname)
     if (!ur)
         return;
 
-    ur->debug.trace = 1;
+    //ur->debug.trace = 1;
 
     test_base64_encode_init(ur);
 
@@ -146,7 +146,7 @@ static void thumb_test_md5(const char *soname)
     if (!ur)
         return;
 
-    ur->debug.trace = 1;
+    //ur->debug.trace = 1;
 
     test_md5_init(ur);
 
@@ -176,11 +176,16 @@ int main(int argc, char **argv, char **envp)
     }
 
     //sprintf(buf, "%s/unittests/base64/libs/armeabi-v7a/libbase64.so", argv[1]);
-    //sprintf(buf, "%s/unittests/base64/libs/armeabi-v7a/libbase64.so.decode", argv[1]);
+#if 0
+    sprintf(buf, "%s/unittests/base64/libs/armeabi-v7a/libbase64.so.decode", argv[1]);
+    thumb_test_base64_encode(buf);
+    thumb_test_base64_decode(buf);
+#endif
+
+#if 1
     sprintf(buf, "%s/unittests/md5/libs/armeabi-v7a/libmd5.so", argv[1]);
-    //thumb_test_base64_encode(buf);
-    //thumb_test_base64_decode(buf);
     thumb_test_md5(buf);
+#endif
 
 
     return 0;

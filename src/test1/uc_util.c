@@ -23,35 +23,42 @@ static struct uc_hook_func*    ur_relocate_func(uc_runtime_t *t, const char *nam
 
 void malloc_cb(uc_runtime_t *t)
 {
-    int r0;
+    int r0, lr;
 
     uc_reg_read(t->uc, UC_ARM_REG_R0,  &r0);
+    uc_reg_read(t->uc, UC_ARM_REG_LR, &lr);
 
     r0 = (int)ur_malloc(t, r0);
 
     uc_reg_write(t->uc, UC_ARM_REG_R0, &r0);
+    uc_reg_write(t->uc, UC_ARM_REG_PC, &lr);
 }
 
 void free_cb(uc_runtime_t *t)
 {
-    int r0;
+    int r0, lr;
+
+    uc_reg_read(t->uc, UC_ARM_REG_LR, &lr);
 
     uc_reg_read(t->uc, UC_ARM_REG_R0,  &r0);
 
     ur_free((void *)r0);
+    uc_reg_write(t->uc, UC_ARM_REG_PC, &lr);
 }
 
 void memcpy_cb(uc_runtime_t *t)
 {
-    int r0, r1, r2;
+    int r0, r1, r2, lr;
     char buf[512];
 
     uc_reg_read(t->uc, UC_ARM_REG_R0, &r0);
     uc_reg_read(t->uc, UC_ARM_REG_R1, &r1);
     uc_reg_read(t->uc, UC_ARM_REG_R2, &r2);
+    uc_reg_read(t->uc, UC_ARM_REG_LR, &lr);
 
     uc_mem_read(t->uc, r1, buf, r2);
     uc_mem_write(t->uc, r0, buf, r2);
+    uc_reg_write(t->uc, UC_ARM_REG_PC, &lr);
 }
 
 void strlen_cb(uc_runtime_t *t)
@@ -85,9 +92,10 @@ void default_cb(uc_runtime_t *t)
 int             ur_stdlib_regist(uc_runtime_t *t)
 {
     t->hooktab._malloc = ur_alloc_func(t, "malloc",  malloc_cb, t);
-    t->hooktab._free = ur_alloc_func(t, "free",  malloc_cb, t);
-    t->hooktab._memcpy = ur_alloc_func(t, "memcpy",  malloc_cb, t);
+    t->hooktab._free = ur_alloc_func(t, "free",  free_cb, t);
+    t->hooktab._memcpy = ur_alloc_func(t, "memcpy",  memcpy_cb, t);
     t->hooktab._strlen = ur_alloc_func(t, "strlen",  strlen_cb, t);
+    t->hooktab.___aeabi_memcpy = ur_alloc_func(t, "__aeabi_memcpy", memcpy_cb, t);
     return 0;
 }
 
@@ -131,13 +139,14 @@ uc_runtime_t*   uc_runtime_new(uc_engine *uc, const char *soname, int stack_size
     //uc_mem_write(uc, ur->elf_load_addr, ur->fdata, ur->flen);
     uc_mem_write(uc, ur->elf_load_addr, memdata, memlen);
 
-    free(memdata);
 
     int stack_guard = rand();
     ur_symbol_add(ur, "__stack_chk_guard", UR_SYMBOL_DATA, &stack_guard, sizeof (stack_guard));
     ur_stdlib_regist(ur);
 
     ur_elf_addr_fix(ur);
+
+    free(memdata);
 
     return ur;
 }
@@ -299,19 +308,20 @@ void            ur_elf_do_rel_sym_fix(uc_runtime_t *t, Elf32_Rel *rel)
     sym = ((Elf32_Sym *)(t->fdata + dynsymsh->sh_offset)) + symind;
     name = elf32_sym_name((Elf32_Ehdr *)t->fdata, sym);
 
+    if (sym->st_value) {
+        global_offset = sym->st_value + (uint32_t)t->elf_load_addr;
+        uc_mem_write(t->uc, t->elf_load_addr + rel->r_offset, (void *)&global_offset, sizeof (global_offset));
+        if (ELF32_ST_TYPE(sym->st_info) == STT_FUNC)
+            return;
+    }
+
     if (ELF32_ST_TYPE(sym->st_info) == STT_OBJECT) {
-        if (sym->st_value) {
-            global_offset = sym->st_value + (uint32_t)t->elf_load_addr;
-            uc_mem_write(t->uc, t->elf_load_addr + rel->r_offset, (void *)&global_offset, sizeof (global_offset));
-        }
-        else if (ur_sym = ur_symbol_find(t, name, UR_SYMBOL_DATA)) {
+        if (ur_sym = ur_symbol_find(t, name, UR_SYMBOL_DATA)) {
             global_offset = (uint32_t)ur_sym->addr;
             uc_mem_write(t->uc, t->elf_load_addr + rel->r_offset, (void *)&global_offset, sizeof (global_offset));
         }
     }
     else if (ELF32_ST_TYPE(sym->st_info) == STT_FUNC) {
-        if (sym->st_value) return;
-
         if (name && name[0])
             ur_relocate_func(t, name, (uint32_t)(rel->r_offset + t->elf_load_addr));
     }
