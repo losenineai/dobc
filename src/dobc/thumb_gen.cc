@@ -851,6 +851,16 @@ void _strb_reg(int rt, int rn, int rm, int shval)
         o(0xf8000000 | (rn << 16) | (rt << 12) | rm | (shval << 4));
 }
 
+void _tst_reg(int rn, int rm, SRType shtype, int shval)
+{
+    if (rn < 8 && rm < 8 && (shtype == SRType_LSL) && !shval) {
+        o(0x4200 | (rm << 3) | rn);
+    }
+    else {
+        o(0xea100f00 | (rn << 16) | rm | SR4_IMM_MAP5(shtype, shval));
+    }
+}
+
 /*
 _mov_imm一般的情况，就是参照arm_arch_ref进行对照即可，但是有几张情况需要说明一下
 
@@ -1623,6 +1633,9 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                         _str_imm(rt, rn, imm, 0);
                     }
                 }
+                else if (follow_by_set_cpsr(p1)) {
+                    _tst_reg(reg2i(pi0a(p)), reg2i(pi1a(p)), SRType_LSL, 0);
+                }
             }
             else if (isreg(p->output)) {
                 _and_reg(reg2i(poa(p)), reg2i(pi0a(p)), reg2i(pi1a(p)), SRType_LSL, 0, follow_by_set_cpsr(p1));
@@ -1964,7 +1977,7 @@ int thumb_gen::get_load_addr_size(pcodeop *p, intb &loadaddr, int &loadsiz)
 
 int thumb_gen::follow_by_set_cpsr(pcodeop *p)
 {
-    return (p && p->output && d->is_tsreg(poa(p)));
+    return (p && p->output && (d->is_tsreg(poa(p)) || d->is_sreg(poa(p))));
 }
 
 void thumb_gen::write_cbranch(flowblock *b, uint32_t cond)
