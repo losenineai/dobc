@@ -105,9 +105,16 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
 
         int iv_in_normal_loop = false;
 
-        if ((ret == ERR_MEET_CALC_BRANCH) && (cmp_sub = cur->get_cbranch_sub_from_cmp())) {
+#if 1
+        if ((ret == ERR_MEET_CALC_BRANCH) && (cmp_sub = cur->get_core_cmp())) {
+            if (cmp_sub->parent == cur)
+                iv_in_normal_loop = cur->is_iv_in_normal_loop(cmp_sub);
+        }
+#else
+        if ((ret == ERR_MEET_CALC_BRANCH) && (cmp_sub = cur->get_cbranch_sub_from_cmp(op2))) {
             iv_in_normal_loop = cur->is_iv_in_normal_loop(cmp_sub);
         }
+#endif
 
         if ((cur->out.size() > 1) && ((ret != ERR_MEET_CALC_BRANCH) || iv_in_normal_loop)) {
             printf("found undefined-bcond node[sub_%llx, index:%d, dfnum:%d]\n", cur->get_start().getOffset(), cur->index, cur->dfnum);
@@ -1203,7 +1210,7 @@ int         funcdata::ollvm_detect_propchain4(ollvmhead *oh, flowblock *&from, b
     2. 我感觉 整个大的if块，可能和非if阶段的逻辑合并到一起，但是我还没完全理顺
     */
     if (!p) {
-        if ((p = h->get_cbranch_sub_from_cmp())) {
+        if ((p = h->get_cbranch_sub_from_cmp(p2))) {
             p1 = p->get_in(0)->def;
             /* libmakeurl:sub_15521 */
             if (b_is_flag(flags, F_OPEN_COPY)) {
@@ -1431,7 +1438,7 @@ int         funcdata::ollvm_detect_propchain3(flowblock *&from, blockedge *&oute
         if (b->in.size() != 2) continue;
         if (!b->is_cbranch()) continue;
 
-        sub = b->get_cbranch_sub_from_cmp();
+        sub = b->get_cbranch_sub_from_cmp(op);
         if (!sub) continue;
         
         op = sub->get_in(0)->def;
@@ -1501,10 +1508,10 @@ int         funcdata::ollvm_detect_fsm2(ollvmhead *oh)
 {
     flowblock *h = oh->h;
     varnode *in0, *in1, *in;
-    pcodeop *p, *p1;
+    pcodeop *p, *p1, *op2;
     int dfnum;
 
-    p = h->get_cbranch_sub_from_cmp();
+    p = h->get_cbranch_sub_from_cmp(op2);
 
     if (!p) return -1;
 

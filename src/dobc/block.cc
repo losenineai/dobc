@@ -43,12 +43,14 @@ void        blockgraph::collect_cond_copy_sub(vector<pcodeop *> &subs)
 
 void        blockgraph::collect_no_cmp_cbranch_block(vector<flowblock *> &blks)
 {
+    pcodeop *op2;
+
     for (int i = 0; i < blist.size(); i++) {
         flowblock *b = blist[i];
         if (!b->is_cbranch()) continue;
         if (b->in.size() < 3) continue;
 
-        pcodeop *sub = b->get_cbranch_sub_from_cmp();
+        pcodeop *sub = b->get_cbranch_sub_from_cmp(op2);
         if (sub) continue;
 
         blks.push_back(b);
@@ -929,9 +931,10 @@ bool        flowblock::noreturn(void)
     return ops.size() && last_op()->callfd && last_op()->callfd->noreturn();
 }
 
-pcodeop*    flowblock::get_cbranch_sub_from_cmp(void)
+pcodeop*    flowblock::get_cbranch_sub_from_cmp(pcodeop *&sub2)
 {
     pcodeop *lastop = last_op(), *op;
+    dobc *d = fd->d;
     vector<pcodeop *> q;
     varnode *in0, *in1;
     if (NULL == lastop || (lastop->opcode != CPUI_CBRANCH)) return NULL;
@@ -939,11 +942,22 @@ pcodeop*    flowblock::get_cbranch_sub_from_cmp(void)
     op = lastop->get_in(1)->def;
     q.push_back(op);
 
+    sub2 = NULL;
+
     while (!q.empty()) {
         op = q.front();
         q.erase(q.begin());
 
         while (op && op->parent == this) {
+            if (!sub2) {
+                for (int i = 0; i < op->inrefs.size(); i++) {
+                    if (d->is_greg(op->get_in(i)->get_addr())) {
+                        sub2 = op;
+                        break;
+                    }
+                }
+            }
+
             switch (op->opcode) {
             case CPUI_COPY:
             case CPUI_BOOL_NEGATE:
@@ -953,6 +967,7 @@ pcodeop*    flowblock::get_cbranch_sub_from_cmp(void)
             case CPUI_INT_NOTEQUAL:
             case CPUI_INT_EQUAL:
             case CPUI_INT_SLESS:
+            case CPUI_INT_LESSEQUAL:
             case CPUI_BOOL_OR:
             case CPUI_BOOL_AND:
                 in0 = op->get_in(0);
@@ -1014,9 +1029,10 @@ int         flowblock::get_cbranch_cond()
 bool        flowblock::have_same_cmp_condition(flowblock *b)
 {
     list<pcodeop *>::iterator it1, it2;
+    pcodeop *op2;
 
-    it1 = find_inst_first_op(get_cbranch_sub_from_cmp());
-    it2 = find_inst_first_op(b->get_cbranch_sub_from_cmp());
+    it1 = find_inst_first_op(get_cbranch_sub_from_cmp(op2));
+    it2 = find_inst_first_op(b->get_cbranch_sub_from_cmp(op2));
 
     for (; it1 != ops.end() && it2 != ops.end(); it1++, it2++) {
         if ((*it1)->opcode == CPUI_CBRANCH && (*it2)->opcode == CPUI_CBRANCH) return true;
@@ -1214,10 +1230,12 @@ int         flowblock::incoming_forward_branches()
 
 bool        flowblock::is_iv_in_normal_loop(pcodeop *sub)
 {
-    varnode *in1 = sub->get_in(1);
+    for (int i = 0; i < sub->inrefs.size(); i++) {
+        varnode *in = sub->get_in(1);
 
-    if (in1->is_constant() && (in1->get_val() >= 0) && in1->get_val() <= 1024)
-        return true;
+        if (in->is_constant() && (in->get_val() >= 0) && in->get_val() <= 1024)
+            return true;
+    }
 
     return false;
 }

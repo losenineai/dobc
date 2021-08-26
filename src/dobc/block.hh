@@ -299,7 +299,12 @@ public:
     /* 当一个block末尾是cbranch时， 一般它的比较条件是来自于cmp 
     cmp指令会产生一个sub指令，返回这个sub指令，假如没有，就返回NULL
     */
-    pcodeop*    get_cbranch_sub_from_cmp(void);
+    pcodeop*    get_cbranch_sub_from_cmp(pcodeop *&less);
+    pcodeop*    get_core_cmp() {
+        pcodeop *op1, *op2;
+        op1 = get_cbranch_sub_from_cmp(op2);
+        return op2;
+    }
     /* 寻找最后一个操作ZR寄存器的指令*/
     pcodeop*    get_last_oper_zr(void);
     /* FIXME:需要重调整个机制 */

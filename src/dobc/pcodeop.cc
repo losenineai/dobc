@@ -678,7 +678,7 @@ int             pcodeop::compute(int inslot, flowblock **branch)
     funcdata *fd = parent->fd;
     dobc *d = fd->d;
     int ret = 0, i;
-    pcodeop *store, *op, *op1;
+    pcodeop *store, *op, *op1, *op2;
     flowblock *b, *bb;
 
     out = output;
@@ -1045,7 +1045,7 @@ int             pcodeop::compute(int inslot, flowblock **branch)
         else if (in0->is_top() && in1->is_constant() 
             && (parent->in.size() == 1)
             && (op = in0->def) && (op->opcode == CPUI_MULTIEQUAL) && (op->inrefs.size() == 2) && op->all_inrefs_is_constant() 
-            && (op1 = (b = parent->get_in(0))->get_cbranch_sub_from_cmp())
+            && (op1 = (b = parent->get_in(0))->get_cbranch_sub_from_cmp(op2))
             && op1->get_in(1)->is_constant()
             && (op1->get_in(0) == in0)
             && b->is_eq_cbranch()) {
