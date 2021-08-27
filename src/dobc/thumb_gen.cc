@@ -21,16 +21,18 @@
 
 #define pcode_cpsr_out_dead(p)      !(p->live_out[NG] | p->live_out[ZR] | p->live_out[CY]| p->live_out[OV])
 
+#define TEST_F_CPSR_SET(f)        (f & 1)
+#define TEST_F_CPSR_DEAD(f)       (f & 2)
+
+#define SET_F_CPSR_SET(f,x)     (f |= (x))
+#define SET_F_CPSR_DEAD(f,x)    (f |= ((x) << 1))
+
+#define SET_CPSR_ON(f)      (TEST_F_CPSR_SET(f) || TEST_F_CPSR_DEAD(f))
+
 #define ANDNEQ(r1, r2)      ((r1 & ~r2) == 0)
 #define ANDEQ(r1, r2)      ((r1 & r2) == r2)
-#define in_imm3(a)          ANDNEQ(a, 0x07)
-#define in_imm4(a)          ANDNEQ(a, 0x0f)
-#define in_imm5(a)          ANDNEQ(a, 0x1f)
-#define in_imm7(a)          ANDNEQ(a, 0x7f)
-#define in_imm8(a)          ANDNEQ(a, 0xff)
 #define align4(a)           ((a & 3) == 0)
 #define align2(a)           ((a & 1) == 0)
-
 
 /* A8.8.119 */
 #define NOP1            0xbf00
@@ -791,6 +793,17 @@ void _rsb_reg(int rd, int rn, int rm, SRType shtype, int shift, int setflags)
     o(0xebc00000 | (rn << 16) | (rd << 8) | rm | (setflags << 20)| SR4_IMM_MAP5(shtype, shift));
 }
 
+/* A8.8.162 */
+void _sbc_reg(int rd, int rn, int rm, SRType shtype, int shval, int flags)
+{
+    int s = SET_CPSR_ON(flags);
+
+    if ((rd == rn) && (rn < 8) && (rm < 8) && s) // t1
+        o(0x4180 | (rm << 3) | rd);
+    else
+        o(0xeb600000 | (rn << 16) | (rd << 8) | rm | (s << 20) | SR4_IMM_MAP5(shtype, shval));
+}
+
 void _str_reg(int rt, int rn, int rm, int lsl)
 {
     if (!lsl && rt < 8 && rn < 8 && rm < 8)
@@ -874,7 +887,7 @@ void thumb_gen::_mov_imm(int rd, uint32_t v, int setflags, int out_cpsr_dead)
     const_item *item;
 
     /* A8.8.102 */
-    if ((setflags || out_cpsr_dead) && in_imm8(v) && in_imm3(rd)) 
+    if ((setflags || out_cpsr_dead) && (v < 256) && (rd < 8)) 
         o(0x2000 | (rd << 8) | v); // T1
     else if (!setflags && (v < 65536)) { // T3
         o(stuff_constw(0xf2400000 | (rd << 8), v, 16));
@@ -1154,7 +1167,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                             if (p->output == pi0(p1))
                                 _rsb_imm(reg2i(poa(p1)), pi0(p)->get_val(), reg2i(pi1a(p1)));
                             else {
-                                _sub_imm(reg2i(poa(p1)), reg2i(pi0a(p1)), pi0(p)->get_val(), follow_by_set_cpsr(p1));
+                                _sub_imm(reg2i(poa(p1)), reg2i(pi0a(p1)), pi0(p)->get_val(), follow_by_set_cpsr(p));
                             }
                             it = advance_to_inst_end(it);
                             break;
@@ -1363,6 +1376,11 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 case CPUI_SUBPIECE:
                     if (istemp(p1->output) && p2->opcode == CPUI_STORE) {
                         _strb_imm(reg2i(pi0a(p1)), rn, -pi1(p)->get_val(), 0);
+                    }
+                    break;
+
+                case CPUI_BOOL_NEGATE:
+                    if (istemp(p1->output) && istemp(p2->output)) {
                     }
                     break;
                 }
@@ -1591,7 +1609,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 }
             }
             else if (isreg(p->output)) {
-                _mvn_reg(reg2i(poa(p)), reg2i(pi0a(p)), SRType_LSL, 0, follow_by_set_cpsr(p1));
+                _mvn_reg(reg2i(poa(p)), reg2i(pi0a(p)), SRType_LSL, 0, follow_by_set_cpsr(p));
                 it = advance_to_inst_end(it);
             }
             break;
@@ -1633,12 +1651,12 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                         _str_imm(rt, rn, imm, 0);
                     }
                 }
-                else if (follow_by_set_cpsr(p1)) {
+                else if (follow_by_set_cpsr(p)) {
                     _tst_reg(reg2i(pi0a(p)), reg2i(pi1a(p)), SRType_LSL, 0);
                 }
             }
             else if (isreg(p->output)) {
-                _and_reg(reg2i(poa(p)), reg2i(pi0a(p)), reg2i(pi1a(p)), SRType_LSL, 0, follow_by_set_cpsr(p1));
+                _and_reg(reg2i(poa(p)), reg2i(pi0a(p)), reg2i(pi1a(p)), SRType_LSL, 0, follow_by_set_cpsr(p));
                 it = advance_to_inst_end(it);
             }
             break;
@@ -1646,7 +1664,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
 
         case CPUI_INT_OR:
             if (isreg(p->output)) {
-                _orr_reg(reg2i(poa(p)), reg2i(pi0a(p)), reg2i(pi1a(p)), SRType_LSL, 0, follow_by_set_cpsr(p1));
+                _orr_reg(reg2i(poa(p)), reg2i(pi0a(p)), reg2i(pi1a(p)), SRType_LSL, 0, follow_by_set_cpsr(p));
                 it = advance_to_inst_end(it);
             }
             break;
@@ -1680,16 +1698,16 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 }
                 else if (isreg(p1->output)) {
                     if (p1->opcode == CPUI_INT_AND) {
-                        _and_reg(reg2i(poa(p1)), reg2i(pi0a(p1)), reg2i(pi0a(p)), SRType_LSL, pi1(p)->get_val(), follow_by_set_cpsr(p2));
+                        _and_reg(reg2i(poa(p1)), reg2i(pi0a(p1)), reg2i(pi0a(p)), SRType_LSL, pi1(p)->get_val(), follow_by_set_cpsr(p1));
                     }
                     else if (p1->opcode == CPUI_INT_OR) {
-                        _orr_reg(reg2i(poa(p1)), reg2i(pi0a(p1)), reg2i(pi0a(p)), SRType_LSL, pi1(p)->get_val(), follow_by_set_cpsr(p2));
+                        _orr_reg(reg2i(poa(p1)), reg2i(pi0a(p1)), reg2i(pi0a(p)), SRType_LSL, pi1(p)->get_val(), follow_by_set_cpsr(p1));
                     }
                 }
             }
             else if (isreg(p->output)) {
                 if (pi1(p)->is_hard_constant()) {
-                    _lsl_imm(reg2i(poa(p)), reg2i(pi0a(p)), pi1(p)->get_val(), follow_by_set_cpsr(p1));
+                    _lsl_imm(reg2i(poa(p)), reg2i(pi0a(p)), pi1(p)->get_val(), follow_by_set_cpsr(p));
                 }
             }
             it = advance_to_inst_end(it);
@@ -1711,9 +1729,9 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 }
                 else if (isreg(p1->output)) {
                     if (p1->opcode == CPUI_INT_AND)
-                        _and_reg(reg2i(poa(p1)), reg2i(pi0a(p1)), reg2i(pi0a(p)), SRType_LSR, pi1(p)->get_val(), follow_by_set_cpsr(p2));
+                        _and_reg(reg2i(poa(p1)), reg2i(pi0a(p1)), reg2i(pi0a(p)), SRType_LSR, pi1(p)->get_val(), follow_by_set_cpsr(p1));
                     else if (p1->opcode == CPUI_INT_SUB)
-                        _rsb_reg(reg2i(poa(p1)), reg2i(pi1a(p1)), reg2i(pi0a(p)), SRType_LSR, pi1(p)->get_val(), follow_by_set_cpsr(p2));
+                        _rsb_reg(reg2i(poa(p1)), reg2i(pi1a(p1)), reg2i(pi0a(p)), SRType_LSR, pi1(p)->get_val(), follow_by_set_cpsr(p1));
                 }
 
                 it = advance_to_inst_end(it);
@@ -1977,7 +1995,16 @@ int thumb_gen::get_load_addr_size(pcodeop *p, intb &loadaddr, int &loadsiz)
 
 int thumb_gen::follow_by_set_cpsr(pcodeop *p)
 {
-    return (p && p->output && (d->is_tsreg(poa(p)) || d->is_sreg(poa(p))));
+    flowblock *b = p->parent;
+    list<pcodeop *>::iterator it = p->basiciter;
+
+    if (it == b->ops.end()) return 0;
+
+    pcodeop *p1 = *++it;
+
+    if (p1->get_addr() != p->get_addr()) return 0;
+
+    return (p1 && p1->output && (d->is_tsreg(poa(p1)) || d->is_sreg(poa(p1))));
 }
 
 void thumb_gen::write_cbranch(flowblock *b, uint32_t cond)
