@@ -21,10 +21,16 @@
 
 #define pcode_cpsr_out_dead(p)      !(p->live_out[NG] | p->live_out[ZR] | p->live_out[CY]| p->live_out[OV])
 
-#define F_CPSR_SET              0x01
-#define F_CPSR_DEAD             0x02
+static int g_cpsr_set = 0;
+static int g_cpsr_dead = 0;
 
-#define CAN_OPEN_SET_CPSR(f)      (TEST_FLAG(f,F_CPSR_SET) || TEST_FLAG(f, F_CPSR_DEAD))
+#define CAN_OPEN_SETFLAGS()      (g_cpsr_set || g_cpsr_dead)
+
+#define UPDATE_CPSR_SET(_p)  do { \
+        g_cpsr_set = follow_by_set_cpsr(_p); \
+        g_cpsr_dead = pcode_cpsr_out_dead(_p); \
+    } while (0)
+
 
 #define ANDNEQ(r1, r2)      ((r1 & ~r2) == 0)
 #define ANDEQ(r1, r2)      ((r1 & r2) == r2)
@@ -497,6 +503,8 @@ void _adr(int rd, int imm)
 /* A8.8.6 */
 void _add_reg(int rd, int rn, int rm, enum SRType sh_type, int shift)
 {
+    int setflag = CAN_OPEN_SETFLAGS();
+
     if (!shift && rd == rn) // t2
         o(0x4400 | (rm << 3) | (rd & 7) | (rd >> 3 << 7));
     else if (!shift && rn < 8 && rm < 8 && rd < 8) // t1
@@ -791,9 +799,9 @@ void _rsb_reg(int rd, int rn, int rm, SRType shtype, int shift, int setflags)
 }
 
 /* A8.8.162 */
-void _sbc_reg(int rd, int rn, int rm, SRType shtype, int shval, int flags)
+void _sbc_reg(int rd, int rn, int rm, SRType shtype, int shval)
 {
-    int s = CAN_OPEN_SET_CPSR(flags);
+    int s = CAN_OPEN_SETFLAGS();
 
     if ((rd == rn) && (rn < 8) && (rm < 8) && s) // t1
         o(0x4180 | (rm << 3) | rd);
@@ -1048,7 +1056,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
     pcodeop *p, *p1, *p2, *p3, *p4;
     uint32_t x, rt, rd, rn, rm, setflags;
     pc_rel_table pc_rel_tab;
-    int oind, imm, i, flags;
+    int oind, imm, i;
 
     b->cg.data = data + ind;
 
@@ -1380,11 +1388,8 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     if (p1 && p2 && p3 && istemp(p1->output) && istemp(p2->output) 
                         && (p2->opcode == CPUI_INT_ZEXT)
                         && (p3->opcode == CPUI_INT_SUB)) {
-                        flags = 0;
-                        if (follow_by_set_cpsr(p3))     SET_FLAG(flags, F_CPSR_SET);
-                        if (pcode_cpsr_out_dead(p3))    SET_FLAG(flags, F_CPSR_DEAD);
-
-                        _sbc_reg(reg2i(poa(p3)), reg2i(pi0a(p)), reg2i(pi1a(p)), SRType_LSL, 0, flags);
+                        UPDATE_CPSR_SET(p3);
+                        _sbc_reg(reg2i(poa(p3)), reg2i(pi0a(p)), reg2i(pi1a(p)), SRType_LSL, 0);
                     }
                     break;
                 }
@@ -1423,6 +1428,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 }
             }
             break;
+
 
         case CPUI_INT_LESSEQUAL:
         case CPUI_INT_ZEXT:
@@ -1586,10 +1592,13 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 if (pi1(p)->is_hard_constant()) {
                     imm = (int)pi1(p)->get_val();
                     _add_imm(rd, rn, imm);
-                    it = advance_to_inst_end(it);
                 }
-                else if (isreg(pi1(p)))
+                else if (isreg(pi1(p))) {
+                    UPDATE_CPSR_SET(p);
                     _add_reg(reg2i(poa(p)), reg2i(pi0a(p)), reg2i(pi1a(p)), SRType_LSL, 0);
+                }
+
+                it = advance_to_inst_end(it);
             }
             break;
 
