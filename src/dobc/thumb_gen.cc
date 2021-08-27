@@ -21,13 +21,10 @@
 
 #define pcode_cpsr_out_dead(p)      !(p->live_out[NG] | p->live_out[ZR] | p->live_out[CY]| p->live_out[OV])
 
-#define TEST_F_CPSR_SET(f)        (f & 1)
-#define TEST_F_CPSR_DEAD(f)       (f & 2)
+#define F_CPSR_SET              0x01
+#define F_CPSR_DEAD             0x02
 
-#define SET_F_CPSR_SET(f,x)     (f |= (x))
-#define SET_F_CPSR_DEAD(f,x)    (f |= ((x) << 1))
-
-#define SET_CPSR_ON(f)      (TEST_F_CPSR_SET(f) || TEST_F_CPSR_DEAD(f))
+#define CAN_OPEN_SET_CPSR(f)      (TEST_FLAG(f,F_CPSR_SET) || TEST_FLAG(f, F_CPSR_DEAD))
 
 #define ANDNEQ(r1, r2)      ((r1 & ~r2) == 0)
 #define ANDEQ(r1, r2)      ((r1 & r2) == r2)
@@ -796,7 +793,7 @@ void _rsb_reg(int rd, int rn, int rm, SRType shtype, int shift, int setflags)
 /* A8.8.162 */
 void _sbc_reg(int rd, int rn, int rm, SRType shtype, int shval, int flags)
 {
-    int s = SET_CPSR_ON(flags);
+    int s = CAN_OPEN_SET_CPSR(flags);
 
     if ((rd == rn) && (rn < 8) && (rm < 8) && s) // t1
         o(0x4180 | (rm << 3) | rd);
@@ -1051,7 +1048,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
     pcodeop *p, *p1, *p2, *p3, *p4;
     uint32_t x, rt, rd, rn, rm, setflags;
     pc_rel_table pc_rel_tab;
-    int oind, imm, i;
+    int oind, imm, i, flags;
 
     b->cg.data = data + ind;
 
@@ -1380,7 +1377,14 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     break;
 
                 case CPUI_BOOL_NEGATE:
-                    if (istemp(p1->output) && istemp(p2->output)) {
+                    if (p1 && p2 && p3 && istemp(p1->output) && istemp(p2->output) 
+                        && (p2->opcode == CPUI_INT_ZEXT)
+                        && (p3->opcode == CPUI_INT_SUB)) {
+                        flags = 0;
+                        if (follow_by_set_cpsr(p3))     SET_FLAG(flags, F_CPSR_SET);
+                        if (pcode_cpsr_out_dead(p3))    SET_FLAG(flags, F_CPSR_DEAD);
+
+                        _sbc_reg(reg2i(poa(p3)), reg2i(pi0a(p)), reg2i(pi1a(p)), SRType_LSL, 0, flags);
                     }
                     break;
                 }

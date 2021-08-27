@@ -292,6 +292,10 @@ void                cstr_delete(CString *cstr);
 
 char*   basename(const char *name);
 
+#define SET_FLAG(f,v)           (f |= v)
+#define TEST_FLAG(f,v)          (f & v)
+#define CLR_FLAG(f,v)         (f &= ~v)
+
 #endif
 
 #if defined(__cplusplus)
