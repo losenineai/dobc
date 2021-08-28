@@ -176,7 +176,7 @@ int main(int argc, char **argv, char **envp)
     }
 
     //sprintf(buf, "%s/unittests/base64/libs/armeabi-v7a/libbase64.so", argv[1]);
-#if 0
+#if 1
     sprintf(buf, "%s/unittests/base64/libs/armeabi-v7a/libbase64.so.decode", argv[1]);
     thumb_test_base64_encode(buf);
     thumb_test_base64_decode(buf);

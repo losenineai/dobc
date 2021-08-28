@@ -462,14 +462,13 @@ void _pop(int32_t reglist)
     }
 }
 
-void _xor_reg(int rd, int rn, int rm)
+/* A8.8.47 */
+void _xor_reg(int rd, int rn, int rm, SRType shtype, int sh)
 {
-    if (rd == rn && rm <= 7 && rn <= 7)
-		o(0x4040 | (rm << 3) | rd);	// Encoding t1
-	else if (rd != 13 && rd != 15 && rn != 13 && rn != 15) 
-        o(0xea800000 | (rn << 16) | (rd << 8) | rm);
-	else
-		vm_error ("_xor_reg invalid parameters");
+    if (t1_param_check1(rd,rn,rm,shtype,sh) && g_setflags) // t1
+		o(0x4040 | (rm << 3) | rd);	
+	else if (rd != 13 && rd != 15 && rn != 13 && rn != 15) // t2
+        o(0xea800000 | T_PARAM_MAP(g_cpsr_follow, rd, rn, rm, shtype, sh));
 }
 
 /* A8.8.238 */
@@ -1738,11 +1737,19 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                         it = retrieve_orig_inst(b, it, 1);
                 }
                 else if (isreg(p1->output)) {
-                    if (p1->opcode == CPUI_INT_AND) {
+                    UPDATE_CPSR_SET(p1);
+                    switch (p1->opcode) {
+                    case CPUI_INT_AND:
                         _and_reg(reg2i(poa(p1)), reg2i(pi0a(p1)), reg2i(pi0a(p)), SRType_LSL, pi1(p)->get_val(), follow_by_set_cpsr(p1));
-                    }
-                    else if (p1->opcode == CPUI_INT_OR) {
+                        break;
+
+                    case CPUI_INT_OR:
                         _orr_reg(reg2i(poa(p1)), reg2i(pi0a(p1)), reg2i(pi0a(p)), SRType_LSL, pi1(p)->get_val(), follow_by_set_cpsr(p1));
+                        break;
+
+                    case CPUI_INT_XOR:
+                        _xor_reg(reg2i(poa(p1)), reg2i(pi0a(p1)), reg2i(pi0a(p)), SRType_LSL, pi1(p)->get_val());
+                        break;
                     }
                 }
             }
