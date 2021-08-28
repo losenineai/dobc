@@ -21,14 +21,14 @@
 
 #define pcode_cpsr_out_dead(p)      !(p->live_out[NG] | p->live_out[ZR] | p->live_out[CY]| p->live_out[OV])
 
-static int g_cpsr_set = 0;
+static int g_cpsr_follow = 0;
 static int g_cpsr_dead = 0;
-
-#define CAN_OPEN_SETFLAGS()      (g_cpsr_set || g_cpsr_dead)
+static int g_setflags = 0;
 
 #define UPDATE_CPSR_SET(_p)  do { \
-        g_cpsr_set = follow_by_set_cpsr(_p); \
+        g_cpsr_follow = follow_by_set_cpsr(_p); \
         g_cpsr_dead = pcode_cpsr_out_dead(_p); \
+        g_setflags = g_cpsr_follow || g_cpsr_dead; \
     } while (0)
 
 
@@ -43,6 +43,8 @@ static int g_cpsr_dead = 0;
 
 #define imm_map(imm, l, bw, r)          (((imm >> l) & ((1 <<  bw) - 1)) << r)
 #define bit_get(imm, l, bw)             ((imm >> l) & ((1 << bw) - 1))
+
+#define t1_param_check(rd,rn,rm,shtype,shval)   ((rd < 8)  && (rm < 8)  && (rn < 8)  && (shtype == SRType_LSL) && (!shval))
 
 #define read_thumb2(b)          ((((uint32_t)(b)[0]) << 16) | (((uint32_t)(b)[1]) << 24) | ((uint32_t)(b)[2]) | (((uint32_t)(b)[3]) << 8))
 #define write_thumb2(i, buf) do { \
@@ -501,16 +503,14 @@ void _adr(int rd, int imm)
 }
 
 /* A8.8.6 */
-void _add_reg(int rd, int rn, int rm, enum SRType sh_type, int shift)
+void _add_reg(int rd, int rn, int rm, enum SRType shtype, int shift)
 {
-    int setflag = CAN_OPEN_SETFLAGS();
-
-    if (!shift && rd == rn) // t2
-        o(0x4400 | (rm << 3) | (rd & 7) | (rd >> 3 << 7));
-    else if (!shift && rn < 8 && rm < 8 && rd < 8) // t1
+    if (t1_param_check(rd,rn,rm,shtype,shift) && g_setflags) // t1
         o(0x1800 | (rm << 6) | (rn << 3) | rd);
+    else if (!shift && (rd == rn) && !g_cpsr_follow) // t2
+        o(0x4400 | (rm << 3) | (rd & 7) | (rd >> 3 << 7));
     else
-        o(0xeb000000 | (rn << 16) | (rd << 8) | rm | (sh_type << 4) | ((shift & 3) << 6) | (shift >> 2 << 12));
+        o(0xeb000000 | (rn << 16) | (rd << 8) | rm | SR4_IMM_MAP5(shtype,shift));
 }
 
 /* A8.8.4 */
@@ -801,12 +801,10 @@ void _rsb_reg(int rd, int rn, int rm, SRType shtype, int shift, int setflags)
 /* A8.8.162 */
 void _sbc_reg(int rd, int rn, int rm, SRType shtype, int shval)
 {
-    int s = CAN_OPEN_SETFLAGS();
-
-    if ((rd == rn) && (rn < 8) && (rm < 8) && s) // t1
+    if ((rd == rn) && (rn < 8) && (rm < 8) && g_setflags) // t1
         o(0x4180 | (rm << 3) | rd);
     else
-        o(0xeb600000 | (rn << 16) | (rd << 8) | rm | (s << 20) | SR4_IMM_MAP5(shtype, shval));
+        o(0xeb600000 | (rn << 16) | (rd << 8) | rm | (g_setflags << 20) | SR4_IMM_MAP5(shtype, shval));
 }
 
 void _str_reg(int rt, int rn, int rm, int lsl)
@@ -1154,6 +1152,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                             */
                             _mov_imm(rn, imm - (ind + 4 * (stuff_const(0, imm) ? 1:2)) - 4, 0, 0);
 
+                            UPDATE_CPSR_SET(p1);
                             _add_reg(rn, rn, PC, SRType_LSL, 0);
                             _ldr_imm(rn, rn, 0, 0);
                             advance(it, 1);
@@ -1222,6 +1221,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
             else if (istemp(p->output)) {
                 switch (p1->opcode) {
                 case CPUI_INT_ADD:
+                    UPDATE_CPSR_SET(p2);
                     _add_reg(reg2i(poa(p1)), reg2i(pi0a(p1)), reg2i(pi0a(p)), SRType_LSL, 0);
                     break;
 
@@ -1569,6 +1569,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     if (pi0(p)->flags.from_pc && isreg(p1->output)) {
                         rd = reg2i(poa(p1));
                         imm = p1->output->get_val();
+                        UPDATE_CPSR_SET(p1);
                         _mov_imm(rd, imm - (ind + 4 * ((stuff_const(0, imm) || stuff_constw(0, imm, 16)) ? 1:2)) - 4, 0, 0);
                         _add_reg(rd, rd, PC, SRType_LSL, 0);
                     }
@@ -1600,6 +1601,12 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
 
                 it = advance_to_inst_end(it);
             }
+            break;
+
+        case CPUI_INT_CARRY:
+            /* 有一些特殊的指令，头部pcode会有int_carray，跳过去就好了，后面是正文，但是一定要是temp cpsr才行，否则会遗漏 cpsr的设置部分 */
+            if (d->is_tsreg(poa(p)))
+                continue;
             break;
 
         case CPUI_INT_SBORROW:
@@ -1700,6 +1707,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     }
                     else if (p1->opcode == CPUI_COPY) {
                         if (p2->opcode == CPUI_INT_ADD) {
+                            UPDATE_CPSR_SET(p2);
                             _add_reg(reg2i(poa(p2)), reg2i(pi0a(p2)), reg2i(pi0a(p)), SRType_LSL, pi1(p)->get_val());
                         }
                         else if (p2->opcode == CPUI_INT_SUB) {
@@ -1734,6 +1742,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 if (istemp(p1->output)) {
                     if (p1->opcode == CPUI_COPY) {
                         if (p2->opcode == CPUI_INT_ADD) {
+                            UPDATE_CPSR_SET(p2);
                             _add_reg(reg2i(poa(p2)), reg2i(pi0a(p2)), reg2i(pi0a(p)), SRType_LSR, pi1(p)->get_val());
                         }
                     }
