@@ -45,6 +45,9 @@ static int g_setflags = 0;
 #define bit_get(imm, l, bw)             ((imm >> l) & ((1 << bw) - 1))
 
 #define t1_param_check(rd,rn,rm,shtype,shval)   ((rd < 8)  && (rm < 8)  && (rn < 8)  && (shtype == SRType_LSL) && (!shval))
+#define t1_param_check1(rd,rn,rm,shtype,shval)  (t1_param_check(rd,rn,rm,shtype,shval) && (rd == rn))
+
+#define T_PARAM_MAP(s,rd,rn,rm,shtype,sh)      ((s << 20) | (rn << 16) | (rd << 8) | (rm) | SR4_IMM_MAP5(shtype,sh))
 
 #define read_thumb2(b)          ((((uint32_t)(b)[0]) << 16) | (((uint32_t)(b)[1]) << 24) | ((uint32_t)(b)[2]) | (((uint32_t)(b)[3]) << 8))
 #define write_thumb2(i, buf) do { \
@@ -502,15 +505,24 @@ void _adr(int rd, int imm)
         o(0xf20f0000 | (rd << 8) | stuff_constw(0, x, 12));
 }
 
-/* A8.8.6 */
-void _add_reg(int rd, int rn, int rm, enum SRType shtype, int shift)
+/* A8.8.2 adc */
+void _adc_reg(int rd, int rn, int rm, enum SRType shtype, int sh)
 {
-    if (t1_param_check(rd,rn,rm,shtype,shift) && g_setflags) // t1
-        o(0x1800 | (rm << 6) | (rn << 3) | rd);
-    else if (!shift && (rd == rn) && !g_cpsr_follow) // t2
-        o(0x4400 | (rm << 3) | (rd & 7) | (rd >> 3 << 7));
+    if (t1_param_check1(rd, rn, rm, shtype, sh) && g_setflags)
+        o(0x4140 | (rm << 3) | rd);
     else
-        o(0xeb000000 | (rn << 16) | (rd << 8) | rm | SR4_IMM_MAP5(shtype,shift));
+        o(0xeb400000 | T_PARAM_MAP(g_setflags,rd,rn,rm,shtype,sh));
+}
+
+/* A8.8.6 */
+void _add_reg(int rd, int rn, int rm, enum SRType shtype, int sh)
+{
+    if (t1_param_check(rd,rn,rm,shtype,sh) && g_setflags) // t1
+        o(0x1800 | (rm << 6) | (rn << 3) | rd);
+    else if (!sh && (rd == rn) && !g_cpsr_follow) // t2
+        o(0x4400 | (rm << 3) | (rd & 7) | (rd >> 3 << 7));
+    else // t3
+        o(0xeb000000 | T_PARAM_MAP(g_setflags, rd, rn, rm, shtype, sh));
 }
 
 /* A8.8.4 */
@@ -1505,6 +1517,14 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                         && p2->opcode == CPUI_INT_ADD
                         && p3->opcode == CPUI_LOAD) {
                         it = retrieve_orig_inst(b, it, 1);
+                    }
+                    it = advance_to_inst_end(it);
+                    break;
+
+                case CPUI_INT_ZEXT:
+                    if (istemp(p1->output) && (pi0a(p1) == acy) && (p2->opcode == CPUI_INT_ADD)) {
+                        UPDATE_CPSR_SET(p2);
+                        _adc_reg(reg2i(poa(p2)), reg2i(pi0a(p)), reg2i(pi1a(p)), SRType_LSL, 0);
                     }
                     it = advance_to_inst_end(it);
                     break;
