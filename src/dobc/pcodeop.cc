@@ -1265,6 +1265,11 @@ int             pcodeop::compute(int inslot, flowblock **branch)
             && in1->is_top_even()) {
             out->set_val(0);
         }
+        else if ((op = in1->def) && (op->opcode == CPUI_INT_XOR) && op->get_in(1)->is_val(-2)
+            && (op->get_in(0) == in0)
+            && in0->is_top_even()) {
+            out->set_val(0);
+        }
         /* 
         0 == a & ~a
 
