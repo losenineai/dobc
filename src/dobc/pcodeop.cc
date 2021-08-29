@@ -1158,16 +1158,16 @@ int             pcodeop::compute(int inslot, flowblock **branch)
             intb v = in0->get_val();
             out->set_val(~v);
         }
-        /* peephole 
+        /* peephole
         a = 0 - b
         c = ~a
-        ==> 
+        ==>
         a = ~b + 1
         c = ~a
         ==>
         c = b - 1
         */
-        else if ((op = in0->def) && (op->opcode == CPUI_INT_SUB) 
+        else if ((op = in0->def) && (op->opcode == CPUI_INT_SUB)
             && (_in0 = op->get_in(0))->is_constant()
             && (_in0->get_val() == 0)
             && (_in1 = op->get_in(1))->in_liverange(this)) {
@@ -1178,8 +1178,14 @@ int             pcodeop::compute(int inslot, flowblock **branch)
             fd->op_set_input(this, _in1, 0);
             fd->op_set_input(this, fd->create_constant_vn(1, output->size), 1);
         }
+        else if (in0->is_top_even()) {
+            out->set_top_odd();
+        }
+        else if (in0->is_top_odd()) {
+            out->set_top_odd();
+        }
         else
-            out->type.height = a_top;
+            out->set_top();
         break;
 
     case CPUI_INT_XOR:
@@ -1290,28 +1296,14 @@ int             pcodeop::compute(int inslot, flowblock **branch)
             out->set_val(in0->get_val() | in1->get_val());
         }
         /* 
-        y = ~(x * (x - 1)) | 0xfffffffe
+        y = odd_number | 0xfffffffe
         y == -1
         */
-        else if (in0->is_constant() && (in0->get_val() == -2)
-            && in1->def
-            && (in1->def->opcode == CPUI_INT_NEGATE)
-            && (op = in1->def->get_in(0)->def)
-            && (op->opcode == CPUI_INT_MULT)) {
-            if ((op1 = op->get_in(1)->def)
-                && (op1->opcode == CPUI_INT_SUB)
-                && op1->get_in(1)->is_val(1)
-                && op1->get_in(0) == op->get_in(0)) {
-                out->set_val(-1);
-            }
-            else if ((op1 = op->get_in(0)->def)
-                && (op1->opcode == CPUI_INT_SUB)
-                && op1->get_in(1)->is_val(1)
-                && op1->get_in(0) == op->get_in(1)) {
-                out->set_val(-1);
-            }
-            else
-                out->set_top();
+        else if (in0->is_top_odd() && in1->is_val(-2)) {
+            out->set_val(-1);
+        }
+        else if (in1->is_top_odd() && in0->is_val(-2)) {
+            out->set_val(-1);
         }
         else
             out->set_top();
@@ -1329,6 +1321,12 @@ int             pcodeop::compute(int inslot, flowblock **branch)
             && (op->opcode == CPUI_INT_SUB) 
             && op->get_in(1)->is_val_odd()
             && (op->get_in(0) == in1)) {
+            set_top_even();
+        }
+        else if ((op = in1->def) 
+            && (op->opcode == CPUI_INT_SUB) 
+            && op->get_in(1)->is_val_odd()
+            && (op->get_in(0) == in0)) {
             set_top_even();
         }
         else
