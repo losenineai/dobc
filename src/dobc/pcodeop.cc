@@ -1197,6 +1197,15 @@ int             pcodeop::compute(int inslot, flowblock **branch)
         if (in0->is_constant() && in1->is_constant()) {
             out->set_val(in0->get_val() & in1->get_val());
         }
+        else if ((in0->is_top_even() && in1->is_val(1)) || (in1->is_top_even()  && in0->is_val(1))) {
+            out->set_val(0);
+        }
+        else if (in1->is_val(-1)) {
+            out->type = in0->type;
+        }
+        else if (in0->is_val(-1)) {
+            out->type = in1->type;
+        }
         /*
         识别以下pattern:
 
@@ -1247,41 +1256,24 @@ int             pcodeop::compute(int inslot, flowblock **branch)
         else if ((in0->is_constant() && (in0->get_val() == 0)) || (in1->is_constant() && (in1->get_val() == 0))) {
             out->set_val(0);
         }
-        else if ((op = in0->def)
-            && ((op->opcode == CPUI_INT_MULT) 
-                || ((op->opcode == CPUI_INT_AND) && (_in1 = op->get_in(1)) && _in1->is_constant() && _in1->get_val() == 0xffffffffffffffff) && (op = op->get_in(0)->def))
-            && (op1 = op->get_in(0)->def)
-            && (op1->opcode == CPUI_INT_SUB)
-            && (op1->get_in(0) == op->get_in(1))
-            && (op1->get_in(1)->is_constant())
-            && (op1->get_in(1)->get_val() == 1)) 
-        {
-            /* 
-            rn = ((x * (x - 1)) & 1
-            rn = 0;
-            */
-            if (in1->is_constant() && in1->get_val() == 1) {
-                out->set_val(0);
-            }
-            /*
-            rn = (x * (x - 1)) & ((x * (x - 1)) ^ 0xfffffffe)
-            rn is 0
-            */
-            else if ((op = in1->def) && (op->opcode == CPUI_INT_XOR)
-                && op->get_in(0)->is_constant() 
-                && (VAL_MASK(op->get_in(0)->get_val(), op->get_in(0)->size) == 0xfffffffe)
-                && (op->get_in(1) == in0)) {
-                out->set_val(0);
-            }
-            else if ((op = in1->def) && (op->opcode == CPUI_INT_XOR)
-                && op->get_in(1)->is_constant() 
-                && (VAL_MASK(op->get_in(1)->get_val(), op->get_in(1)->size) == 0xfffffffe)
-                && (op->get_in(0) == in0)) {
-                out->set_val(0);
-            }
-            else {
-                out->set_top();
-            }
+        /*
+        a = x * (x - 1)
+        (a ^ 0xfffffffe) & a == 0
+        */
+        else if ((op = in0->def) && (op->opcode == CPUI_INT_XOR) && op->get_in(1)->is_val(-2)
+            && (op->get_in(0) == in1)
+            && in1->is_top_even()) {
+            out->set_val(0);
+        }
+        /* 
+        0 == a & ~a
+
+        ~a == even_number ^ -2
+        */
+        else if (in0->is_top_even() && (op = in1->def) && (op->opcode == CPUI_INT_XOR)
+            && op->get_in(0)->is_val(-2)
+            && (op->get_in(1) == in0)) {
+            out->set_val(0);
         }
         else
             out->set_top();
@@ -1325,8 +1317,17 @@ int             pcodeop::compute(int inslot, flowblock **branch)
         if (in0->is_constant() && in1->is_constant()) {
             out->set_val(in0->get_val() * in1->get_val());
         }
+        /*
+        a = x * (x - odd_number)
+        */
+        else if ((op = in0->def) 
+            && (op->opcode == CPUI_INT_SUB) 
+            && op->get_in(1)->is_val_odd()
+            && (op->get_in(0) == in1)) {
+            set_top_even();
+        }
         else
-            out->type.height = a_top;
+            out->set_top();
         break;
 
     case CPUI_BOOL_NEGATE:

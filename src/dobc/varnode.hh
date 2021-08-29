@@ -44,6 +44,10 @@ enum height {
     a_sp_constant,
     /* 当某个数和pc寄存器相加的时候，这个值就是pc_constant */
     a_pc_constant,
+    /* 虽然值不可计算，但是知道是 偶数，比如 x * (x - 1)  */
+    a_top_even,
+    /* 虽然值不可计算，但是知道是 奇数 x * (x - 1) ^ 0xfffffffe */
+    a_top_odd,
     a_bottom,
 
     /* */
@@ -173,7 +177,9 @@ public:
     void            set_def(pcodeop *op);
     pcodeop*        get_def() { return def; }
     bool            is_constant(void) const { return type.height == a_constant; }
-    bool            is_top(void) const { return type.height == a_top;  }
+    bool            is_top(void) const { return (type.height == a_top) || (type.height == a_top_even) || (type.height == a_top_odd);  }
+    bool            is_top_even(void) const { return type.height == a_top_even;  }
+    bool            is_top_odd(void) const { return type.height == a_top_odd;  }
     bool            is_hard_constant(void) const { return (type.height == a_constant) && get_addr().isConstant(); }
     bool            in_constant_space() { return get_addr().isConstant(); }
     bool            is_pc_constant() { return type.height == a_pc_constant;  }
@@ -206,6 +212,8 @@ public:
         }
     }
     void            set_top() { type.height = a_top;  }
+    void            set_top_even() { type.height = a_top_even;  }
+    void            set_top_odd() { type.height = a_top_odd;  }
     void            set_sub_val(int insize, intb l, intb r) {
         if (insize == 1)
             set_val((int1)l - (int1)r);
@@ -224,6 +232,12 @@ public:
     intb            get_val(void) const;
     bool            is_val(intb v) {
         return is_constant() && (get_val() == v);
+    }
+    bool            is_val_even() {
+        return is_constant() && ((get_val() & 1) == 0);
+    }
+    bool            is_val_odd() {
+        return is_constant() && ((get_val() & 1) == 1);
     }
     intb            get_sp_offset() { return get_addr().getOffset() - STACK_BASE; }
 

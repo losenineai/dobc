@@ -162,6 +162,8 @@ public:
 	int				compute_add_sub();
     void            set_output(varnode *vn) { output = vn;  }
     void            set_top() { if (output) output->type.height = a_top; }
+    void            set_top_odd() { if (output) output->type.height = a_top_odd; }
+    void            set_top_even() { if (output) output->type.height = a_top_even;  }
 
     bool            is_dead(void) { return flags.dead;  }
     bool            have_virtualnode(void) { return inrefs.size() == 3;  }
