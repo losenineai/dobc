@@ -157,6 +157,7 @@ int     high_cond::linkto(high_cond &op2)
     funcdata *fd = from->fd;
     flowblock *middle;
     varnode *vn;
+    int not;
 
     if ((p->opcode != CPUI_MULTIEQUAL)) {
         /*
@@ -192,8 +193,25 @@ int     high_cond::linkto(high_cond &op2)
 
         这里的 bool关系 R(x, 0, ==) <==> R(1, x, !=)
         */
-        if ((op2.rhs == lhs) && ((type == h_eq) || (type == h_ne))) {
-            p = lhs->def;
+        if ((op2.rhs == lhs) && op2.lhs->is_constant() && rhs->is_constant() && ((type == h_eq) || (type == h_ne))) {
+            vn = lhs;
+            if (vn->def && vn->def->opcode == CPUI_INT_ZEXT) vn = vn->def->get_in(0);
+            p = vn->search_copy_chain(CPUI_MULTIEQUAL, lhs->def->parent);
+            if (!p 
+                || (p->inrefs.size() != 2) || !p->all_inrefs_is_constant() 
+                || !p->get_const_in(rhs)
+                || !p->get_const_in(op2.lhs))
+                return -1;
+
+            not = 0;
+            if (type != op2.type)
+                not++;
+
+            if (op2.lhs->type != rhs->type)
+                not++;
+
+            clist_add(this, &op2, not % 2);
+            return 0;
         }
 
         if (p->opcode == CPUI_INT_ZEXT) {
