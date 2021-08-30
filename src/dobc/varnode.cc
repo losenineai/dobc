@@ -164,9 +164,11 @@ pcodeop*        varnode::search_copy_chain(OpCode until, flowblock *until_blk)
             vn = p->get_virtualnode();
             break;
 
+        case CPUI_SUBPIECE:
         case CPUI_COPY:
             vn = p->get_in(0);
             break;
+
         }
 
         if (!vn || !vn->def) return p;

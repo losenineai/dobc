@@ -328,9 +328,13 @@ int             pcodeop::on_cond_MULTIEQUAL2()
     high_cond topcond, cond;
     flowblock *b = this->parent, *topb, *topb1, *topb2, *b1;
 
+    /* FIXME:调试用 */
+    static int trace = 0, trace1 = 0;
+
     topp = topvn->def;
     if (topp->opcode == CPUI_COPY)
         topp = topp->get_in(0)->def;
+    trace++;
 
     if (!fd->is_ifthenfi_structure(topb = b->get_min_dfnum_in(), b1 = b->get_max_dfnum_in(), b)
         || !fd->is_ifthenfi_structure(topb1 = topb->get_min_dfnum_in(), topb->get_max_dfnum_in(), topb)
@@ -346,9 +350,6 @@ int             pcodeop::on_cond_MULTIEQUAL2()
     if (!c1)
         return TOP;
 
-    /* FIXME:调试用 */
-    static int trace = 0;
-    trace++;
 
     if (topb->cond == topb1->cond) {
         cond.update(topb1, c1->def->parent);
@@ -368,9 +369,10 @@ int             pcodeop::on_cond_MULTIEQUAL2()
     topb2->cond.linkto(topb1->cond);
     topb1->cond.linkto(topb->cond);
 
-
+    /* 这里获取到c1的bool 条件 */
     cond.update(topp->parent->get_min_dfnum_in(), c1->def->parent);
 
+    /* 然后判断 c1的条件 和 topp 的条件是否相等，是的话，则可以赋常量 */
     if (topcond == cond) {
         output->set_val(c1->get_val());
         return 0;

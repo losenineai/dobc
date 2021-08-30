@@ -1121,6 +1121,9 @@ varnode*    flowblock::get_true_vn(pcodeop *phi)
 {
     if (!is_cbranch()) return NULL;
 
+    if (phi->opcode != CPUI_MULTIEQUAL)
+        return NULL;
+
     flowblock *b = phi->parent;
 
     for (int i = 0; i < out.size(); i++) {

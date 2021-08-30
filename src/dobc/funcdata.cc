@@ -2201,6 +2201,8 @@ void        funcdata::heritage(void)
     varnode *vn;
     int i;
 
+    heritage_times++;
+
     if (maxdepth == -1)
         build_adt();
 
@@ -3438,8 +3440,7 @@ int         funcdata::ollvm_deshell()
     combine_lcts_all();
 
     dump_cfg(name, "final0", 1);
-#if 0
-    dobc::singleton()->debug.open_phi2 = 1;
+#if 1
     heritage_clear();
     heritage();
 

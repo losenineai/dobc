@@ -251,7 +251,7 @@ inline bool high_cond::operator==(high_cond &op2) const
         return false;
 
     if (to) {
-        not = node->lnode.not;
+        //not = node->lnode.not;
 
         if (!op2.to)
             throw LowlevelError("high_cond type mismatch");
@@ -268,6 +268,9 @@ inline bool high_cond::operator==(high_cond &op2) const
             if (!lhs->is_constant() && !node->lhs->is_constant() && (lhs == node->lhs)) {
                 if (rhs->is_constant() && node->rhs->is_constant() && rhs->type == node->rhs->type)
                     return true;
+            }
+            else if ((lhs->is_constant() && node->lhs->is_constant() && (lhs->type == node->lhs->type)) && rhs == node->rhs) {
+                return true;
             }
 
 cont_label:

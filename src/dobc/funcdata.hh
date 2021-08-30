@@ -198,6 +198,7 @@ public:
 
     int op_generated = 0;
 	int reset_version = 0;
+    int heritage_times = 0;
 
     pcodeop_tree     optree;
     funcproto       funcp;

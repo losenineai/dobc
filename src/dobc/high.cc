@@ -34,6 +34,7 @@ int high_cond::compute_cond(flowblock *b)
 
     lnode.next = lnode.prev = NULL;
     lnode.not = 0;
+    lhs = rhs = NULL;
 
     for (++rit; rit != b->ops.rend(); rit++) {
         if ((*rit)->get_addr() == last_addr)
@@ -42,7 +43,7 @@ int high_cond::compute_cond(flowblock *b)
             break;
     }
 
-    version = b->fd->reset_version;
+    version = b->fd->heritage_times;
 
     if (detect_operands(b->last_op()))
         return -1;
@@ -87,8 +88,10 @@ int high_cond::update(flowblock *t)
 {
     from = t;
 
-    if (version != t->fd->reset_version)
+    if (version != t->fd->heritage_times)
         return compute_cond(t);
+    else if (!lhs || !rhs)
+        return -1;
 
     return 0;
 }
@@ -113,7 +116,7 @@ enum high_cond_type  high_cond::get_type(void)
 {
     funcdata *fd = from->fd;
 
-    if (version != fd->reset_version)
+    if (version != fd->heritage_times)
         update(from);
 
     return type;
@@ -153,6 +156,7 @@ int     high_cond::linkto(high_cond &op2)
     pcodeop *p = op2.lhs->def;
     funcdata *fd = from->fd;
     flowblock *middle;
+    varnode *vn;
 
     if ((p->opcode != CPUI_MULTIEQUAL)) {
         /*
@@ -171,10 +175,40 @@ int     high_cond::linkto(high_cond &op2)
             return 0;
         }
 
+        /*
+        链接这样一种情况 
+
+        x = 0
+        if (a > 10>
+            x = 1
+
+        y.0 = c1
+        if (x == 0)
+            y.1 = c2
+        y.2 = phi(y.0, y.1)
+        if (x == 1)
+            y.3 = c2
+        y.4 = phi(y.2, y.3)
+
+        这里的 bool关系 R(x, 0, ==) <==> R(1, x, !=)
+        */
+        if ((op2.rhs == lhs) && ((type == h_eq) || (type == h_ne))) {
+            p = lhs->def;
+        }
+
+        if (p->opcode == CPUI_INT_ZEXT) {
+            vn = p->get_in(0);
+            p = vn->search_copy_chain(CPUI_MULTIEQUAL, p->parent);
+            if (!p)
+                return -1;
+        }
+
         if (!p->all_inrefs_is_constant())
             return -1;
-
     }
+
+    if (p->opcode != CPUI_MULTIEQUAL) 
+        throw LowlevelError("must be link phi node");
 
     if (!fd->is_ifthenfi_structure(from, middle = op2.from->get_max_dfnum_in(), op2.from))
         return -1;
@@ -184,8 +218,10 @@ int     high_cond::linkto(high_cond &op2)
     int link_not = 0;
     if (op2.type == h_eq) {
 
-        if (!op2.rhs->is_val(truevn->get_val()))
-            link_not = 1;
+        vn = op2.rhs->is_constant() ? op2.rhs : (op2.lhs->is_constant() ? op2.lhs:NULL);
+
+        if (vn && !vn->is_val(truevn->get_val())) 
+                link_not = 1;
 
         clist_add(this, &op2, link_not);
 
@@ -228,8 +264,11 @@ int high_cond::detect_operands(pcodeop *op)
 
             if (dobc::singleton()->is_greg(vn->get_addr())) {
                 if (op->inrefs.size() == 2) {
-                    lhs = op->get_in(0);
-                    rhs = op->get_in(1);
+
+                    {
+                        lhs = op->get_in(0);
+                        rhs = op->get_in(1);
+                    }
                     return 0;
                 }
                 else
@@ -274,7 +313,10 @@ high_cond *high_cond::get_cond_link_head(int &not)
 
     while (n->lnode.prev) {
         n = n->lnode.prev;
+        not += n->lnode.not;
     }
+
+    not %= 2;
 
     return n;
 }
