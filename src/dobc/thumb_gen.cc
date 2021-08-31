@@ -1268,10 +1268,15 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
             break;
 
         case CPUI_LOAD:
-            if (isreg(p->output) && pi1(p)->is_constant()) {
-                rd = reg2i(poa(p));
-                _mov_imm(rd, pi1(p)->get_val(), 0, 0);
-                o(0xf8d00000 | (rd << 12) | (rd << 16) | 0);
+            if (isreg(p->output)) {
+                if (pi1(p)->is_constant()) {
+                    rd = reg2i(poa(p));
+                    _mov_imm(rd, pi1(p)->get_val(), 0, 0);
+                    o(0xf8d00000 | (rd << 12) | (rd << 16) | 0);
+                }
+                else if ((pi1a(p) == ama) && p1->opcode == CPUI_INT_ADD) {
+                    it = retrieve_orig_inst(b, it, 1);
+                }
             }
             break;
 
@@ -2254,35 +2259,39 @@ pit thumb_gen::g_push(flowblock *b, pit pit)
 
 pit thumb_gen::g_pop(flowblock *b, pit pit)
 {
-    int reglist = 0;
+    int reglist = 0, reg, preg;
     pcodeop *p = *pit, *p1;
 
     p = *pit++;
     p1 = *pit++;
-    reglist |= 1 << reg2i(poa(p1));
+    preg = reg2i(poa(p1));
+    reglist |= 1 << preg;
 
     while (1) {
         p = *pit++;
         p1 = *pit++;
         if ((p->opcode == CPUI_INT_ADD) && (p1->opcode == CPUI_LOAD)) {
-            reglist |= 1 << reg2i(poa(p1));
+            reg = reg2i(poa(p1));
+            if (preg > reg)
+                break;
+
+            preg = reg;
+            reglist |= 1 << reg;
         }
         else
             break;
     }
 
-    if ((p1->opcode == CPUI_COPY)) {
-        _pop(reglist);
+    _pop(reglist);
 
+    if ((p1->opcode == CPUI_COPY)) {
         if ((reglist & (1 << PC))) {
             if ((*pit++)->opcode != CPUI_INT_AND
                 || (*pit)->opcode != CPUI_RETURN)
                 vm_error("pop need pc operation ");
         }
-
-        return pit;
     }
-    vm_error("pop meet error pcode, %d", p->start.getTime());
+
     return pit;
 }
 

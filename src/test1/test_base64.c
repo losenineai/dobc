@@ -230,7 +230,7 @@ int test_md5_on_exit(struct uc_runtime *r)
     uc_mem_read(r->uc, r0, buf, sizeof (buf));
 
     if (strcmp(bin2hex(buf, 16, hex), "5d41402abc4b2a76b9719d911017c592")) {
-        printf("md5 test failure, out[%s]\n", buf);
+        printf("md5 test failure, out[%s]\n", hex);
     }
     else {
         printf("md5 test success, out[%s]\n", hex);

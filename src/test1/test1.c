@@ -28,6 +28,8 @@ int arm_general_regs[16] = {
     UC_ARM_REG_PC
 };
 
+static int g_debug_trace = 0;
+
 static void hook_block(uc_engine *uc, uint64_t address, uint32_t size, void *user_data)
 {
     // printf(">>> Tracing basic block at 0x%"PRIx64 ", block size = 0x%x\n", address, size);
@@ -40,7 +42,7 @@ static void hook_code(uc_engine *uc, uint64_t address, uint32_t size, void *user
 
     int i;
 
-    if (t->debug.trace) {
+    if (g_debug_trace) {
         test_dump_regs(t);
 
         printf("%llx ", address);
@@ -59,6 +61,17 @@ static void hook_code(uc_engine *uc, uint64_t address, uint32_t size, void *user
             ur_set_cur_func(t, hook);
             hook->cb(t);
         }
+    }
+}
+
+static void hook_mem_write(uc_engine *uc, uc_mem_type type, uint64_t address, int size, int64_t value, void *user_data)
+{
+    if (type == UC_MEM_WRITE)
+        printf("address = 0x%llx is write val = %llx\n", address, value);
+    else if (type == UC_MEM_READ) {
+        int v;
+        uc_mem_read(uc, address, &v, sizeof (v));
+        printf("address = 0x%llx is read val = 0x%x\n", address, v);
     }
 }
 
@@ -133,7 +146,7 @@ static void thumb_test_md5(const char *soname)
 {
     uc_engine *uc;
     uc_err err;
-    uc_hook trace1, trace2;
+    uc_hook trace1, trace2, trace3;
 
     err = uc_open(UC_ARCH_ARM, UC_MODE_THUMB, &uc);
     if (err) {
@@ -146,12 +159,12 @@ static void thumb_test_md5(const char *soname)
     if (!ur)
         return;
 
-    //ur->debug.trace = 1;
-
     test_md5_init(ur);
 
     uc_hook_add(uc, &trace1, UC_HOOK_BLOCK, hook_block, ur, 1, 0);
     uc_hook_add(uc, &trace2, UC_HOOK_CODE, hook_code, ur, ur_text_start(ur), ur_text_end(ur));
+    //uc_hook_add(uc, &trace3, UC_HOOK_MEM_WRITE, hook_mem_write, ur, 0x51ff68, 0x51ff68 + 4);
+    //uc_hook_add(uc, &trace3, UC_HOOK_MEM_READ, hook_mem_write, ur, 0x51ff68, 0x51ff68 + 4);
 
     uint64_t start = ur_symbol_addr(ur, "md5String");
     err = uc_emu_start(uc, start, 0, 0, 0);
@@ -176,14 +189,16 @@ int main(int argc, char **argv, char **envp)
     }
 
     //sprintf(buf, "%s/unittests/base64/libs/armeabi-v7a/libbase64.so", argv[1]);
-#if 1
+#if 0
     sprintf(buf, "%s/unittests/base64/libs/armeabi-v7a/libbase64.so.decode", argv[1]);
     thumb_test_base64_encode(buf);
     thumb_test_base64_decode(buf);
 #endif
 
+    g_debug_trace = 1;
 #if 1
-    sprintf(buf, "%s/unittests/md5/libs/armeabi-v7a/libmd5.so", argv[1]);
+    //sprintf(buf, "%s/unittests/md5/libs/armeabi-v7a/libmd5.so", argv[1]);
+    sprintf(buf, "%s/unittests/md5/libs/armeabi-v7a/libmd5.so.decode", argv[1]);
     thumb_test_md5(buf);
 #endif
 
