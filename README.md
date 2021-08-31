@@ -48,7 +48,11 @@ Some APK test by manual, becuase auto-test hard to work close-source so。
 | sha256         | libsha256.so     | 2f0a73a9509eb0599aca9c298016ee9 | libsha256.so.d | encrypt | 
 | sha512         | libsha512.so     | 2f0a73a9509eb0599aca9c298016ee9 | libsha512.so.d | encrypt | 
 | base64 | libbase64.so | | libbase64.so.d | encrypt |
-| fft | libfft.so | | libfft.so.d | |
+| fft | libfft.so | | libfft.so.d | encode |
+| yuv2gb | libyuv2rgb.so | | libyuv2rgb.so.d | encode |
+| insertsort | libinsertsort.so | | libinsert.so | |
+| quicksort | libquicksort.so | | libquicksort.so | |
+| twosum | libtwosum.so | | libtwosum.so.d | leetcode | 
 | 
 
 
