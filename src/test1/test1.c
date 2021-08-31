@@ -56,6 +56,8 @@ static void hook_code(uc_engine *uc, uint64_t address, uint32_t size, void *user
         printf("\n");
     }
 
+    t->hooktab.cur_addr = address;
+
     if ((hook = ur_hook_func_find_by_addr(t, address))) {
         if (hook->cb) {
             ur_set_cur_func(t, hook);
@@ -66,8 +68,10 @@ static void hook_code(uc_engine *uc, uint64_t address, uint32_t size, void *user
 
 static void hook_mem_write(uc_engine *uc, uc_mem_type type, uint64_t address, int size, int64_t value, void *user_data)
 {
+    struct uc_runtime *t = user_data;
+
     if (type == UC_MEM_WRITE)
-        printf("address = 0x%llx is write val = %llx\n", address, value);
+        printf("[%llx] address = 0x%llx is write val = %llx\n", t->hooktab.cur_addr, address, value);
     else if (type == UC_MEM_READ) {
         int v;
         uc_mem_read(uc, address, &v, sizeof (v));
@@ -164,6 +168,7 @@ static void thumb_test_md5(const char *soname)
     uc_hook_add(uc, &trace1, UC_HOOK_BLOCK, hook_block, ur, 1, 0);
     uc_hook_add(uc, &trace2, UC_HOOK_CODE, hook_code, ur, ur_text_start(ur), ur_text_end(ur));
     //uc_hook_add(uc, &trace3, UC_HOOK_MEM_WRITE, hook_mem_write, ur, 0x51ff68, 0x51ff68 + 4);
+    uc_hook_add(uc, &trace3, UC_HOOK_MEM_WRITE, hook_mem_write, ur, ur_stack_start(ur), ur_stack_end(ur));
     //uc_hook_add(uc, &trace3, UC_HOOK_MEM_READ, hook_mem_write, ur, 0x51ff68, 0x51ff68 + 4);
 
     uint64_t start = ur_symbol_addr(ur, "md5String");
@@ -195,7 +200,7 @@ int main(int argc, char **argv, char **envp)
     thumb_test_base64_decode(buf);
 #endif
 
-    g_debug_trace = 1;
+    //g_debug_trace = 1;
 #if 1
     //sprintf(buf, "%s/unittests/md5/libs/armeabi-v7a/libmd5.so", argv[1]);
     sprintf(buf, "%s/unittests/md5/libs/armeabi-v7a/libmd5.so.decode", argv[1]);

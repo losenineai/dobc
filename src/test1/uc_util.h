@@ -170,6 +170,7 @@ typedef struct uc_runtime {
 
         /* 当前调用的函数，函数调用前设置，当前函数调用完以后，不会清空 */
         struct uc_hook_func *cur;
+        int64_t             cur_addr;
     } hooktab;
 
     struct {
