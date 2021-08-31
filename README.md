@@ -53,7 +53,10 @@ Some APK test by manual, becuase auto-test hard to work close-source so。
 | insertsort | libinsertsort.so | | libinsert.so | |
 | quicksort | libquicksort.so | | libquicksort.so | |
 | twosum | libtwosum.so | | libtwosum.so.d | leetcode | 
-| 
+| avl | libavl.so | | libavl.so.d | |
+| astar | libastar.so | | libastar.so.d | |
+| binsearch | libbinsearch.so | | libbinsearch.so.d | |
+
 
 
 
