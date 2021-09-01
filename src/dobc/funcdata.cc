@@ -3439,8 +3439,8 @@ int         funcdata::ollvm_deshell()
 
     combine_lcts_all();
 
+#if 0
     dump_cfg(name, "final0", 1);
-#if 1
     heritage_clear();
     heritage();
 

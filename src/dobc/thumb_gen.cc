@@ -1301,7 +1301,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
          false_label:
 
 
-          true_label: 
+          true_label:
 
                     这个是ne
 
@@ -1309,13 +1309,13 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     warn: sleigh在转it指令时，mov.后面的条件，走的是false的分支，为真的条件实际上是相反的。
                     */
                     if (!imm && (p1->opcode == CPUI_BOOL_NEGATE) && (p2->opcode == CPUI_CBRANCH)) {
-                        write_cbranch(b, ((p->opcode == CPUI_INT_NOTEQUAL)?COND_NE:COND_EQ));
+                        write_cbranch(b, ((p->opcode == CPUI_INT_NOTEQUAL) ? COND_NE : COND_EQ));
                     }
                     else if (imm && p1->opcode == CPUI_CBRANCH) {
-                        write_cbranch(b, ((p->opcode == CPUI_INT_NOTEQUAL)?COND_NE:COND_EQ));
+                        write_cbranch(b, ((p->opcode == CPUI_INT_NOTEQUAL) ? COND_NE : COND_EQ));
                     }
                     else if (!imm && p1->opcode == CPUI_CBRANCH) {
-                        write_cbranch(b, ((p->opcode == CPUI_INT_NOTEQUAL)?COND_EQ:COND_NE));
+                        write_cbranch(b, ((p->opcode == CPUI_INT_NOTEQUAL) ? COND_EQ : COND_NE));
                     }
                 }
                 else if ((pi0a(p) == acy) && pi1(p)->is_constant()) {
@@ -1323,17 +1323,17 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     if (p->opcode == CPUI_INT_NOTEQUAL) imm = !imm;
                     if (p1->opcode == CPUI_BOOL_NEGATE) imm = !imm;
 
-                    write_cbranch(b, imm?COND_CS:COND_CC);
+                    write_cbranch(b, imm ? COND_CS : COND_CC);
 
                 }
                 else if ((pi0a(p) == ang) && pi1(p)->is_hard_constant()) {
                     imm = pi1(p)->get_val();
                     if (p->opcode == CPUI_INT_NOTEQUAL) imm = !imm;
                     if (p1->opcode == CPUI_BOOL_NEGATE) imm = !imm;
-                    write_cbranch(b, imm ? COND_MI:COND_PL);
+                    write_cbranch(b, imm ? COND_MI : COND_PL);
                 }
                 else if (pi0a(p) == ang && pi1a(p) == aov && p1->opcode == CPUI_BOOL_NEGATE && p2->opcode == CPUI_CBRANCH) {
-                    write_cbranch(b, (p->opcode == CPUI_INT_EQUAL) ? COND_LT:COND_GE);
+                    write_cbranch(b, (p->opcode == CPUI_INT_EQUAL) ? COND_LT : COND_GE);
                 }
                 else if ((p1->opcode == CPUI_BOOL_OR) && (p2->opcode == CPUI_BOOL_NEGATE) && (p3->opcode == CPUI_CBRANCH)) {
                     if ((pi0a(p) == ang) && (pi1a(p) == aov) && (pi0a(p1) == azr)) {
@@ -1344,10 +1344,16 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     imm = pi1(p)->get_val();
 
                     _cmp_imm(reg2i(pi0a(p)), imm);
-                    write_cbranch(b, ((p->opcode == CPUI_INT_NOTEQUAL)?COND_NE:COND_EQ));
+                    write_cbranch(b, ((p->opcode == CPUI_INT_NOTEQUAL) ? COND_NE : COND_EQ));
                 }
 
                 it = advance_to_inst_end(it);
+            }
+            else if (d->is_tsreg(poa(p))) {
+                /* rsb */
+                if (p1->opcode == CPUI_INT_SUB) {
+                    it = retrieve_orig_inst(b, it, 1);
+                }
             }
             break;
 
@@ -1734,6 +1740,10 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                         }
                         else if (p2->opcode == CPUI_INT_SUB) {
                             _sub_reg(reg2i(poa(p2)), reg2i(pi0a(p2)), reg2i(pi0a(p)), SRType_LSL, pi1(p)->get_val());
+                        }
+                        /* sbc */
+                        else if (p2->opcode == CPUI_INT_LESSEQUAL) {
+                            it = retrieve_orig_inst(b, it, 1);
                         }
                     }
                     else if (p1->opcode == CPUI_INT_NEGATE)
