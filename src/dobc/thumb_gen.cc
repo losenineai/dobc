@@ -681,8 +681,6 @@ void _ldrd_imm(int rt, int rt2, int rn, int imm)
     int add = imm >= 0;
     imm = abs(imm);
 
-    if (rn == rt) return;
-
     if (imm < 1024 && align4(imm)) 
         o(0xe9500000 |  (rn << 16) | (rt << 12) | (rt2 << 8) | (imm >> 2) | (add << 23));
     /* wback ? */
