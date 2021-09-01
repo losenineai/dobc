@@ -13,10 +13,19 @@ md5_clean: FORCE
 	$(ndkbuild) clean; \
 	cd -
 
+sha1: FORCE
+	cd sha1; \
+	$(ndkbuild); \
+	cd -
+
+sha1_clean: FORCE
+	cd sha1; \
+	$(ndkbuild) clean; \
+	cd -
+
 base64: FORCE
 	cd base64 ; \
 	$(ndkbuild) ; \
-	cp libs/armeabi-v7a/libbase64.so  libs/armeabi-v7a/libbase64.so.decode; \
 	cd -
 
 base64_clean: FORCE
@@ -27,7 +36,6 @@ base64_clean: FORCE
 crc32: FORCE
 	cd crc32 ; \
 	$(ndkbuild) ; \
-	cp libs/armeabi-v7a/libcrc32.so  libs/armeabi-v7a/libcrc32.so.decode; \
 	cd -
 
 crc32_clean: FORCE
