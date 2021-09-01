@@ -21,8 +21,13 @@
 
 #define pcode_cpsr_out_dead(p)      !(p->live_out[NG] | p->live_out[ZR] | p->live_out[CY]| p->live_out[OV])
 
+/* 表明当前pcode后，是否有跟随对cpsr的操作 */
 static int g_cpsr_follow = 0;
+
+/* 表明当前pcode后，cpsr寄存器是否出口死亡 */
 static int g_cpsr_dead = 0;
+
+/* 表明是否可以对当前指令设置 setflags 标记 */
 static int g_setflags = 0;
 
 #define UPDATE_CPSR_SET(_p)  do { \
@@ -774,6 +779,15 @@ void _lsr_imm(int rd, int rm, int imm)
         o(0x0800 | (imm << 6) | (rm << 3) | rd);
     else
         o(0xea4f0010 | (rd << 8) | rm | imm_map(imm, 2, 3, 12) | imm_map(imm, 0, 2, 6));
+}
+
+/* A8.8.97 */
+void _lsr_reg(int rd, int rn, int rm)
+{
+    if ((rd == rn) && (rd < 8) && (rm < 8) && g_setflags)
+        o(0x40c0 | (rm << 3) | rd);
+    else
+        o(0xfa20f000 | (g_setflags << 20) | (rn << 16) | (rd << 12) | rm);
 }
 
 /* A8.8.100 */
@@ -1698,6 +1712,10 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                         rn = reg2i(pi0a(p));
                         _str_imm(rt, rn, imm, 0);
                     }
+                }
+                else if (p1->opcode == CPUI_INT_RIGHT) {
+                    UPDATE_CPSR_SET(p1);
+                    _lsr_reg(reg2i(poa(p1)), reg2i(poa(p1)), reg2i(pi0a(p)));
                 }
                 else if (follow_by_set_cpsr(p)) {
                     _tst_reg(reg2i(pi0a(p)), reg2i(pi1a(p)), SRType_LSL, 0);
