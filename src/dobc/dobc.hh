@@ -16,6 +16,24 @@
 class dobc;
 
 /* 重命名一些符号，做内部使用，我懒的改opcodes.hh了 */
+/*
+这个use是为了解决这么一个问题:
+
+假设我们需要把一个stack上的变量和某个寄存器比较
+
+2. - 0x10: cmp r0, [sp + 3a]
+
+这里，我们的sp，其实代表的不是当前的sp的值，而是基准sp寄存器，当前的sp值
+其实是前面的 sp - 0x10
+
+所以最后指令2，其实需要转换为当前sp的值，减去操作数里sp地址的值
+
+最后的代码生成时，应该是:
+
+rm = regalloc();
+mov rm, [sp + 4a]
+cmp r0, rm
+*/
 #define CPUI_USE        CPUI_CAST
 
 #define pi0(p)              p->get_in(0)
@@ -158,6 +176,7 @@ public:
 
     vector<intb>    decode_address_list;
     vector<string>  decode_symbol_list;
+    vector<intb>    noreturn_calls;
 
 #define SHELL_OLLVM           0
 #define SHELL_360FREE         1
@@ -236,6 +255,9 @@ public:
     void init_spcs();
     /* 初始化位置位置无关代码，主要时分析原型 */
     void init_plt(void);
+
+    /* 初始化符号，包括库里加载的符号，外部指定的noreturn符号等等 */
+    void init_syms();
 
     void        add_inst_mnem(const Address &addr, const string &mnem);
     string&     get_inst_mnem(intb addr);

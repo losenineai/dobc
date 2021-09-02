@@ -3052,7 +3052,7 @@ int         funcdata::collect_all_const_defs(pcodeop *start, vector<varnode *> &
                 cad_push_def(in);
             }
         }
-        else if ((p->opcode == CPUI_LOAD) && (in = p->get_virtualnode()) && in->def) {
+        else if ((p->opcode == CPUI_LOAD) && (in = p->get_virtualnode()) && in->def && (in->def->opcode == CPUI_STORE)) {
             in = in->def->get_in(2);
             cad_push_def(in);
         }
@@ -3179,6 +3179,31 @@ int         funcdata::combine_lcts(vector<flowblock *> &blks)
         if (i == its.size())
             ops.insert(ops.begin(), p);
         else {
+            /* 
+
+
+            blockA:
+            0x18200: ldrd r4,r9,[sp,#0x288]
+            p74014 [239]:(u8fc00.1152:4) = INT_ADD (%sp.3:4) (#288:4)
+            p74015 [240]:(%r4.240:4) = LOAD ram (u8fc00.1152:4) (s-170.113:4)
+            p74016 [241]:(u97080.375:4) = INT_ADD (u8fc00.1152:4) (#4:4)
+            p74017 [242]:(%r9.174:4) = LOAD ram (u97080.375:4) (s-16c.67:4)
+
+            blockB:
+            0x18200: ldrd r4,r9,[sp,#0x288]
+            p344636 [ 80]:(u8fc00.786:4) = INT_ADD (%sp.3:4) (#288:4)
+            p344638 [ 81]:(u97080.264:4) = INT_ADD (u8fc00.786:4) (#4:4)
+            p344639 [ 82]:(%r9.115:4) = LOAD ram (u97080.264:4) (s-16c.44:4)
+
+            这个块，其实它们本来是一样的，但是因为优化的原因，导致其中blockB少了一条指令，
+            然后我们在做块合并时，要基于指令单位来做，发现这个情况后，要退掉尾部那些同一个
+            指令产生的pcode
+            */
+            while (ops.size() && (ops.front()->get_addr() == p->get_addr())) {
+                for (i = 0; i < its.size(); i++)
+                    its[i]--;
+                ops.erase(ops.begin());
+            }
             break;
         }
 

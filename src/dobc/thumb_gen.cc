@@ -770,6 +770,14 @@ void _lsl_imm(int rd, int rm, int imm, int setflags)
         o(0xea4f0000 | (rd << 8) | rm | imm_map(imm, 2, 3, 12) | imm_map(imm, 0, 2, 6) | (setflags << 20));
 }
 
+void _lsl_reg(int rd, int rn, int rm)
+{
+    if ((rd == rn) && (rm < 8) && (rd < 8) && g_setflags)
+        o(0x4080 | (rm << 3));
+    else
+        o(0xfa00f000 | (g_setflags << 20) | (rn << 16) | (rd << 8) | rm);
+}
+
 /* A8.8.96 */
 void _lsr_imm(int rd, int rm, int imm)
 {
@@ -1135,7 +1143,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     it = g_vstl(b, it);
             }
             else if (poa(p) == alr) {
-                if ((p1->opcode == CPUI_COPY) && poa(p1) == d->get_addr("ISAModeSwitch")
+                if (p1 && (p1->opcode == CPUI_COPY) && poa(p1) == d->get_addr("ISAModeSwitch")
                     && (p2->opcode == CPUI_COPY) && poa(p2) == d->get_addr("TB")
                     && (p3->opcode == CPUI_CALL) && (pi0(p3)->get_addr().getSpace() == d->ram_spc)) {
 
@@ -1143,7 +1151,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     int tb = p2->output->get_val();
                     _bl_x_imm(!tb, imm);
                 }
-                else if ((p1->opcode == CPUI_CALL) && (pi0(p1)->get_addr().getSpace() == d->ram_spc)) {
+                else if (p1 && (p1->opcode == CPUI_CALL) && (pi0(p1)->get_addr().getSpace() == d->ram_spc)) {
                     imm = pi0(p1)->get_addr().getOffset();
                     _bl_x_imm(0, imm);
                 }
@@ -1203,6 +1211,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                         case CPUI_INT_AND:
                         case CPUI_INT_OR:
                         case CPUI_INT_RIGHT:
+                        case CPUI_INT_LEFT:
                             it = retrieve_orig_inst(b, it, 1);
                             break;
                         }
@@ -1244,7 +1253,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
             else if (istemp(p->output)) {
                 switch (p1->opcode) {
                 case CPUI_INT_ADD:
-                    UPDATE_CPSR_SET(p2);
+                    UPDATE_CPSR_SET(p1);
                     _add_reg(reg2i(poa(p1)), reg2i(pi0a(p1)), reg2i(pi0a(p)), SRType_LSL, 0);
                     break;
 
@@ -1892,6 +1901,10 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
             break;
 
         case CPUI_USE:
+            /* FIXME:这里其实等于在做硬编码了，后期考虑干掉 */
+            if (!p1 || (p1->opcode != CPUI_INT_SUB))
+                continue;
+
             rn = regalloc(p);
             rm = regalloc(p);
 
@@ -2082,7 +2095,7 @@ int thumb_gen::follow_by_set_cpsr(pcodeop *p)
 
     pcodeop *p1 = *++it;
 
-    if (p1->get_addr() != p->get_addr()) return 0;
+    if (!p1 || (p1->get_addr() != p->get_addr())) return 0;
 
     return (p1 && p1->output && (d->is_tsreg(poa(p1)) || d->is_sreg(poa(p1))));
 }

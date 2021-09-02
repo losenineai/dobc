@@ -2730,6 +2730,9 @@ void        funcdata::op_destroy_raw(pcodeop *op)
 {
     int i;
 
+    if (op->start.getTime() == 649432)
+        printf("a\n");
+
 	for (i = 0; i < op->inrefs.size(); i++) {
 		if (op->get_in(i))
 			destroy_varnode(op->get_in(i));
@@ -2746,6 +2749,9 @@ void        funcdata::op_destroy(pcodeop *op)
 {
     int i;
     flowblock *b;
+
+    if (op->start.getTime() == 649432)
+        printf("a\n");
 
 	if (op->output) {
         destroy_varnode(op->output);
@@ -4306,7 +4312,11 @@ void dobc::init(DocumentStorage &store)
     init_regs();
     init_abbrev();
     init_plt();
+    init_syms();
+}
 
+void dobc::init_syms()
+{
     addrtab::iterator it;
     LoadImageFunc *sym;
     funcdata *fd;
@@ -4323,8 +4333,17 @@ void dobc::init(DocumentStorage &store)
 
         add_func(fd);
     }
-}
 
+    for (int i = 0; i < noreturn_calls.size(); i++) {
+        Address addr(getDefaultCodeSpace(), noreturn_calls[i]);
+
+        if (NULL == (fd = find_func(addr))) {
+            fd = add_func(addr);
+        }
+
+        fd->set_noreturn(1);
+    }
+}
 
 void dobc::parse_stack_pointer(const Element *el)
 {

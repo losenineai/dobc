@@ -28,6 +28,9 @@ pcodeop::pcodeop(int s, const SeqNum &sq)
 
     output = 0;
     opcode = CPUI_MAX;
+
+    if (start.getTime() == 649433)
+        printf("a\n");
 }
 pcodeop::~pcodeop()
 {
@@ -1270,6 +1273,11 @@ int             pcodeop::compute(int inslot, flowblock **branch)
         */
         else if ((op = in0->def) && (op->opcode == CPUI_INT_XOR) && op->get_in(1)->is_val(-2)
             && (op->get_in(0) == in1)
+            && in1->is_top_even()) {
+            out->set_val(0);
+        }
+        else if ((op = in0->def) && (op->opcode == CPUI_INT_XOR) && op->get_in(0)->is_val(-2)
+            && (op->get_in(1) == in1)
             && in1->is_top_even()) {
             out->set_val(0);
         }

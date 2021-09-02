@@ -14,6 +14,7 @@ static char help[] = {
     "       -da [hex address, ]     decode address list\r\n"
     "       -ds [symbol name, ]     decode symbol list\r\n"
     "       --ghidra                ghidra config directory\r\n"
+    "       -noreturn addrlist      addrlist seperate by space"
     "\n\n"
     "       -debug.cfg              dump static trace cfg\r\n"
     "       -debug.level [0-6]      debug info level, [error -> detail]\r\n"
@@ -58,6 +59,12 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "-ds")) {
             while (((i+ 1) < argc) && argv[i + 1][0] != '-') {
                 d.decode_symbol_list.push_back(argv[i + 1]);
+                i++;
+            }
+        }
+        else if (!strcmp(argv[i], "-noreturn")) {
+            while (((i+ 1) < argc) && argv[i + 1][0] != '-') {
+                d.noreturn_calls.push_back(strtoul(argv[i + 1], NULL, 16));
                 i++;
             }
         }
