@@ -3001,6 +3001,8 @@ int         funcdata::ollvm_do_copy_expand(pcodeop *p, flowblock *b, int outslot
         return -1;
 
     if (defs.size() == dfnum)  return -1;
+    /* 我们只针对不透明的谓词处理一下，但是应该来说我们应该消除不透明谓词 */
+    if (defs.size() > 4) return -1;
 
     cond_copy_expand(p, b, outslot);
     heritage_clear();
