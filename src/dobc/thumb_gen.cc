@@ -641,6 +641,7 @@ void _sub_reg(int rd, int rn, int rm, SRType shtype, int sh)
         o(0xeba00000 | (rn << 16) | (rd << 8) | rm | (shtype << 4) | ((sh & 3) << 6) | (sh >> 2 << 12));
 }
 
+/* A8.8.38 */
 void _cmp_reg(int rn, int rm)
 {
     if (rn < 8 && rm < 8)
@@ -1408,7 +1409,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
 
                 case CPUI_INT_EQUAL:
                     /* A8.8.37 */
-                    if (pi1(p)->is_constant()) 
+                    if (pi1(p)->is_hard_constant()) 
                         _cmp_imm(rn, pi1(p)->get_val());
                     /* A8.8.38 */
                     else if (isreg(pi0(p)) && isreg(pi1(p))) {
