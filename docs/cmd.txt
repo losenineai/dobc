@@ -10,14 +10,16 @@
 -c  ../../../Ghidra  -i  ../../../data/斗鱼/edfc5f175821c4605ebb11399953054/libmakeurl2.4.9.so -sd -da 0x366f5
 -c  ../../../Ghidra  -i  E:\source\dobc\unittests\base64\libs\armeabi-v7a\libbase64.so -sd -ds base64_encode base64_decode -debug.zxw
 -c  ../../../Ghidra  -i  E:\source\dobc\unittests\base64\libs\armeabi-v7a\libbase64.so -sd -ds base64_decode -debug.zxw
--c  ../../../Ghidra  -i  E:\source\dobc\unittests\md5\libs\armeabi-v7a\libmd5.so -sd -ds md5Update -debug.zxw
--c  ../../../Ghidra  -i  E:\source\dobc\unittests\md5\libs\armeabi-v7a\libmd5.so -sd -ds md5Finalize -debug.zxw
+-c  ../../../Ghidra  -i  E:\source\dobc\unittests\md5\libs\armeabi-v7a\libmd5.so -sd -ds md5Update md5Finalize -debug.zxw
+-c  ../../../Ghidra  -i  E:\source\dobc\unittests\sha1\libs\armeabi-v7a\libsha1.so -sd -ds sha1_final  -debug.zxw
 
+
+-c  ../../../Ghidra -st ollvm  -i  e:\source\dobc\data\liblazarus\liblazarus.so -sd -da 0x15f09 0x132ed -debug.zxw
 
 -c  ../../../Ghidra -st ollvm  -i  e:\source\dobc\data\liblazarus\liblazarus.so -sd -da 0x15f09 -debug.zxw
 -c  ../../../Ghidra -st ollvm  -i  e:\source\dobc\data\liblazarus\liblazarus.so -sd -da 0x132ed -debug.zxw
 
--s  ../../../Processors/ARM/data/languages/ARM8_le.sla -st ollvm  -i e:\source\dobc\data\快手\2f0a73a9509eb0599aca9c298016ee9\libkwsgmain.so -stack_check_fail 0x7a14 -sd -da 0xcb59
 
-
--c  ../../../Ghidra -st ollvm  -i  e:\source\dobc\data\快手\2f0a73a9509eb0599aca9c298016ee9\libkwsgmain.so -sd -da 0xcb59 -debug.zxw
+-c  ../../../Ghidra -i  e:\source\dobc\data\快手\2f0a73a9509eb0599aca9c298016ee9\libkwsgmain.so -sd -da 0xcb59 -debug.zxw
+-c  ../../../Ghidra -i  e:\source\dobc\data\快手\bf8035a0f4c9680a9b53eb225bbe12fd\libkwsgmain.so -sd -da 0xc061 -debug.zxw -noreturn 8f7bc
+-c  ../../../Ghidra -i  e:\source\dobc\data\快手\bf8035a0f4c9680a9b53eb225bbe12fd\libkwsgmain.so -sd -da 0x3e551 -debug.zxw -noreturn 8f7bc
