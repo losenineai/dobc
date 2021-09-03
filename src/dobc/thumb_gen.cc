@@ -625,10 +625,10 @@ void thumb_gen::_sub_imm(int rd, int rn, uint32_t imm, int setflags)
 
 void thumb_gen::_sub_sp_imm(int imm, int setflags)
 {
-    if (!(imm & 3)) /* ALIGN 4 */
+    if (align4(imm) && (imm < 512)) /* ALIGN 4 */
         o(0xb080 | (imm >> 2));
     else if (imm < 4096) //subw, T3
-        o(stuff_constw(0xf25b0000, imm, 12));
+        o(stuff_constw(0xf2ad0000, imm, 12) | (SP << 8));
     else // T2
         o(stuff_const(0xf1ad0000 | (SP << 8), imm));
 }
