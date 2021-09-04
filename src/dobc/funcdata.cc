@@ -1518,6 +1518,7 @@ int         funcdata::ollvm_detect_fsm2(ollvmhead *oh)
     in0 = p->get_in(0);
     in1 = p->get_in(1);
 
+    /* 2个数都不是常数，需要递归扫描sub指令的 常数定义 */
     if (!in0->is_constant() && !in1->is_constant()) {
         vector<varnode *> defs;
 
@@ -1533,6 +1534,9 @@ int         funcdata::ollvm_detect_fsm2(ollvmhead *oh)
 
         return -1;
     }
+
+    /* 假如是普通循环，则退出 */
+    if (h->is_iv_in_normal_loop(p)) return -1;
 
     in = in0->is_constant() ? in1 : in0;
 
@@ -3330,7 +3334,7 @@ int         funcdata::cmp_itblock_cbranch_conditions(pcodeop *cbr1, pcodeop* cbr
     pcodeop *p2 = *--it2;
     pcodeop *pp2 = *--it2;
 
-    /* 这个复杂的表达式，只是模拟ssa的效果，保证du链，确保我们是在比较同一个东西 */
+    /* 这个复杂的表达式，只是模拟ssa的效果，保证du链，确保我们是在比较同一个东西，因为这个时候ssa还没有计算 */
     if ((p1->opcode == CPUI_BOOL_NEGATE) && (p2->opcode == CPUI_BOOL_NEGATE) && (pp1->opcode == pp2->opcode)
         && p1->output->get_addr() == cbr1->get_in(1)->get_addr()
         && pp1->output->get_addr() == p1->get_in(0)->get_addr()

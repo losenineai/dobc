@@ -1162,7 +1162,7 @@ bool        flowblock::is_iv_in_normal_loop(pcodeop *sub)
     for (int i = 0; i < sub->inrefs.size(); i++) {
         varnode *in = sub->get_in(1);
 
-        if (in->is_constant() && (in->get_val() >= 0) && in->get_val() <= 1024)
+        if (in->is_simple_constant())
             return true;
     }
 
