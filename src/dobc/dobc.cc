@@ -2029,10 +2029,12 @@ void        funcdata::collect_edges()
 
         case CPUI_CBRANCH:
             if (op->flags.itblock) {
-                list<pcodeop *>::const_iterator it = iter, next_it;
+                list<pcodeop *>::const_iterator it = iter, next_it, it1;
+                pcodeop *p, *p1;
 
+combine_it_label:
                 for (; (it != deadlist.end()) && (*it)->flags.itblock; it = next_it) {
-                    pcodeop *p = *it;
+                    p = *it;
                     next_it = ++it;
 
                     if (p->opcode == CPUI_CBRANCH) {
@@ -2043,6 +2045,34 @@ void        funcdata::collect_edges()
                             op_set_input(op, clone_varnode(p->get_in(0)), 0);
                             op_destroy_raw(p);
                         }
+                    }
+                }
+
+                /* 来自于 libkwsgmain.so[bf8035a0f4c9680a9b53eb225bbe12fd]
+                有这样一种情况 
+
+.text:0003E712 368 01 BF       ITTTT EQ
+.text:0003E714 368 24 99       LDREQ           R1, [SP,#0x360+var_2D0]
+.text:0003E716 368 08 68       LDREQ           R0, [R1]
+.text:0003E718 368 00 BA       REVEQ           R0, R0
+.text:0003E71A 368 41 F8 04 0B STREQ.W         R0, [R1],#4
+.text:0003E71E 368 02 BF       ITTT EQ
+.text:0003E720 368 2A 91       STREQ           R1, [SP,#0x360+var_2B8]
+.text:0003E722 368 4C F6 2F 51 MOVWEQ          R1, #0xCD2F
+.text:0003E726 368 CB F6 A3 41 MOVTEQ          R1, #0xBCA3
+
+我们把3e712开始的it块指令，全部粘合在了一起，结果发现下面的3E71E它也是一个it块，而这个it块的条件和上面一个
+IT块是完全一样的，这个时候我们需要把3E720 - 3E726的代码，和上面的 3E714-3E71A的指令粘合在一起
+                */
+                p = *it;
+                p1 = *++it;
+                if (p1 && p1->flags.itblock) {
+                    it1 = it;
+                    while (p1->opcode != CPUI_CBRANCH) p1 = *++it1;
+
+                    if (0 == cmp_itblock_cbranch_conditions(op, p1)) {
+                        it = it1;
+                        goto combine_it_label;
                     }
                 }
             }
