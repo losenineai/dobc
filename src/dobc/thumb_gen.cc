@@ -485,14 +485,20 @@ void _teq_reg(int rn, int rm, int shift)
 }
 
 /* A8.8.123 */
-void _orr_reg(int rd, int rn, int rm, SRType sht, int shval, int setflags)
+void _orr_reg(int rd, int rn, int rm, SRType sht, int shval)
 {
-    if (setflags && (rd == rn) && rm < 8 && rn < 8 && (sht == SRType_LSL) && !shval)
+    if (g_setflags && (rd == rn) && rm < 8 && rn < 8 && (sht == SRType_LSL) && !shval)
         o(0x4300 | (rm << 3) | rd);
     else if (rd != 13 && rd != 15 && rn != 13 && rm != 13 && rm != 15) 
-        o(0xea400000 | (rn << 16) | (rd << 8) | rm | (setflags << 20) | SR4_IMM_MAP5(sht,shval));
+        o(0xea400000 | (rn << 16) | (rd << 8) | rm | (g_setflags << 20) | SR4_IMM_MAP5(sht,shval));
 	else
 		vm_error ("internal error: th_orr_reg invalid parameters\n");
+}
+
+/* A8.8.122 */
+void _orr_imm(int rd, int rn, SRType sht, int shval)
+{
+    o(0x40400000 | (rn << 16) | (rd << 8) | thumb_gen::stuff_const(0, shval));
 }
 
 void _adr(int rd, int imm)
@@ -1740,7 +1746,8 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
 
         case CPUI_INT_OR:
             if (isreg(p->output)) {
-                _orr_reg(reg2i(poa(p)), reg2i(pi0a(p)), reg2i(pi1a(p)), SRType_LSL, 0, follow_by_set_cpsr(p));
+                UPDATE_CPSR_SET(p);
+                _orr_reg(reg2i(poa(p)), reg2i(pi0a(p)), reg2i(pi1a(p)), SRType_LSL, 0);
                 it = advance_to_inst_end(it);
             }
             break;
@@ -1785,7 +1792,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                         break;
 
                     case CPUI_INT_OR:
-                        _orr_reg(reg2i(poa(p1)), reg2i(pi0a(p1)), reg2i(pi0a(p)), SRType_LSL, pi1(p)->get_val(), follow_by_set_cpsr(p1));
+                        _orr_reg(reg2i(poa(p1)), reg2i(pi0a(p1)), reg2i(pi0a(p)), SRType_LSL, pi1(p)->get_val());
                         break;
 
                     case CPUI_INT_XOR:
@@ -1822,6 +1829,11 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                         _and_reg(reg2i(poa(p1)), reg2i(pi0a(p1)), reg2i(pi0a(p)), SRType_LSR, pi1(p)->get_val(), follow_by_set_cpsr(p1));
                     else if (p1->opcode == CPUI_INT_SUB)
                         _rsb_reg(reg2i(poa(p1)), reg2i(pi1a(p1)), reg2i(pi0a(p)), SRType_LSR, pi1(p)->get_val(), follow_by_set_cpsr(p1));
+                    else if (p1->opcode == CPUI_INT_OR) {
+                        UPDATE_CPSR_SET(p1);
+                        if (pi1(p)->is_hard_constant())
+                            _orr_reg(reg2i(poa(p1)), reg2i(pi0a(p1)), reg2i(pi0a(p)), SRType_LSR, pi1(p)->get_val());
+                    }
                 }
 
                 it = advance_to_inst_end(it);
