@@ -1552,6 +1552,7 @@ void            pcodeop::to_copy(varnode *in)
 void            pcodeop::to_nop(void)
 {
     funcdata *fd = parent->fd;
+    dobc *d = fd->d;
 
     while (num_input() > 0)
         fd->op_remove_input(this, 0);
@@ -1560,4 +1561,6 @@ void            pcodeop::to_nop(void)
         fd->destroy_varnode(output);
 
     fd->op_set_opcode(this, CPUI_COPY);
+    fd->op_set_input(this, fd->create_vn(d->wordsize, d->r0_addr), 0);
+    fd->op_set_output(this, fd->create_vn(d->wordsize, d->r0_addr));
 }
