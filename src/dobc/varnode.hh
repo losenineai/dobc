@@ -177,6 +177,9 @@ public:
     void            set_def(pcodeop *op);
     pcodeop*        get_def() { return def; }
     bool            is_constant(void) const { return type.height == a_constant; }
+    /* 判断是否时简单常数 ，这个主要是勇于判断当我们在ollvm做循环展开时，是在展开一个普通的循环还是ollvm循环
+    */
+    bool            is_simple_constant(void) const { return is_constant() && (get_val() >= 0 ) && (get_val() < 1024); }
     bool            is_top(void) const { return (type.height == a_top) || (type.height == a_top_even) || (type.height == a_top_odd);  }
     bool            is_top_even(void) const { return type.height == a_top_even;  }
     bool            is_top_odd(void) const { return type.height == a_top_odd;  }
