@@ -28,6 +28,16 @@ class flowblock;
 class varnode;
 class funcdata;
 
+class pcodeop_lite {
+public:
+    OpCode opcode;
+    varnode *output = NULL;
+    vector<varnode *> inrefs;
+
+    pcodeop_lite(int s);
+    ~pcodeop_lite();
+};
+
 class pcodeop {
 public:
     struct {
@@ -106,6 +116,7 @@ public:
     list<pcodeop *> mayuses;
 
     pcodeop(int s, const SeqNum &sq);
+    pcodeop(pcodeop_lite *lite);
     ~pcodeop();
 
     void            set_opcode(OpCode op);

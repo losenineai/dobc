@@ -500,6 +500,14 @@ void        funcdata::place_multiequal(void)
 
 
         /* FIXME:Ghidra这里的判断和我差别很大，后期必须得重新调试，深入分析下Ghidra逻辑 */
+        /* 这里的作用是当对同一个地址的，不同size的访问要如何处理
+        
+        比如: s0, d0
+        或者: al, ax, eax, rax，
+
+        后期我们要改成对simd类型指令，为8字节访问
+        对普通寄存器，改成wordsize访问
+        */
         if (!BIT0(flags)) {
 #if 1
             if (refinement(addr, max, readvars, writevars, inputvars)) {
@@ -512,6 +520,13 @@ void        funcdata::place_multiequal(void)
             }
 #endif
         }
+
+        /* 我们在插入phi节点的时候，有些节点是不需要计算phi节点的 
+        
+        1. uniq的变量，而且没人读
+        2. 没人读，也没人写
+        3. 非cpu寄存器系列的变量，没有相对跳转，而且不是safevn
+        */
 
         /* uniq变量，不出口活跃 */
         if (readvars.empty() && (addr.getSpace()->getType() == IPTR_INTERNAL))
@@ -526,8 +541,10 @@ void        funcdata::place_multiequal(void)
 
         if (!BIT1(flags))
             calc_phi_placement2(writevars);
-        else
+        else {
+            /* 有相对跳转的指令，调整计算支配边界的方式 */
             calc_phi_placement4(writevars);
+        }
 
         for (i = 0; i < merge.size(); ++i) {
             bl = merge[i];
@@ -3525,6 +3542,33 @@ void        funcdata::static_trace_restore()
 bool        funcdata::is_safe_sp_vn(varnode *vn) 
 {
     return (vn->get_addr().getSpace() == d->getStackBaseSpace()) && (in_safezone(vn->get_addr().getOffset(), vn->size));
+}
+
+bool        funcdata::use_old_inst(const Address &addr, vector<pcodeop *> &plist)
+{
+    vector<pcodeop_lite *> &oldlist(litemap[addr]);
+    int i;
+
+    if (oldlist.size() == 0) return false;
+
+    /* 新的指令序列一定会小于等于老的指令序列，以前新的会做死代码删除 */
+    for (i = 0; i < plist.size(); i++) {
+        pcodeop op(oldlist[i]);
+        if (pcodeop_struct_cmp(plist[i], &op, 1)) return false;
+    }
+
+    for (; i < oldlist.size(); i++) {
+        pcodeop_lite *p = oldlist[i];
+
+        if (p->opcode == CPUI_STORE) return false;
+
+        int reg = d->reg2i(poa(p));
+        if (reg == -1) continue;
+
+        if (plist.back()->live_out[reg]) return false;
+    }
+
+    return true;
 }
 
 int        funcdata::vmp360_deshell()

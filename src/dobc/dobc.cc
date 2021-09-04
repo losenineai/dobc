@@ -205,6 +205,10 @@ void pcodeemit2::dump(const Address &addr, OpCode opc, VarnodeData *outvar, Varn
         }
     }
 
+    vector<pcodeop_lite *> &pvec(fd->litemap[addr]);
+
+    pvec.push_back(fd->cloneop_lite(op));
+
     if (d->is_adr(addr)) {
         vn->set_pc_constant(vn->get_offset());
         vn->flags.from_pc = 1;
@@ -2756,12 +2760,30 @@ pcodeop*    funcdata::cloneop(pcodeop *op, const SeqNum &seq)
     return newop1;
 }
 
+pcodeop_lite*    funcdata::cloneop_lite(pcodeop *op)
+{
+    int sz = op->inrefs.size();
+    pcodeop_lite *lite = new pcodeop_lite(sz);
+    varnode *vn;
+
+    if (op->output) {
+        vn = new varnode(op->output->size, op->output->get_addr());
+
+        lite->output = vn;
+    }
+
+    for (int i = 0; i < sz; i++) {
+        varnode *vn = new varnode(op->get_in(i)->size, op->get_in(i)->get_addr());
+
+        lite->inrefs.push_back(vn);
+    }
+
+    return lite;
+}
+
 void        funcdata::op_destroy_raw(pcodeop *op)
 {
     int i;
-
-    if (op->start.getTime() == 649432)
-        printf("a\n");
 
 	for (i = 0; i < op->inrefs.size(); i++) {
 		if (op->get_in(i))

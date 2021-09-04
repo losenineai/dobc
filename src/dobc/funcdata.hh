@@ -13,6 +13,7 @@ class func_call_specs;
 class ollvmhead;
 
 typedef map<Address, int> version_map;
+typedef map<Address, vector<pcodeop_lite *>> instmap;
 
 struct pcodeop_cmp_def {
     bool operator() ( const pcodeop *a, const pcodeop *b ) const;
@@ -208,7 +209,11 @@ public:
 
     每次使用之前，必须得执行clear
     */
-    valuemap   tracemap;
+    valuemap    tracemap;
+
+    /* 用来还原指令用的，我们在做代码生成的时候，可以比对原先的指令差距，假如和原先的指令没有差别，
+    可以直接采用原先的指令  */
+    instmap     litemap;
 
     /* 记录地址和版本号的,SSA时用到 */
     version_map vermap;
@@ -356,6 +361,12 @@ public:
     pcodeop*    newop(int inputs, const SeqNum &sq);
     pcodeop*    newop(int inputs, const Address &pc);
     pcodeop*    cloneop(pcodeop *op, const SeqNum &seq);
+    /* 
+    克隆一个类似的结构，但是不插入Optree，deadlist, 也不需要seq，这个只是为了做结构比较用的，
+
+    只保留最基本的信息，包括opcode, output, inrefs, address
+    */
+    pcodeop_lite*   cloneop_lite(pcodeop *op);
     void        op_destroy_raw(pcodeop *op);
     void        op_destroy(pcodeop *op);
     void        op_destroy_ssa(pcodeop *op);
@@ -531,8 +542,11 @@ public:
 	void		build_liverange();
     void        build_liverange_recurse(flowblock *bl, variable_stack &varstack);
 
+    /* 
+    这个是因为某些指令内部自带相对跳转，需要指示当前的write的变量所在的block是否在这个相对跳转内
+    */
     int         collect(Address addr, int size, vector<varnode *> &read,
-        vector<varnode *> &write, vector<varnode *> &input, int &equal);
+        vector<varnode *> &write, vector<varnode *> &input, int &flags);
     void        heritage(void);
     void        heritage_clear(void);
     bool        refinement(const Address &addr, int size, const vector<varnode *> &readvars, const vector<varnode *> &writevars, const vector<varnode *> &inputvars);
@@ -1059,6 +1073,9 @@ public:
     bool        is_safe_sp_vn(varnode *vn);
     void        set_noreturn(int v) { flags.noreturn = v;  }
     bool        noreturn() { return flags.noreturn; }
+
+    /* 在代码生成时，是否使用以前的指令进行填充，需要做一些模式的匹配 */
+    bool        use_old_inst(const Address &addr, vector<pcodeop *> &plist);
 };
 
 #endif

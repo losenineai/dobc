@@ -19,6 +19,15 @@ intb sext(intb in, int insiz, int outsz)
     return in;
 }
 
+pcodeop_lite::pcodeop_lite(int s)
+    :inrefs(s)
+{
+}
+
+pcodeop_lite::~pcodeop_lite()
+{
+}
+
 pcodeop::pcodeop(int s, const SeqNum &sq)
     :start(sq), inrefs(s)
 {
@@ -28,10 +37,14 @@ pcodeop::pcodeop(int s, const SeqNum &sq)
 
     output = 0;
     opcode = CPUI_MAX;
-
-    if (start.getTime() == 649433)
-        printf("a\n");
 }
+
+pcodeop::pcodeop(pcodeop_lite *lite)
+{
+    output = lite->output;
+    opcode = lite->opcode;
+}
+
 pcodeop::~pcodeop()
 {
 }

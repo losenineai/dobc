@@ -1730,8 +1730,12 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     }
                 }
                 else if (p1->opcode == CPUI_INT_RIGHT) {
-                    UPDATE_CPSR_SET(p1);
-                    _lsr_reg(reg2i(poa(p1)), reg2i(poa(p1)), reg2i(pi0a(p)));
+                    if (isreg(p1->output)) {
+                        UPDATE_CPSR_SET(p1);
+                        _lsr_reg(reg2i(poa(p1)), reg2i(poa(p1)), reg2i(pi0a(p)));
+                    }
+                    else
+                        it = retrieve_orig_inst(b, it, 1);
                 }
                 else if (follow_by_set_cpsr(p)) {
                     _tst_reg(reg2i(pi0a(p)), reg2i(pi1a(p)), SRType_LSL, 0);
@@ -1777,7 +1781,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                             _sub_reg(reg2i(poa(p2)), reg2i(pi0a(p2)), reg2i(pi0a(p)), SRType_LSL, pi1(p)->get_val());
                         }
                         /* sbc */
-                        else if (p2->opcode == CPUI_INT_LESSEQUAL) {
+                        else if ((p2->opcode == CPUI_INT_LESSEQUAL) || (p2->opcode == CPUI_INT_CARRY)) {
                             it = retrieve_orig_inst(b, it, 1);
                         }
                     }
