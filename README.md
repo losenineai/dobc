@@ -48,7 +48,7 @@ Some APK test by manual, becuase auto-test hard to work close-source so。
 | md4         | libmd4.so    | 1d8f011a1a53b2b7bd73aed5ebe62142 | libmd4.so.d | md4Update, md4Final
 | sha256         | libsha256.so     | 2f0a73a9509eb0599aca9c298016ee9 | libsha256.so.d | encrypt | 
 | sha512         | libsha512.so     | 2f0a73a9509eb0599aca9c298016ee9 | libsha512.so.d | encrypt | 
-| base64 | [libbase64.so](https://github.com/baikaishiuc/dobc/blob/main/unittests/base64/libs/armeabi-v7a/libbase64.so) | | [libbase64.so.d](https://github.com/baikaishiuc/dobc/blob/main/unittests/base64/libs/armeabi-v7a/libbase64.so.decode) | base64Encode, base64Decode |
+| base64 | [libbase64.so](https://github.com/baikaishiuc/dobc/blob/main/unittests/base64/libs/armeabi-v7a/libbase64.so) | | [libbase64.so.d](https://github.com/baikaishiuc/dobc/blob/main/unittests/base64/libs/armeabi-v7a/libbase64.so.decode) | base64_encode, base64_decode |
 | fft | libfft.so | | libfft.so.d | encode |
 | yuv2gb | libyuv2rgb.so | | libyuv2rgb.so.d | encode |
 | insertsort | libinsertsort.so | | libinsert.so | |
