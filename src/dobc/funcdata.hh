@@ -1075,7 +1075,7 @@ public:
     bool        noreturn() { return flags.noreturn; }
 
     /* 在代码生成时，是否使用以前的指令进行填充，需要做一些模式的匹配 */
-    bool        use_old_inst(const Address &addr, vector<pcodeop *> &plist);
+    bool        use_old_inst(vector<pcodeop *> &plist);
 };
 
 #endif

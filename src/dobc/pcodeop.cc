@@ -706,7 +706,7 @@ int             pcodeop::compute(int inslot, flowblock **branch)
     case CPUI_COPY:
         if (!is_trace() && !in0->is_input() && ((op = in0->def) && op->opcode == CPUI_COPY)) {
             _in0 = op->get_in(0);
-            if ((_in0->get_addr() == out->get_addr()) && ((_in0->version + 1) == out->version)) {
+            if ((_in0->get_addr() == out->get_addr()) && ((_in0->version + 1) == out->version) && d->is_cpu_reg(out->get_addr())) {
                 to_copy(_in0);
 
                 if (in0->uses.size() == 0)

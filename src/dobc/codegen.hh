@@ -6,6 +6,8 @@
 
 typedef map<intb, pcodeop *>         pc_rel_table;
 
+#define MAX_INST_SIZ            16
+
 class codegen {
 public:
     funcdata *fd;

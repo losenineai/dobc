@@ -530,7 +530,7 @@ void dobc::init_regs()
     for (it = reglist.begin(); it != reglist.end(); it++) {
         string &name = it->second;
         if (name.find("tmp") != string::npos) continue;
-        if (name.find("multi") != string::npos) continue;
+        if (name.find("mult") != string::npos) continue;
         if (name == "TB") continue;
         if (name == "ISAModeSwitch") continue;
         cpu_regs.insert(it->first.getAddr());
@@ -2801,9 +2801,6 @@ void        funcdata::op_destroy(pcodeop *op)
 {
     int i;
     flowblock *b;
-
-    if (op->start.getTime() == 649432)
-        printf("a\n");
 
 	if (op->output) {
         destroy_varnode(op->output);

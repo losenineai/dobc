@@ -127,7 +127,6 @@ public:
     funcdata *fd;
     dobc *d;
     /* x86里面好像一条最长的变长指令是15字节，不清楚x64有没变多 */
-    unsigned char fillbuf[16];
 
     vector<flowblock *> blist;
     vector<fix_item *> flist;

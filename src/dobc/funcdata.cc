@@ -3544,8 +3544,9 @@ bool        funcdata::is_safe_sp_vn(varnode *vn)
     return (vn->get_addr().getSpace() == d->getStackBaseSpace()) && (in_safezone(vn->get_addr().getOffset(), vn->size));
 }
 
-bool        funcdata::use_old_inst(const Address &addr, vector<pcodeop *> &plist)
+bool        funcdata::use_old_inst(vector<pcodeop *> &plist)
 {
+    Address addr = plist[0]->get_addr();
     vector<pcodeop_lite *> &oldlist(litemap[addr]);
     int i;
 

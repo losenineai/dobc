@@ -1089,10 +1089,11 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
     vector<fix_vldr_item> fix_vldr_list;
     vector<fix_vld1_item> fix_vld1_list;
     list<pcodeop *>::iterator it, it1;
-    pcodeop *p, *p1, *p2, *p3, *p4;
+    pcodeop *p;
     uint32_t x, rt, rd, rn, rm, setflags;
     pc_rel_table pc_rel_tab;
-    int oind, imm, i;
+    int oind, imm, i, ret;
+    uint8_t fillbuf[MAX_INST_SIZ];
 
     b->cg.data = data + ind;
 
@@ -1104,16 +1105,15 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
         /* phi节点不处理 */
         if (p->opcode == CPUI_MULTIEQUAL) continue;
 
-        /* 这一坨代码都是相当于词法分析的token的预取 */
-        it1 = it;
-        p1 = p2 = p3 = NULL;
-        ++it1;
-        if (it1 != b->ops.end())
-            p1 = *it1++;
-        if (it1 != b->ops.end())
-            p2 = *it1++;
-        if (it1 != b->ops.end())
-            p3 = *it1++;
+        vector<pcodeop *> ps;
+
+        for (it1 = it; (it1 != b->ops.end()) && ((*it1)->get_addr() == (*it)->get_addr()); it1++)
+            ps.push_back(*it1);
+
+#define p1      ((ps.size() >= 2) ? ps[1]:NULL)
+#define p2      ((ps.size() >= 3) ? ps[2]:NULL)
+#define p3      ((ps.size() >= 4) ? ps[3]:NULL)
+#define p4      ((ps.size() >= 5) ? ps[4]:NULL)
 
         p->ind = oind = ind;
         setflags = 0;
@@ -1178,7 +1178,6 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                         switch (p1->opcode) {
                         case CPUI_COPY:
                             _mov_imm(reg2i(poa(p1)), pi0(p)->get_val(), 0, 0);
-                            advance(it, 1);
                             break;
 
                         case CPUI_LOAD:
@@ -1193,7 +1192,6 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                             UPDATE_CPSR_SET(p1);
                             _add_reg(rn, rn, PC, SRType_LSL, 0);
                             _ldr_imm(rn, rn, 0, 0);
-                            advance(it, 1);
                             break;
 
                         case CPUI_INT_ADD:
@@ -1202,7 +1200,6 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                                 _add_sp_imm(reg2i(poa(p1)), rn, pi0(p)->get_val());
                             else
                                 _add_imm(reg2i(poa(p1)), rn, pi0(p)->get_val());
-                            advance(it, 1);
                             break;
 
                         case CPUI_INT_SUB:
@@ -1222,6 +1219,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                             it = retrieve_orig_inst(b, it, 1);
                             break;
                         }
+
                     }
                     else if (istemp(p1->output)) {
                         it = retrieve_orig_inst(b, it, 1);
@@ -1236,7 +1234,6 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                     int size = p->output->get_size();
                     if (p1 && d->is_vreg(poa(p1)) && pi0(p1)->is_constant() && pi0(p)->get_val() == pi0(p1)->get_val()) {
                         size += p1->output->get_size();
-                        advance(it, 1);
                     }
                     vmov_imm(size, d->vreg2i(poa(p)), pi0(p)->get_val());
                 }
@@ -1247,8 +1244,8 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                         _mov_imm(rd, !imm, 1, 0);
                     }
 
-                    it = advance_to_inst_end(it);
                 }
+                it = advance_to_inst_end(it);
             }
             else if (pi0(p)->is_hard_pc_constant()) {
                 if (isreg(p->output)) {
@@ -1504,7 +1501,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                                 rn = d->reg2i(pi0a(p));
                                 _strb_imm(rt, rn, pi1(p)->get_val(), 0);
                             }
-                            else if (p3 && (p3->opcode == CPUI_INT_ADD) && pi0(p3) == p1->output && (p4 = *it1)->opcode == CPUI_STORE) {
+                            else if (p3 && (p3->opcode == CPUI_INT_ADD) && pi0(p3) == p1->output && p4->opcode == CPUI_STORE) {
                                 _strd(reg2i(pi2a(p2)), reg2i(pi2a(p4)), reg2i(pi0a(p)), pi1(p)->get_val(), 0);
                             }
                             else if (!p3 || (p3->get_addr() != p2->get_addr())) {
@@ -1569,7 +1566,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
 
                 case CPUI_STORE:
                     if (a(pi1(p1)) == poa(p)) {
-                        if (p2 && p3 && (p2->opcode == CPUI_INT_ADD) 
+                        if ((ps.size() == 4) && (p2->opcode == CPUI_INT_ADD) 
                             && (p3->opcode == CPUI_STORE) && (pi0a(p2) == poa(p))) {
                             _strd(reg2i(pi2a(p1)), reg2i(pi2a(p3)), reg2i(pi0a(p)), pi1(p)->get_val(), 0);
                             advance(it, 2);
@@ -1583,7 +1580,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
 
                 case CPUI_LOAD:
                     if (a(pi1(p1)) == poa(p)) {
-                        if (p2 && p3 && (pi0a(p2) == poa(p)) && (p3->opcode == CPUI_LOAD)) {
+                        if ((ps.size() == 4) && (pi0a(p2) == poa(p)) && (p3->opcode == CPUI_LOAD)) {
                             _ldrd_imm(reg2i(poa(p1)), reg2i(poa(p3)), reg2i(pi0a(p)), p->get_in(1)->get_val());
                         }
                         else if (istemp(p1->output) && isreg(p2->output) && p2->opcode == CPUI_INT_ZEXT) {
@@ -1712,15 +1709,13 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
 
         case CPUI_INT_AND:
             if (poa(p) == apc) {
-                p1 = *++it;
                 if (poa(p1) == alr) {
-                    p2 = *++it;
                     if (p2->opcode == CPUI_CALLIND) 
                         o(0x4780 | (reg2i(pi0a(p)) << 3));
                 }
+                it = advance_to_inst_end(it);
             }
             else if (istemp(p->output)) {
-                p1 = *++it;
                 if (p1->opcode == CPUI_STORE) {
                     if (isreg(pi0(p)) && pi1(p)->is_constant()) {
                         imm = pi1(p)->get_val();
@@ -1740,6 +1735,8 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                 else if (follow_by_set_cpsr(p)) {
                     _tst_reg(reg2i(pi0a(p)), reg2i(pi1a(p)), SRType_LSL, 0);
                 }
+
+                it = advance_to_inst_end(it);
             }
             else if (isreg(p->output)) {
                 _and_reg(reg2i(poa(p)), reg2i(pi0a(p)), reg2i(pi1a(p)), SRType_LSL, 0, follow_by_set_cpsr(p));
@@ -1869,7 +1866,6 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
             break;
 
         case CPUI_BOOL_NEGATE:
-            p4 = *it1;
             if (p3->opcode == CPUI_CBRANCH) {
                 if ((p->opcode == CPUI_BOOL_NEGATE)) {
                     if (pi0a(p) == azr) {
@@ -1936,12 +1932,18 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
         }
 
 inst_label:
-        if (oind == ind)
+        int len = ind - oind, siz;
+
+        if (oind == ind) {
+            /* len == 0 说明没有生成代码，这个时候自动尝试匹配原文代码 */
+            if (fd->use_old_inst(ps)) {
+                ret = d->loader1->loadFill(fillbuf, sizeof(fillbuf), p->get_addr());
+            }
             vm_error("thumbgen find un-support pcode seq[%d]", p->start.getTime());
+        }
 
         /* 打印新生成的代码 */
 #if 1
-        int len = ind - oind, siz;
 
         while (len > 0) {
             siz = dump_one_inst(oind, p);
@@ -1950,6 +1952,11 @@ inst_label:
         }
 #endif
     }
+
+#undef p1
+#undef p2
+#undef p3
+#undef p4
 
     if (b->out.size() == 0) return 0;
 
@@ -2215,6 +2222,7 @@ int thumb_gen::regalloc(pcodeop *p)
 */
 pit thumb_gen::retrieve_orig_inst(flowblock *b, pit pit, int save)
 {
+    uint8_t fillbuf[MAX_INST_SIZ];
     pcodeop *p, *prevp = *pit;
 
     for (++pit; pit != b->ops.end(); prevp = p, pit++) {
