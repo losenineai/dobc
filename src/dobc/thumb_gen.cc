@@ -2248,6 +2248,8 @@ pit thumb_gen::advance_to_inst_end(pit pit)
     flowblock *b = (*pit)->parent;
     const Address &addr = (*pit)->get_addr();
 
+    if (addr == d->zero_addr) return pit;
+
     for (++pit; pit != b->ops.end(); pit++) {
         if ((*pit)->get_addr() != addr)
             return --pit;

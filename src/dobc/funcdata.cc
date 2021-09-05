@@ -182,7 +182,8 @@ int  funcdata::loop_dfa_connect(uint32_t flags)
         if (((p->opcode == CPUI_BRANCH) || (p->opcode == CPUI_CBRANCH) || (p->opcode == CPUI_INDIRECT) || (p->opcode == CPUI_MULTIEQUAL) || (p->opcode == CPUI_BRANCHIND)))
             continue;
 
-        Address addr2(d->getDefaultCodeSpace(), p->get_addr().getOffset());
+        //Address addr2(d->getDefaultCodeSpace(), p->get_addr().getOffset());
+        Address addr2(p->get_addr());
         const SeqNum sq(addr2, op_uniqid++);
         op = cloneop(p, sq);
         op_insert(op, cur, cur->ops.end());
@@ -551,7 +552,7 @@ void        funcdata::place_multiequal(void)
             //if ((it != bl->ops.end()) && p->flags.copy_from_phi) continue;
 
             if (!multiop) {
-                multiop = newop(bl->in.size(), bl->get_start());
+                multiop = newop(bl->in.size(), d->zero_addr);
                 vnout = new_varnode_out(size, addr, multiop);
                 op_set_opcode(multiop, CPUI_MULTIEQUAL);
                 op_insert_begin(multiop, bl);

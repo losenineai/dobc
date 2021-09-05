@@ -4394,6 +4394,8 @@ void dobc::init_syms()
 
         fd->set_noreturn(1);
     }
+
+    zero_addr = Address(getDefaultCodeSpace(), 0);
 }
 
 void dobc::parse_stack_pointer(const Element *el)

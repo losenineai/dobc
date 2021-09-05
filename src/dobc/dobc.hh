@@ -200,6 +200,9 @@ public:
         int open_phi2;
     } debug = { 0 };
 
+    /* 特殊用，创建phi的时候，默认地址 */
+    Address     zero_addr;
+
     Address     sp_addr;
     Address     r0_addr;
     Address     r1_addr;
