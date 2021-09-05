@@ -1229,6 +1229,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                             it = retrieve_orig_inst(b, it, 1);
                         }
                     }
+                    it = advance_to_inst_end(it);
                 }
                 else if (d->is_vreg(poa(p))) {
                     int size = p->output->get_size();
@@ -1236,6 +1237,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                         size += p1->output->get_size();
                     }
                     vmov_imm(size, d->vreg2i(poa(p)), pi0(p)->get_val());
+                    it = advance_to_inst_end(it);
                 }
                 else if (d->is_tsreg(poa(p))) {
                     if (poa(p) == as("tmpZR") && poa(p1) == azr) {
@@ -1243,9 +1245,8 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                         imm = pi1(p)->get_val();
                         _mov_imm(rd, !imm, 1, 0);
                     }
-
+                    it = advance_to_inst_end(it);
                 }
-                it = advance_to_inst_end(it);
             }
             else if (pi0(p)->is_hard_pc_constant()) {
                 if (isreg(p->output)) {
@@ -1590,7 +1591,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
                             else
                                 _ldrb_reg(reg2i(poa(p2)), reg2i(pi0a(p)), reg2i(pi1a(p)), 0);
                         }
-                        else {
+                        else if (isreg(p1->output)){
                             rt = reg2i(poa(p1));
                             imm = pi1(p)->get_val();
                             /* A8.8.62 */
