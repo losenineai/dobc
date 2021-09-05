@@ -32,7 +32,7 @@ dobc soname -o output.so
 
 Some APK test by manual, becuase auto-test hard to work close-source so。
 
-| APK-cn       | ollvm-so      | so-md5  | decode-so | func | 
+| APK desc       | ollvm-so      | so-md5  | decode-so | func | 
 | ------------ |:-------------:| -----:|-----:| -----:| 
 | 斗鱼         | [libmakeurl](https://github.com/baikaishiuc/dobc/blob/main/data/%E6%96%97%E9%B1%BC/edfc5f175821c4605ebb11399953054/libmakeurl2.4.9.so)    | 2f0a73a9509eb0599aca9c298016ee9 | libmakeurl.so.d |
 | 抖音         | [libcms](https://github.com/baikaishiuc/dobc/blob/main/data/%E6%8A%96%E9%9F%B3/1d8f011a1a53b2b7bd73aed5ebe62142/libcms.so)        | 1d8f011a1a53b2b7bd73aed5ebe62142 | libcms.so.d |
