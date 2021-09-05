@@ -2514,10 +2514,7 @@ void        funcdata::dump_cfg(const string &name, const char *postfix, int dump
         }
     }
 
-#if 0
-    if (k > 1000)
-        dump_rank(fp);
-#endif
+    //dump_rank(fp);
 
     fprintf(fp, "}");
 
@@ -3473,25 +3470,17 @@ pcodeop*    funcdata::store_query(pcodeop *load, flowblock *b, varnode *pos, pco
                         /* 在分支中找到了store节点，假如是第一个就保存起来，
                         假如不是第一个，则比较是否相等，不是的话返回NULL */
                         if (a->is_top()) {
-#if 0
-                            if (load && load->output->maystore_from_this(p))
-                                continue;
-#endif
-
                             *maystore = p;
                             return NULL;
                         }
 
-                        if (a->type == pos->type) {
-#if 0
-                            if (NULL == tmpstore)
-                                tmpstore = p;
-                            else if (tmpstore->get_in(2) != p->get_in(2))
-                                return NULL;
-#else
+                        if (a->type == pos->type)
                             return NULL;
-#endif
-                        }
+                    }
+                    else if ((p->opcode == CPUI_COPY) && p->output->is_sp_constant()) {
+                        varnode *a = p->output;
+                        if (a->type == pos->type)
+                            return NULL;
                     }
                 }
 

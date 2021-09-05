@@ -1206,8 +1206,12 @@ int         funcdata::ollvm_detect_propchain4(ollvmhead *oh, flowblock *&from, b
             p1 = p->get_in(0)->def;
             /* libmakeurl:sub_15521 */
             if (b_is_flag(flags, F_OPEN_COPY)) {
-                if ((p1->parent == h) && p1->opcode == CPUI_COPY)
-                    p1 = p1->get_in(0)->def;
+                if ((p1->parent == h)) {
+                    if (p1->opcode == CPUI_COPY)
+                        p1 = p1->get_in(0)->def;
+                    else if (p1->opcode == CPUI_LOAD)
+                        p1 = p1->get_in(2)->def;
+                }
 
                 if (h->is_in((pre = p1->parent)))
                     return ollvm_on_unconst_def(p1, pre, h);
@@ -2329,6 +2333,9 @@ cp_label1:
             }
         }
         else if ((op->opcode == CPUI_LOAD) &&  !op->flags.input && !find) {
+            if (op->have_virtualnode() && is_safe_sp_vn(op->get_virtualnode()))
+                continue;
+
             load = op;
             maystore = NULL;
             store = store_query(load, NULL, load->get_in(1), &maystore);

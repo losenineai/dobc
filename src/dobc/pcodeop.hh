@@ -30,6 +30,9 @@ class funcdata;
 
 class pcodeop_lite {
 public:
+    struct {
+        unsigned side_effect : 1;
+    } flags;
     OpCode opcode;
     varnode *output = NULL;
     vector<varnode *> inrefs;
@@ -37,7 +40,8 @@ public:
     pcodeop_lite(int s);
     ~pcodeop_lite();
 
-    bool have_side_effect() { return (opcode == CPUI_STORE) || (opcode == CPUI_CALL) || (opcode == CPUI_CALLIND) || (opcode == CPUI_BRANCH) || (opcode == CPUI_BRANCHIND);  }
+    bool have_side_effect() { return (opcode == CPUI_STORE) || (opcode == CPUI_CALL) || (opcode == CPUI_CALLIND) 
+        || (opcode == CPUI_BRANCH) || (opcode == CPUI_BRANCHIND) || (opcode == CPUI_CBRANCH); }
 };
 
 class pcodeop {
