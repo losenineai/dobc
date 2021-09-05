@@ -44,7 +44,7 @@ Some APK test by manual, becuase auto-test hard to work close-source so。
 ## Unit Tests
 |        | ollvm-so      | so-md5  | decode-so | func  | 
 | ------------ |:-------------:| -----:|-----:| -----:| 
-| md5         | libmd5.so    | 2f0a73a9509eb0599aca9c298016ee9 | libmd5.so.d | md5Update, md5Final | 
+| md5         | [libmd5.so](https://github.com/baikaishiuc/dobc/blob/main/unittests/md5/libs/armeabi-v7a/libmd5.so)    | 2f0a73a9509eb0599aca9c298016ee9 | [libmd5.so.d](https://github.com/baikaishiuc/dobc/blob/main/unittests/md5/libs/armeabi-v7a/libmd5.so.decode) | md5Update, md5Final | 
 | md4         | libmd4.so    | 1d8f011a1a53b2b7bd73aed5ebe62142 | libmd4.so.d | md4Update, md4Final
 | sha256         | libsha256.so     | 2f0a73a9509eb0599aca9c298016ee9 | libsha256.so.d | encrypt | 
 | sha512         | libsha512.so     | 2f0a73a9509eb0599aca9c298016ee9 | libsha512.so.d | encrypt | 
