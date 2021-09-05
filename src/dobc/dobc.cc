@@ -2766,6 +2766,8 @@ pcodeop_lite*    funcdata::cloneop_lite(pcodeop *op)
     pcodeop_lite *lite = new pcodeop_lite(sz);
     varnode *vn;
 
+    lite->opcode = op->opcode;
+
     if (op->output) {
         vn = new varnode(op->output->size, op->output->get_addr());
 
@@ -2775,7 +2777,7 @@ pcodeop_lite*    funcdata::cloneop_lite(pcodeop *op)
     for (int i = 0; i < sz; i++) {
         varnode *vn = new varnode(op->get_in(i)->size, op->get_in(i)->get_addr());
 
-        lite->inrefs.push_back(vn);
+        lite->inrefs[i] = vn;
     }
 
     return lite;

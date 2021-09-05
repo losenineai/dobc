@@ -3548,25 +3548,28 @@ bool        funcdata::use_old_inst(vector<pcodeop *> &plist)
 {
     Address addr = plist[0]->get_addr();
     vector<pcodeop_lite *> &oldlist(litemap[addr]);
-    int i;
+    int i, j;
 
     if (oldlist.size() == 0) return false;
 
-    /* 新的指令序列一定会小于等于老的指令序列，以前新的会做死代码删除 */
-    for (i = 0; i < plist.size(); i++) {
-        pcodeop op(oldlist[i]);
-        if (pcodeop_struct_cmp(plist[i], &op, 1)) return false;
-    }
+    for (i = j = 0; i < oldlist.size(); i++) {
+        pcodeop_lite *lite = oldlist[i];
 
-    for (; i < oldlist.size(); i++) {
-        pcodeop_lite *p = oldlist[i];
+        if (lite->have_side_effect()) return false;
 
-        if (p->opcode == CPUI_STORE) return false;
-
-        int reg = d->reg2i(poa(p));
+        /* SIMD? */
+        int reg = d->reg2i(poa(lite));
+        /* 非标准寄存器变量 */
         if (reg == -1) continue;
 
-        if (plist.back()->live_out[reg]) return false;
+        for (j = 0; j < plist.size(); j++) {
+            if (poa(plist[j]) == poa(lite))
+                break;
+        }
+
+        /* 假如没有在最新的inst-pcode 列表中找到老的对应的寄存器，而且出口也不为死，则没有匹配上，直接报错  */
+        if ((j == plist.size()) && plist.back()->live_out[reg])
+            return false;
     }
 
     return true;

@@ -36,6 +36,8 @@ public:
 
     pcodeop_lite(int s);
     ~pcodeop_lite();
+
+    bool have_side_effect() { return (opcode == CPUI_STORE) || (opcode == CPUI_CALL) || (opcode == CPUI_CALLIND) || (opcode == CPUI_BRANCH) || (opcode == CPUI_BRANCHIND);  }
 };
 
 class pcodeop {

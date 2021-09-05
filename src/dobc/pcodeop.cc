@@ -43,6 +43,7 @@ pcodeop::pcodeop(pcodeop_lite *lite)
 {
     output = lite->output;
     opcode = lite->opcode;
+    inrefs = lite->inrefs;
 }
 
 pcodeop::~pcodeop()

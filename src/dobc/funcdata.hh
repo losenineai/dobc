@@ -1076,6 +1076,11 @@ public:
 
     /* 在代码生成时，是否使用以前的指令进行填充，需要做一些模式的匹配 */
     bool        use_old_inst(vector<pcodeop *> &plist);
+    int         get_inst_size(const Address &addr) {
+        VisitStat &stat(visited[addr]);
+
+        return stat.size;
+    }
 };
 
 #endif

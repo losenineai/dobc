@@ -1092,7 +1092,7 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
     pcodeop *p;
     uint32_t x, rt, rd, rn, rm, setflags;
     pc_rel_table pc_rel_tab;
-    int oind, imm, i, ret;
+    int oind, imm, i, size;
     uint8_t fillbuf[MAX_INST_SIZ];
 
     b->cg.data = data + ind;
@@ -1932,23 +1932,26 @@ int thumb_gen::run_block(flowblock *b, int b_ind)
         }
 
 inst_label:
-        int len = ind - oind, siz;
-
         if (oind == ind) {
             /* len == 0 说明没有生成代码，这个时候自动尝试匹配原文代码 */
             if (fd->use_old_inst(ps)) {
-                ret = d->loader1->loadFill(fillbuf, sizeof(fillbuf), p->get_addr());
+                size = fd->get_inst_size(p->get_addr());
+                d->loader1->loadFill(fillbuf, size, p->get_addr());
+                ob(fillbuf, size);
             }
-            vm_error("thumbgen find un-support pcode seq[%d]", p->start.getTime());
+            else
+                vm_error("thumbgen find un-support pcode seq[%d]", p->start.getTime());
         }
+
+        int len = ind - oind;
 
         /* 打印新生成的代码 */
 #if 1
 
         while (len > 0) {
-            siz = dump_one_inst(oind, p);
-            len -= siz;
-            oind += siz;
+            size = dump_one_inst(oind, p);
+            len -= size;
+            oind += size;
         }
 #endif
     }
