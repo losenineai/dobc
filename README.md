@@ -37,7 +37,7 @@ Some APK test by manual, becuase auto-test hard to work close-source so。
 | 斗鱼         | [libmakeurl](https://github.com/baikaishiuc/dobc/blob/main/data/%E6%96%97%E9%B1%BC/edfc5f175821c4605ebb11399953054/libmakeurl2.4.9.so)    | 2f0a73a9509eb0599aca9c298016ee9 | libmakeurl.so.d | 0x342d 0x407d 0x367d 0x15521 0x366f5 | 
 | 抖音         | [libcms](https://github.com/baikaishiuc/dobc/blob/main/data/%E6%8A%96%E9%9F%B3/1d8f011a1a53b2b7bd73aed5ebe62142/libcms.so)        | 1d8f011a1a53b2b7bd73aed5ebe62142 | libcms.so.d |
 | 快手         | [libqsmain](https://github.com/baikaishiuc/dobc/blob/main/data/%E5%BF%AB%E6%89%8B/2f0a73a9509eb0599aca9c298016ee9/libkwsgmain.so)     | 2f0a73a9509eb0599aca9c298016ee9 | libqsmain.so.d | 0xcb59 | 
-|             | [libqsmain](https://github.com/baikaishiuc/dobc/blob/main/data/%E5%BF%AB%E6%89%8B/bf8035a0f4c9680a9b53eb225bbe12fd/libkwsgmain.so)     | bf8035a0f4c9680a9b53eb225bbe12fd | [libqsmain.so.d] (https://github.com/baikaishiuc/dobc/blob/main/data/%E5%BF%AB%E6%89%8B/bf8035a0f4c9680a9b53eb225bbe12fd/libkwsgmain.so.decode) | 0xc061 0x3e551 | 
+|             | [libqsmain](https://github.com/baikaishiuc/dobc/blob/main/data/%E5%BF%AB%E6%89%8B/bf8035a0f4c9680a9b53eb225bbe12fd/libkwsgmain.so)     | bf8035a0f4c9680a9b53eb225bbe12fd | [libqsmain.so.d](https://github.com/baikaishiuc/dobc/blob/main/data/%E5%BF%AB%E6%89%8B/bf8035a0f4c9680a9b53eb225bbe12fd/libkwsgmain.so.decode) | 0xc061 0x3e551 | 
 | liblazarus  | [liblazarus](https://github.com/baikaishiuc/dobc/blob/main/data/liblazarus/liblazarus.so)     |       |  [liblazarus.so.d ](https://github.com/baikaishiuc/dobc/blob/main/data/liblazarus/test.so) | 0x15f09 0x132ed |
 
 
