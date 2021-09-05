@@ -61,4 +61,4 @@ Some APK test by manual, becuase auto-test hard to work close-source so。
 
 
 
-## Wiki
+## [Wiki](https://github.com/baikaishiuc/dobc/blob/main/docs/index.rst)
