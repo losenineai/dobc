@@ -6,7 +6,7 @@
 -c  ../../../Ghidra  -i  ../../../data/斗鱼/edfc5f175821c4605ebb11399953054/libmakeurl2.4.9.so -sd -da 0x342d 0x407d 0x367d
 -c  ../../../Ghidra  -i  ../../../data/斗鱼/edfc5f175821c4605ebb11399953054/libmakeurl2.4.9.so -sd -da 0x407d
 -c  ../../../Ghidra  -i  ../../../data/斗鱼/edfc5f175821c4605ebb11399953054/libmakeurl2.4.9.so -sd -da 0x367d
--c  ../../../Ghidra  -i  ../../../data/斗鱼/edfc5f175821c4605ebb11399953054/libmakeurl2.4.9.so -sd -da 0x15521
+-c  ../../../Ghidra  -i  ../../../data/斗鱼/edfc5f175821c4605ebb11399953054/libmakeurl2.4.9.so -sd -da 0x15521 -debug.zxw
 -c  ../../../Ghidra  -i  ../../../data/斗鱼/edfc5f175821c4605ebb11399953054/libmakeurl2.4.9.so -sd -da 0x366f5
 -c  ../../../Ghidra  -i  E:\source\dobc\unittests\base64\libs\armeabi-v7a\libbase64.so -sd -ds base64_encode base64_decode -debug.zxw
 -c  ../../../Ghidra  -i  E:\source\dobc\unittests\base64\libs\armeabi-v7a\libbase64.so -sd -ds base64_decode -debug.zxw
@@ -23,3 +23,7 @@
 -c  ../../../Ghidra -i  e:\source\dobc\data\快手\2f0a73a9509eb0599aca9c298016ee9\libkwsgmain.so -sd -da 0xcb59 -debug.zxw
 -c  ../../../Ghidra -i  e:\source\dobc\data\快手\bf8035a0f4c9680a9b53eb225bbe12fd\libkwsgmain.so -sd -da 0xc061 -debug.zxw -noreturn 8f7bc
 -c  ../../../Ghidra -i  e:\source\dobc\data\快手\bf8035a0f4c9680a9b53eb225bbe12fd\libkwsgmain.so -sd -da 0x3e551 -debug.zxw -noreturn 8f7bc
+-c  ../../../Ghidra -i  e:\source\dobc\data\快手\bf8035a0f4c9680a9b53eb225bbe12fd\libkwsgmain.so -sd -da 0x3fda5 -debug.zxw -noreturn 8f7bc
+-c  ../../../Ghidra -i  e:\source\dobc\data\快手\bf8035a0f4c9680a9b53eb225bbe12fd\libkwsgmain.so -sd -da 0x1b655 -debug.zxw -noreturn 8f7bc
+
+-c  ../../../Ghidra -i  e:\source\dobc\data\快手\bf8035a0f4c9680a9b53eb225bbe12fd\libkwsgmain.so -sd -da 0xc061 0x3e551 0x3fda5 0x1b655 -debug.zxw -noreturn 8f7bc
