@@ -92,7 +92,11 @@ int             pcodeop::dump(char *buf, uint32_t flags)
     dobc *d = parent->fd->d;
     Translate *trans = parent->fd->d->trans;
 
-    i += sprintf(buf + i, " p%-3d [%3d]:", start.getTime(), start.getOrder());
+    //i += sprintf(buf + i, " p%-3d [%3d]:", start.getTime(), start.getOrder());
+    if (sp == INT_MAX)
+        i += sprintf(buf + i, " p%-3d [ T ]:", start.getTime());
+    else
+        i += sprintf(buf + i, " p%-3d [%3x]:", start.getTime(), sp);
 
     if (output) {
         i += print_varnode(trans, buf + i, output);

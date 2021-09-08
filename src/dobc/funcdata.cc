@@ -2249,11 +2249,15 @@ void        funcdata::heritage(void)
     rename();
 	//build_liverange();
 
-    long start1 = clock();
+    clock_t start1 = clock();
 
     constant_propagation4();
 
-    print_info("%sheritage scan node end.  heriage spent [%lu]ms, CP spent [%lu]ms.", print_indent(), start1 - start, clock() - start);
+    clock_t start2 = clock();
+
+    generate_sp_info();
+
+    print_info("%sheritage scan node end.  heriage[%lu]ms, CP[%lu]ms, sp[%lu]ms.", print_indent(), start1 - start, start2 - start1, clock() - start2);
 }
 
 void    funcdata::heritage_clear()
@@ -2303,6 +2307,7 @@ cp_label1:
 
         if (op->flags.dead) continue;
 
+        /* 每个store，可能有很多mayuse节点挂在上面，当某个store地址算出以后，清空它身上的mayuse节点 */
         if ((op->opcode == CPUI_STORE) && !op->get_in(1)->is_top()) {
             for (iter1 = op->mayuses.begin(); iter1 != op->mayuses.end(); ++iter1) {
                 use = *iter1;
@@ -2315,6 +2320,7 @@ cp_label1:
         if ((op->opcode == CPUI_LOAD) || (op->opcode == CPUI_STORE)) op->create_stack_virtual_vn();
 
         r = op->compute(-1, &b);
+
         if (!flags.disable_to_const)
             op->to_constant1();
 
@@ -3612,3 +3618,62 @@ int        funcdata::vmp360_deshell()
     return 0;
 }
 
+
+bool        funcdata::is_stack_balance()
+{
+    int i;
+
+    for (i = 0; i < bblocks.exitlist.size(); i++) {
+        pcodeop *lastop = bblocks.exitlist[i]->last_op();
+        /* 假如最后的退出函数，是noreturn，那么即使堆栈不平衡，我们也认为平衡 */
+        if (lastop->is_call() && !lastop->callfd->noreturn())
+            return false;
+
+        /* 假如最后的退出节点，堆栈不平衡，那么返回false */
+        if (lastop->sp)
+            return false;
+    }
+
+    return true;
+}
+
+void        funcdata::generate_sp_info()
+{
+    list<pcodeop *>::iterator it;
+    vector<flowblock *> q;
+    flowblock *b = bblocks.get_entry_point(), *outb;
+    int sp = 0;
+
+    b->set_mark();
+    q.push_back(b);
+
+    while (!q.empty()) {
+        b = q.front();
+        q.erase(q.begin());
+
+        sp = b->sp;
+        for (it = b->ops.begin(); it != b->ops.end(); it++) {
+            pcodeop *p = *it;
+
+            p->sp = sp;
+            varnode *o = p->output;
+            if (o && o->get_addr() == d->sp_addr) {
+                if (o->is_sp_constant())
+                    sp = -o->get_val();
+                else
+                    sp = INT_MAX;
+            }
+        }
+
+        for (int i = 0; i < b->out.size(); i++) {
+            outb = b->get_out(i);
+            if (outb->is_mark()) continue;
+
+            outb->set_mark();
+            q.push_back(outb);
+            outb->sp = sp;
+        }
+    }
+
+    bblocks.clear_marks();
+}

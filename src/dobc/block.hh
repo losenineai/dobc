@@ -101,6 +101,8 @@ public:
     bitset<32>      live_in;
     bitset<32>      live_out;
 
+    /* 这个block的起始sp */
+    int sp = 0;
     list<pcodeop*>      ops;
     list<pcodeop *>     sideeffect_ops;
 

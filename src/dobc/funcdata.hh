@@ -189,6 +189,9 @@ public:
         unsigned disable_simd_to_const : 1;
 
         unsigned noreturn : 1;
+
+        /* 这个是用来判断函数在出口时，是否堆栈平衡 */
+        unsigned stack_blance : 1;
     } flags = { 0 };
 
     enum {
@@ -1081,6 +1084,10 @@ public:
 
         return stat.size;
     }
+
+    bool        is_stack_balance();
+    /* 生成函数每条指令的堆栈信息 */
+    void        generate_sp_info();
 };
 
 #endif
