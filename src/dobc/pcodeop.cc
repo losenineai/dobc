@@ -1039,6 +1039,9 @@ int             pcodeop::compute(int inslot, flowblock **branch)
             else 
                 out->set_val(in0->type.v - in1->type.v);
         }
+        else if (in0->is_pc_constant() && in1->is_pc_constant()) {
+            out->set_val(in0->get_val() - in1->get_val());
+        }
         /*      out                             0                   1       */
         /* 0:(register,mult_addr,4) = INT_SUB (register,sp,4) (const,0x4,4) */
         else if (fd->is_sp_constant(in0) && in1->is_constant()) {

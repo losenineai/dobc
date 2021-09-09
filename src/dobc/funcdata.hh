@@ -1088,6 +1088,11 @@ public:
     bool        is_stack_balance();
     /* 生成函数每条指令的堆栈信息 */
     void        generate_sp_info();
+
+    /*
+    有些函数可能是没有堆栈平衡的，我们尝试修复它, libmetasec_ml.so
+    */
+    int         try_to_completion_function();
 };
 
 #endif

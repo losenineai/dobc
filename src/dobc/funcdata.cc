@@ -3423,6 +3423,9 @@ int         funcdata::ollvm_deshell()
     heritage();
 
     dump_cfg(name, "orig0", 1);
+
+    try_to_completion_function();
+
 #if 1
     while (!cbrlist.empty() || !emptylist.empty()) {
         cond_constant_propagation();
@@ -3430,17 +3433,9 @@ int         funcdata::ollvm_deshell()
     }
 #endif
 
-    //dump_djgraph("1", 0);
-
-    //dump_cfg(name, "orig0", 1);
-
     ollvm_detect_frameworkinfo();
 
     dump_cfg(name, "orig", 1);
-
-    //bblocks.calc_post_dominator();
-
-    //dump_alias_info(stdout);
 
     h = ollvm_get_head();
     for (i = 0; loop_dfa_connect(0) >= 0; i++)
@@ -3676,4 +3671,10 @@ void        funcdata::generate_sp_info()
     }
 
     bblocks.clear_marks();
+}
+
+int         funcdata::try_to_completion_function()
+{
+    exit(1);
+    return 0;
 }
