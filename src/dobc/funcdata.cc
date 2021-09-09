@@ -3675,6 +3675,29 @@ void        funcdata::generate_sp_info()
 
 int         funcdata::try_to_completion_function()
 {
-    exit(1);
+    if (is_stack_balance()) return 0;
+    int i = 1;
+
+    while (i) {
+        for (int i = 0; i < bblocks.exitlist.size(); i++) {
+            flowblock *outb = bblocks.exitlist[i];
+
+            pcodeop *lastop = outb->last_op();
+
+            if ((lastop->opcode == CPUI_BRANCHIND) && lastop->get_in(0)->is_pc_constant()) {
+                addrlist.push_back(Address(d->getDefaultCodeSpace(), lastop->get_in(0)->get_val()));
+
+                generate_ops();
+            }
+        }
+
+        generate_blocks();
+        heritage_clear();
+        heritage();
+
+        dump_cfg(name, "complete", 1);
+        exit(0);
+    }
+
     return 0;
 }

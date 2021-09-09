@@ -1745,7 +1745,7 @@ bool        funcdata::process_instruction(const Address &curaddr, bool &startbas
         emitter.exit_itblock();
     }
 
-    if (flags.dump_inst)
+    //if (flags.dump_inst)
         d->trans->printAssembly(assem, curaddr);
 
     assem.set_mnem(1);
