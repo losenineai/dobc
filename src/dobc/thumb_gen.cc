@@ -2186,7 +2186,7 @@ void thumb_gen::preprocess()
     pass_cond_reduce pass_cond_reduce(fd);
     pass_regalloc_const_arm pass_regalloc(fd);
 
-    fd->flags.disable_to_const = 1;
+    fd->flags.enable_to_const = 0;
 
     ret = pass_cond_reduce.run();
     if (PASS_DO_STHING(ret)) {

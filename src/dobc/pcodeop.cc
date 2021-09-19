@@ -603,7 +603,7 @@ int				pcodeop::compute_add_sub()
 
 	op = in0->def;
 
-	if (!is_trace() && !(dobc::singleton()->is_simd(get_addr())) && op && ((op->opcode == CPUI_INT_ADD) || (op->opcode == CPUI_INT_SUB))) {
+	if (is_enable_peephole() && !(dobc::singleton()->is_simd(get_addr())) && op && ((op->opcode == CPUI_INT_ADD) || (op->opcode == CPUI_INT_SUB))) {
 		_in0 = op->get_in(0);
 		_in1 = op->get_in(1);
 
@@ -709,7 +709,7 @@ int             pcodeop::compute(int inslot, flowblock **branch)
 
     switch (opcode) {
     case CPUI_COPY:
-        if (!is_trace() && !in0->is_input() && ((op = in0->def) && op->opcode == CPUI_COPY)) {
+        if (is_enable_peephole() && !in0->is_input() && ((op = in0->def) && op->opcode == CPUI_COPY)) {
             _in0 = op->get_in(0);
             if ((_in0->get_addr() == out->get_addr()) && ((_in0->version + 1) == out->version) && d->is_cpu_reg(out->get_addr())) {
                 to_copy(_in0);
@@ -743,7 +743,7 @@ int             pcodeop::compute(int inslot, flowblock **branch)
             不处理load是怕会影响别名分析
             */
             op = in0->def;
-            if (!is_trace()
+            if (is_enable_peephole()
                 && (in0->uses.size() == 1)
                 && !in0->flags.input
                 && (op->opcode == CPUI_INT_ADD)) {
@@ -751,7 +751,6 @@ int             pcodeop::compute(int inslot, flowblock **branch)
                 _in1 = op->get_in(1);
 
                 /* 后面那个判断都是用来确认，活跃范围的 */
-                //if (_in1->is_constant() && (_in0->get_addr() == output->get_addr()) && ((_in0->version + 1) == (output->version))) {
                 if (_in1->is_constant() && _in0->in_liverange(this)) {
                     fd->op_remove_input(this, 0);
                     fd->op_set_opcode(this, op->opcode);
@@ -763,6 +762,7 @@ int             pcodeop::compute(int inslot, flowblock **branch)
                     fd->op_destroy(op);
                 }
             }
+
         }
         else
             out->type = in0->type;
@@ -791,7 +791,7 @@ int             pcodeop::compute(int inslot, flowblock **branch)
             */
             if (op->opcode == CPUI_STORE) {
                 varnode *_in2 = op->get_in(2);
-                if (!is_trace() && 
+                if (is_enable_peephole() && 
                     (((_in2->get_addr() == out->get_addr()) && (_in2->version + 1) == (out->version))
                         || _in2->in_liverange_simple(this))) {
                     while (num_input())
@@ -855,7 +855,7 @@ int             pcodeop::compute(int inslot, flowblock **branch)
             *branch = edge->point;
             ret = ERR_MEET_CALC_BRANCH;
 
-            if (!is_trace() && !fd->in_cbrlist(this))
+            if (is_enable_peephole() && !fd->in_cbrlist(this))
                 fd->cbrlist.push_back(this);
         }
         else if ((op = in1->def) && (op->opcode == CPUI_BOOL_NEGATE)
@@ -1480,7 +1480,7 @@ void            pcodeop::to_constant1(void)
     /*
     非trace条件才能开启常量持久化
     */
-    if (is_trace()) return;
+    if (!is_enable_peephole()) return;
 
     /* simd别转了 */
     if (dobc::singleton()->is_simd(get_addr()) && fd->flags.disable_simd_to_const) return;
@@ -1568,6 +1568,12 @@ void            pcodeop::to_copy(varnode *in)
 
     fd->op_set_opcode(this, CPUI_COPY);
     fd->op_set_input(this, in, 0);
+}
+
+bool            pcodeop::is_enable_peephole() 
+{ 
+    return !flags.trace && parent->fd->flags.enable_peephole; 
+    //return !flags.trace;
 }
 
 void            pcodeop::to_nop(void)

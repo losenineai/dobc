@@ -2257,6 +2257,7 @@ void        funcdata::heritage(void)
 
     generate_sp_info();
 
+
     print_info("%sheritage scan node end.  heriage[%lu]ms, CP[%lu]ms, sp[%lu]ms.", print_indent(), start1 - start, start2 - start1, clock() - start2);
 }
 
@@ -2291,6 +2292,8 @@ int         funcdata::constant_propagation4()
     flowblock *b;
     varnode *out;
 
+    flags.enable_to_const = flags.enable_peephole;
+
     bblocks.collect_sideeffect_ops();
 
     for (iter = deadlist.begin(); iter != deadlist.end(); iter++) {
@@ -2321,7 +2324,7 @@ cp_label1:
 
         r = op->compute(-1, &b);
 
-        if (!flags.disable_to_const)
+        if (flags.enable_to_const)
             op->to_constant1();
 
         out = op->output;
@@ -2424,46 +2427,6 @@ cp_label1:
 			goto cp_label1;
 		}
 	}
-
-    return ret;
-}
-
-int         funcdata::pure_constant_propagation(pcodeop_set &set)
-{
-    list<pcodeop *>::const_iterator iter;
-    list<pcodeop *>::const_iterator iter1;
-    pcodeop_set::iterator it;
-	pcodeop_set maystore_set;
-    pcodeop_set visit;
-    pcodeop *op;
-	int ret = 0, changed = 0;
-    flowblock *b;
-    varnode *out;
-
-    while (!set.empty()) {
-        it = set.begin();
-        op = *it;
-        set.erase(it);
-
-        if (op->flags.dead) continue;
-
-        op->compute(-1, &b);
-        if (!flags.disable_to_const)
-            op->to_constant1();
-
-        out = op->output;
-
-        if (!out) continue;
-
-        if (out->is_constant() || out->is_sp_constant()) {
-            if (visit.find(op) != visit.end()) continue;
-            visit.insert(op);
-
-            for (iter1 = out->uses.begin(); iter1 != out->uses.end(); ++iter1) {
-                set.insert(*iter1);
-            }
-        }
-    }
 
     return ret;
 }
@@ -3424,14 +3387,20 @@ int         funcdata::ollvm_deshell()
 
     dump_cfg(name, "orig0", 1);
 
-    try_to_completion_function();
+    if (!is_complete_function()) {
+        do {
+            try_to_completion_function();
+        } while (is_complete_function());
+    }
+    else {
+        flags.enable_peephole = 1;
+        heritage();
+    }
 
-#if 1
     while (!cbrlist.empty() || !emptylist.empty()) {
         cond_constant_propagation();
         dead_code_elimination(bblocks.blist, 0);
     }
-#endif
 
     ollvm_detect_frameworkinfo();
 
@@ -3620,12 +3589,13 @@ bool        funcdata::is_stack_balance()
 
     for (i = 0; i < bblocks.exitlist.size(); i++) {
         pcodeop *lastop = bblocks.exitlist[i]->last_op();
-        /* 假如最后的退出函数，是noreturn，那么即使堆栈不平衡，我们也认为平衡 */
-        if (lastop->is_call() && !lastop->callfd->noreturn())
-            return false;
-
+        if (lastop->is_call()) {
+            /* 假如最后的退出函数，是noreturn，那么即使堆栈不平衡，我们也认为平衡 */
+            if (lastop->callfd && !lastop->callfd->noreturn())
+                return false;
+        }
         /* 假如最后的退出节点，堆栈不平衡，那么返回false */
-        if (lastop->sp)
+        else if (lastop->sp)
             return false;
     }
 
@@ -3700,4 +3670,9 @@ int         funcdata::try_to_completion_function()
     }
 
     return 0;
+}
+
+bool        funcdata::is_complete_function()
+{
+    return is_stack_balance();
 }

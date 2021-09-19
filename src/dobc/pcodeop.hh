@@ -95,7 +95,7 @@ public:
     SeqNum start;
     flowblock *parent;
     /* 我们认为程序在分析的时候，sp的值是可以静态分析的，他表示的并不是sp寄存器，而是系统当前堆栈的深度 */
-    int     sp = 0;
+    int     sp = -1;
     Address *disaddr = NULL;
 
     varnode *output = NULL;
@@ -197,6 +197,7 @@ public:
     /* 转换成nop指令 */
     void            to_nop(void);
     void            add_mayuse(pcodeop *p) { mayuses.push_back(p);  }
+    bool            is_enable_peephole();
     bool            is_trace() { return flags.trace;  }
     void            set_trace() { flags.trace = 1; }
     void            clear_trace() { flags.trace = 0;  }

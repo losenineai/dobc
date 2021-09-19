@@ -171,7 +171,7 @@ public:
 		unsigned enable_complete_liverange : 1;
         unsigned thumb : 1;
         unsigned dump_inst : 1;
-        /* 关闭常量持久化，比如
+        /* 开启常量持久化，比如
         copy r0, 1
         cmp r1, r0
 
@@ -183,7 +183,8 @@ public:
         
         关闭掉这种优化
         */
-        unsigned disable_to_const : 1;
+        unsigned enable_to_const : 1;
+        unsigned enable_peephole : 1;
         unsigned disable_inrefs_to_const : 1;
         /* 关闭simid指令的常量化，否则处理起来很麻烦 */
         unsigned disable_simd_to_const : 1;
@@ -607,7 +608,6 @@ public:
         (4) 递归扫描整个dom树，和普通的rename过程一致
     */
     int         constant_propagation4();
-    int         pure_constant_propagation(pcodeop_set &set);
     /*
     1. 根据第一次heritage的结果，对所有有地址的load, store，生成sp-mem 节点
 
@@ -1088,6 +1088,9 @@ public:
     bool        is_stack_balance();
     /* 生成函数每条指令的堆栈信息 */
     void        generate_sp_info();
+
+    /* 判断是否是一个完整的函数，这起始是一个概率问题？ */
+    bool        is_complete_function();
 
     /*
     有些函数可能是没有堆栈平衡的，我们尝试修复它, libmetasec_ml.so
