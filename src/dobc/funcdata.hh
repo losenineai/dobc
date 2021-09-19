@@ -453,7 +453,7 @@ public:
     void        dump_inst();
     void        dump_block(FILE *fp, flowblock *b, int pcode);
     /* flag: 1: enable pcode */
-    void        dump_cfg(const string &name, const char *postfix, int flag);
+    void        dump_cfg(const string &name, const string &postfix, int flag);
     void        dump_pcode(const char *postfix);
     void        dump_rank(FILE *fp);
     /* 打印loop的包含关系 */
@@ -1096,6 +1096,8 @@ public:
     有些函数可能是没有堆栈平衡的，我们尝试修复它, libmetasec_ml.so
     */
     int         try_to_completion_function();
+
+    void        phi_clear();
 };
 
 #endif

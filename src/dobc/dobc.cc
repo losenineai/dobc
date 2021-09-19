@@ -2482,11 +2482,11 @@ void        funcdata::dump_rank(FILE *fp)
     fprintf(fp, "}\n");
 }
 
-void        funcdata::dump_cfg(const string &name, const char *postfix, int dumppcode)
+void        funcdata::dump_cfg(const string &name, const string &postfix, int dumppcode)
 {
     char obuf[512];
 
-    sprintf(obuf, "%s/cfg_%s_%s.dot", get_dir(obuf), name.c_str(), postfix);
+    sprintf(obuf, "%s/cfg_%s_%s.dot", get_dir(obuf), name.c_str(), postfix.c_str());
 
     FILE *fp = fopen(obuf, "w");
     if (NULL == fp) 
@@ -3062,16 +3062,13 @@ flowblock*      funcdata::argument_inline(funcdata *inlinefd, pcodeop *callop)
 
 
 #if defined(DCFG_COND_INLINE)
-    char buf[32];
-    sprintf(buf, "cond_before");
-    fd.dump_cfg(fd.name, buf, 1);
+    fd.dump_cfg(fd.name, "cond_before", 1);
 #endif
 
     fd.argument_pass();
 
 #if defined(DCFG_COND_INLINE)
-    sprintf(buf, "cond_after");
-    fd.dump_cfg(fd.name, buf, 1);
+    fd.dump_cfg(fd.name, "cond_after", 1);
 #endif
 
     flowblock *b = fd.bblocks.get_block(0);
@@ -3262,6 +3259,17 @@ void        funcdata::clear_blocks()
     bblocks.clear();
 
     flags.blocks_generated = 0;
+}
+
+void        funcdata::phi_clear()
+{
+    pcodeop *p;
+    for (int i = 0; i < bblocks.get_size(); i++) {
+        flowblock *b = bblocks.get_block(i);
+
+        while ((p = b->first_op()) && (p->opcode == CPUI_MULTIEQUAL))
+            op_destroy_ssa(p);
+    }
 }
 
 void        funcdata::clear_blocks_mark()
@@ -3514,7 +3522,6 @@ bool        funcdata::loop_unrolling4(flowblock *h, int vm_caseindex, uint32_t f
     flowblock *cur = loop_unrolling(h, h, flags, meet_exit);
     vector<flowblock *> blks;
     pcodeop *p;
-    char buf[32];
 
     cur->vm_caseindex = vm_caseindex;
 
@@ -3524,8 +3531,7 @@ bool        funcdata::loop_unrolling4(flowblock *h, int vm_caseindex, uint32_t f
         return 0;
 
 #if defined(DCFG_BEFORE)
-    sprintf(buf, "%d_orig", vm_caseindex);
-    dump_cfg(name, buf, 1);
+    dump_cfg(name, to_string(vm_caseindex) + "_orig" , 1);
 #endif
 
     vector<flowblock *> stack;

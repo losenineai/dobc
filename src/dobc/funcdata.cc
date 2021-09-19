@@ -3563,8 +3563,7 @@ int        funcdata::vmp360_deshell()
         loop_unrolling4(get_vmhead(), i, _NOTE_VMBYTEINDEX);
         dead_code_elimination(bblocks.blist, RDS_UNROLL0);
 #if defined(DCFG_CASE)
-    char buf[16];
-        dump_cfg(name, _itoa(i, buf, 10), 1);
+        dump_cfg(name, to_string(i), 1);
 #endif
     }
 
@@ -3646,9 +3645,9 @@ void        funcdata::generate_sp_info()
 int         funcdata::try_to_completion_function()
 {
     if (is_stack_balance()) return 0;
-    int i = 1;
+    int loop = 0;
 
-    while (i) {
+    for (; loop < 4; loop++) {
         for (int i = 0; i < bblocks.exitlist.size(); i++) {
             flowblock *outb = bblocks.exitlist[i];
 
@@ -3661,13 +3660,16 @@ int         funcdata::try_to_completion_function()
             }
         }
 
-        generate_blocks();
+        phi_clear();
         heritage_clear();
+
+        generate_blocks();
         heritage();
 
-        dump_cfg(name, "complete", 1);
-        exit(0);
+        dump_cfg(name, "complete" + to_string(loop), 1);
     }
+
+    exit(0);
 
     return 0;
 }
