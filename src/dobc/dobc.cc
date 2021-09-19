@@ -1996,7 +1996,7 @@ void        funcdata::collect_edges()
             break;
 
         case CPUI_BRANCHIND:
-            if (op->get_in(0)->is_constant()) {
+            if (op->get_in(0)->is_constant() || op->get_in(0)->is_pc_constant()) {
                 Address addr(d->getDefaultCodeSpace(), op->get_in(0)->get_val());
 
                 target_op = find_op(addr);
