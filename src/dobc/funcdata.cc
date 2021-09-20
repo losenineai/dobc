@@ -3647,9 +3647,13 @@ int         funcdata::try_to_completion_function()
     if (is_stack_balance()) return 0;
     int loop = 0;
 
-    for (; loop < 4; loop++) {
+    for (; loop < 6; loop++) {
+        bblocks.mark_dynamic_reachability();
+
         for (int i = 0; i < bblocks.exitlist.size(); i++) {
             flowblock *outb = bblocks.exitlist[i];
+
+            if (!outb->is_dyn_reachable()) continue;
 
             pcodeop *lastop = outb->last_op();
 

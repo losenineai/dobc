@@ -63,6 +63,15 @@ public:
         /* 
         1. 在cbranch中被分析为不可达，确认为死 */
         unsigned f_dead : 1; 
+
+        /* f_dyn_reachable和f_dead语义上比较接近，只是f_dead一般用来表明为死以后，彻底从cfg中删除
+        而 f_dyn_reachable 只是表明在当前次大pass中，这个cfg node不可达，但是可能又分析了一次，
+        发现可达，只要核心pass没分析完，这个f_dyn_reachable只是一个比较临时性的语义而已，在核心的
+        cfg生成pass中走完以后，确认是 f_dyn_reachable 为0，会标识为 f_dead.
+        
+        f_dyn_reachable 会分析cbranch指令的条件是否为真，还是假，来判断一个块是否可达
+        */
+        unsigned f_dyn_reachable : 1;
         unsigned f_no_cmp : 1;
 
         unsigned f_switch_case : 1;
@@ -224,7 +233,6 @@ public:
     void        add_op(pcodeop *);
     void        insert(list<pcodeop *>::iterator iter, pcodeop *inst);
 
-
     Address     get_start(void);
 
     bool        is_back_edge_in(int i) { return in[i].label & a_back_edge; }
@@ -264,6 +272,10 @@ public:
 
     void        set_dead(void) { flags.f_dead = 1;  }
     int         is_dead(void) { return flags.f_dead;  }
+
+    void        set_dyn_reachable(void) { flags.f_dyn_reachable = 1;  }
+    void        clear_dyn_reachable(void) { flags.f_dyn_reachable = 0;  }
+    bool        is_dyn_reachable(void) { return flags.f_dyn_reachable;  }
     bool        is_irreducible() { return flags.f_irreducible;  }
     void        remove_op(pcodeop *inst);
     void        replace_in_edge(int num, flowblock *b);
@@ -502,6 +514,20 @@ public:
     /* 为了计算post-dom 树，需要临时增加结束节点，计算完毕以后，则删除exit节点 */
     void        add_exit();
     void        del_exit();
+
+    void        clear_dynamic_reachability();
+    /* 标注出cfg流图中的哪些块是可到达的 
+    
+    这个标注是参考heritage以后，cbranch的条件来判断的
+    
+    1. 假如为T，则都可达
+    2. true, true block可达
+    3. false, false block可达
+
+    它和 collect_reachable 函数的结果不一样，collect_reachable不在乎cbranch计算的值，它计算是一个"静态可达"
+    的结果
+    */
+    void        mark_dynamic_reachability();
 };
 
 

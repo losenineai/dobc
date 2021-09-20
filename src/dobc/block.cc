@@ -1433,3 +1433,49 @@ int         flowblock::update_cond()
 {
     return cond.update(this);
 }
+
+void        blockgraph::clear_dynamic_reachability()
+{
+    for (int i = 0; i < blist.size(); i++)
+        blist[i]->clear_dyn_reachable();
+}
+
+void        blockgraph::mark_dynamic_reachability()
+{
+    flowblock *b = get_entry_point(), *outb;
+    vector<flowblock *> q;
+    pcodeop *op;
+
+    clear_dynamic_reachability();
+
+    b->set_dyn_reachable();
+    b->set_mark();
+    q.push_back(b);
+
+    while (!q.empty()) {
+        b = q.front();
+        q.erase(q.begin());
+
+        op = b->last_op();
+        if ((op->opcode == CPUI_CBRANCH) && !op->get_in(1)->is_top()) {
+            outb = (op->get_in(1)->get_val()) ? b->get_true_block():b->get_false_block();
+            if (outb->is_mark()) continue;
+
+            outb->set_dyn_reachable();
+            outb->set_mark();
+            q.push_back(outb);
+            continue;
+        }
+
+        for (int i = 0; i < b->out.size(); i++) {
+            outb = b->get_out(i);
+            if (outb->is_mark()) continue;
+
+            outb->set_mark();
+            outb->set_dyn_reachable();
+            q.push_back(outb);
+        }
+    }
+
+    clear_marks();
+}

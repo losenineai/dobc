@@ -2020,9 +2020,10 @@ void        funcdata::collect_edges()
                 Address addr(d->getDefaultCodeSpace(), op->get_in(0)->get_val());
 
                 target_op = find_op(addr);
-                if (!target_op)
-                    throw LowlevelError("not found address ");
-                block_edge.push_back(new op_edge(op, target_op));
+                if (target_op)
+                    block_edge.push_back(new op_edge(op, target_op));
+                else
+                    printf("not found address[%llx]  \n", addr.getOffset());
                 break;
             }
 
