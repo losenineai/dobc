@@ -1745,11 +1745,31 @@ bool        funcdata::process_instruction(const Address &curaddr, bool &startbas
         emitter.exit_itblock();
     }
 
-    //if (flags.dump_inst)
-        d->trans->printAssembly(assem, curaddr);
 
-    assem.set_mnem(1);
-    d->trans->printAssembly(assem, curaddr);
+    try {
+        //if (flags.dump_inst) 
+        {
+            d->trans->printAssembly(assem, curaddr);
+        }
+
+        assem.set_mnem(1);
+        d->trans->printAssembly(assem, curaddr);
+    }
+    /* 这一个地方是无法避免的， 我们看以下代码:
+    
+    0x01040: bl r3
+    0x01042: data0 data1
+
+    当我们走到 1040 时，因为我们无法成功计算r3的地址，所以我们要继续往下，但是r3其实是一个noreturn函数，
+    我们继续fallthru时，结果找不到数据对应的指令直接就崩溃了。我们需要把崩溃的前一条pcode打上exit的标记，
+    这样在split_basic时，会在这里停止
+    */
+    catch (LowlevelError &err) {
+        printf("Instructon not implement 0x%llx\n", curaddr.getOffset());
+        oiter = --deadlist.end();
+        (*oiter)->flags.exit = 1;
+        return false;
+    }
     
     step = d->trans->oneInstruction(emitter, curaddr);
 
