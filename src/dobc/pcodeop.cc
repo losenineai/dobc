@@ -191,7 +191,7 @@ void            pcodeop::on_MULTIEQUAL()
     for (i = 0; i < inrefs.size(); i++) {
         vn = get_in(i);
         p = vn->def;
-        if (vn->is_constant()) {
+        if (vn->is_gen_constant()) {
             c.insert(vn->get_val());
             cn = vn;
             continue;
@@ -248,7 +248,7 @@ void            pcodeop::on_MULTIEQUAL()
             vn1 = p->get_in(i);
             p1 = vn1->def;
 
-            if (vn1->is_constant()) {
+            if (vn1->is_gen_constant()) {
                 if (!cn) cn = vn1;
                 else if (vn1->type != cn->type) {
                     goto top_label;

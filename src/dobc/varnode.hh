@@ -177,6 +177,8 @@ public:
     void            set_def(pcodeop *op);
     pcodeop*        get_def() { return def; }
     bool            is_constant(void) const { return type.height == a_constant; }
+    /* 判断是否是一种更通用的常量形式*/
+    bool            is_gen_constant(void) const { return type.height == a_constant || type.height == a_sp_constant || type.height == a_pc_constant;  }
     /* 判断是否时简单常数 ，这个主要是勇于判断当我们在ollvm做循环展开时，是在展开一个普通的循环还是ollvm循环
     */
     bool            is_simple_constant(void) const { return is_constant() && (get_val() >= 0 ) && (get_val() < 1024); }

@@ -3388,9 +3388,7 @@ int         funcdata::ollvm_deshell()
     dump_cfg(name, "orig0", 1);
 
     if (!is_complete_function()) {
-        do {
-            try_to_completion_function();
-        } while (is_complete_function());
+        try_to_completion_function();
     }
     else {
         flags.enable_peephole = 1;
@@ -3647,9 +3645,7 @@ int         funcdata::try_to_completion_function()
     if (is_stack_balance()) return 0;
     int loop = 0;
 
-    for (; loop < 6; loop++) {
-        bblocks.mark_dynamic_reachability();
-
+    while (!is_complete_function()) {
         for (int i = 0; i < bblocks.exitlist.size(); i++) {
             flowblock *outb = bblocks.exitlist[i];
 
@@ -3671,14 +3667,32 @@ int         funcdata::try_to_completion_function()
         heritage();
 
         dump_cfg(name, "complete" + to_string(loop), 1);
+        loop++;
     }
-
-    exit(0);
 
     return 0;
 }
 
 bool        funcdata::is_complete_function()
 {
-    return is_stack_balance();
+    int i;
+
+    bblocks.mark_dynamic_reachability();
+
+    for (i = 0; i < bblocks.exitlist.size(); i++) {
+        flowblock *b = bblocks.exitlist[i];
+        pcodeop *p = b->last_op();
+
+        if (!b->is_dyn_reachable()) continue;
+
+        if (p->flags.exit) continue;
+
+        if (p->callfd && !p->callfd->noreturn())
+            return false;
+
+        if ((p->opcode != CPUI_RETURN))
+            return false;
+    }
+
+    return true;
 }
