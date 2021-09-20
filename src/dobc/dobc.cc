@@ -91,15 +91,21 @@ int print_udchain(char *buf, pcodeop *op, uint32_t flags)
 
     if (out && out->uses.size()) {
         list<pcodeop *>::iterator iter = out->uses.begin();
+
+        pcodeop  *puse = NULL;
+
         i += sprintf(buf + i, " [u:");
         for (j = 0; iter != out->uses.end(); iter++, j++) {
             /* 最多打印limit个use */
-            if (j == uses_limit)
-                break;
+            if (!uses_limit) break;
 
-            i += sprintf(buf + i, "%d ", (*iter)->start.getTime());
+            if ((*iter) != puse) {
+                i += sprintf(buf + i, "%d ", (*iter)->start.getTime());
+                puse = *iter;
+                uses_limit--;
+            }
         }
-        if (iter != out->uses.end())
+        if (!uses_limit)
         /* 遇见没打印完的use，以省略号代替，*/
             i += sprintf(buf + i, "...]");
         else {
@@ -119,15 +125,21 @@ int print_udchain(char *buf, pcodeop *op, uint32_t flags)
         if (flags & PCODE_OMIT_MORE_DEF)
             defs_limit = 7;
 
+        pcodeop  *pdef = NULL;
+
         i += sprintf(buf + i, " [d:");
         for (j = 0; j < op->inrefs.size(); j++) {
-            if (j == defs_limit) break;
+            if (!defs_limit) break;
 
-            if (op->inrefs[j]->def)
+            pcodeop *def = op->inrefs[j]->def;
+            if (def && (pdef != def)) {
                 i += sprintf(buf + i, "%d ", op->inrefs[j]->def->start.getTime());
+                pdef = def;
+                defs_limit--;
+            }
         }
 
-        if (j == defs_limit)
+        if (!defs_limit)
             i += sprintf(buf + i, "...]");
         else {
             if (j > 0) i--;
