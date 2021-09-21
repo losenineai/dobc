@@ -1708,7 +1708,7 @@ void        funcdata::splice_block_basic(flowblock *bl)
 
     if (!bl->ops.empty()) {
         pcodeop *jumpop = bl->last_op();
-        if ((jumpop->opcode == CPUI_BRANCH) || (jumpop->opcode == CPUI_CBRANCH))
+        if ((jumpop->opcode == CPUI_BRANCH) || (jumpop->opcode == CPUI_CBRANCH) || (jumpop->opcode == CPUI_BRANCHIND))
             op_destroy(jumpop, 1);
     }
 
@@ -3387,18 +3387,19 @@ int         funcdata::ollvm_deshell()
 
     dump_cfg(name, "orig0", 1);
 
-    if (!is_complete_function()) {
+    if (!is_complete_function())
         try_to_completion_function();
-    }
-    else {
-        flags.enable_peephole = 1;
-        heritage();
-    }
+
+    flags.enable_peephole = 1;
+    heritage_clear();
+    heritage();
 
     while (!cbrlist.empty() || !emptylist.empty()) {
         cond_constant_propagation();
         dead_code_elimination(bblocks.blist, 0);
     }
+
+    dump_cfg(name, "orig1", 1);
 
     ollvm_detect_frameworkinfo();
 

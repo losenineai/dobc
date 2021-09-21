@@ -1759,7 +1759,7 @@ bool        funcdata::process_instruction(const Address &curaddr, bool &startbas
 
 
     try {
-        //if (flags.dump_inst) 
+        if (flags.dump_inst) 
         {
             d->trans->printAssembly(assem, curaddr);
         }
