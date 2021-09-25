@@ -937,12 +937,14 @@ pcodeop*    flowblock::get_cbranch_sub_from_cmp(pcodeop *&sub2)
     dobc *d = fd->d;
     vector<pcodeop *> q;
     varnode *in0, *in1;
+
+    sub2 = NULL;
+
     if (NULL == lastop || (lastop->opcode != CPUI_CBRANCH)) return NULL;
 
     op = lastop->get_in(1)->def;
     q.push_back(op);
 
-    sub2 = NULL;
 
     while (!q.empty()) {
         op = q.front();
