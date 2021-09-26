@@ -275,14 +275,14 @@ int high_cond::detect_operands(pcodeop *op)
 
     ops.push_back(op);
     while (!ops.empty()) {
-        op = *(ops.erase(ops.begin()));
+        op = ops.front();
+        ops.erase(ops.begin());
 
         for (int i = 0; i < op->inrefs.size(); i++) {
             varnode *vn = op->get_in(i);
 
             if (dobc::singleton()->is_greg(vn->get_addr())) {
                 if (op->inrefs.size() == 2) {
-
                     {
                         lhs = op->get_in(0);
                         rhs = op->get_in(1);
