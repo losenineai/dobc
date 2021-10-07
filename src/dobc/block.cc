@@ -1481,3 +1481,38 @@ void        blockgraph::mark_dynamic_reachability()
 
     clear_marks();
 }
+
+void        blockgraph::collect_unidirect_connected_block(blockedge *e, vector<flowblock *> &blks)
+{
+    vector<flowblock *> q;
+    blks.clear();
+
+    flowblock *b = e->point;
+
+    if (b->in.size() == 1) {
+        q.push_back(b);
+        b->set_mark();
+    }
+
+    /* FIXME:有BUG，输入为1的边要考虑去除去掉不可达的边 */
+    while (q.size()) {
+        b = q.front();
+        q.erase(q.begin());
+
+        blks.push_back(b);
+
+        for (int i = 0; i < b->out.size(); i++) {
+            flowblock *outb = b->get_out(i);
+
+            if (outb->is_mark()) continue;
+            if (outb->in.size() == 1) {
+                q.push_back(outb);
+                outb->set_mark();
+            }
+        }
+    }
+
+    for (int i = 0; i < blks.size(); i++) {
+        blks[i]->clear_mark();
+    }
+}

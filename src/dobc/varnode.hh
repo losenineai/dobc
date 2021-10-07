@@ -10,6 +10,8 @@
 /* 这里是因为Ghidra用Stackbase做 Space，offset都是负数，加了size以后，值被处理过以后不正确了 */
 #define STACK_BASE          0x10000
 
+class funcdata;
+
 enum height {
     a_top,
     /* 
@@ -164,7 +166,18 @@ public:
 	coverblock			simple_cover;
     list<pcodeop *>     uses;    // descend, Ghidra把这个取名为descend，搞的我头晕，改成use
 
-    varnode(int s, const Address &m);
+    /* 尝试收集这个变量的所有常量定义，
+    
+    这个值表，每次随着heritage重新生成
+    */
+    vector<varnode* >   const_defs;
+    /* 补充上面的const_defs，判断是否有无法分析的值 */
+    vector<varnode* >   top_defs;
+    /* 这个版本号，是用来判断const_defs里的值是否符合最新的heritage，假如不是就要清空 */
+    int heritage_ver = 0;
+    funcdata *fd = NULL;
+
+    varnode(funcdata *fd, int s, const Address &m);
     ~varnode();
 
     const Address &get_addr(void) const { return (const Address &)loc; }
@@ -304,6 +317,8 @@ public:
 		int n = simple_cover.dump(buf);
 		return n + cover.dump(buf + n);
 	}
+
+    void            collect_all_const_defs();
 };
 
 

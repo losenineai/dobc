@@ -48,7 +48,7 @@ int pass_regalloc_const_arm::run()
             vm_error("pass_regalloc_const_arm() failure");
 
         it = p->basiciter;
-        pf.add_copy_const(p->parent, it, varnode(4, d->i2reg(rm)), *pi1(p));
+        pf.add_copy_const(p->parent, it, varnode(fd, 4, d->i2reg(rm)), *pi1(p));
 
         p1 = *--it;
         fd->op_remove_input(p, 1);

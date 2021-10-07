@@ -954,11 +954,16 @@ public:
     3. 不是copy，也不是phi，认为其实一个定值
 
     @defs       这个数组里存了扫描到的常量，已去重
+    @tdefs      把所有无法计算的def都保存在这个数组内
     @dfnum      这个值表示，里面有多少次常量的定义，不去重
+    @savesame   把相同的值全部保存下来，这个是因为有些常量虽然值一样，但是定义在不同的block内，需要区分这些block
     @return     0           当前v的所有def都是常量，defs里的def就是v的所有def
                 1           v有值类型为top的def
     */
-    int         collect_all_const_defs(pcodeop *start, vector<varnode *> &defs, int &dfnum);
+    int         collect_all_const_defs(pcodeop *start, vector<varnode *> &defs, vector<varnode *> &tdefs, int &dfnum, int savesame);
+    int         collect_all_const_defs(pcodeop *start, vector<varnode *> &defs, vector<varnode *> &tdefs, int &dfnum) {
+        return collect_all_const_defs(start, defs, tdefs, dfnum, 0);
+    }
     /* 裁剪由collect_all_const_defs收集到的常量定义 
 
     有如下代码:
@@ -1110,6 +1115,12 @@ public:
     int         try_to_completion_function();
 
     void        phi_clear();
+    /* zr为0时，导致哪个边不可达 
+    
+    @return     0       成功，检测到不可达
+                -1      不符合规范，比如op的output不是zr，或者zr为0，但是对cbranch无影响
+    */
+    int         zr0_lead_to_unreachable_edge(pcodeop *op, blockedge *&e);
 };
 
 #endif

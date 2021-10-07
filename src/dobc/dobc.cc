@@ -221,10 +221,12 @@ void pcodeemit2::dump(const Address &addr, OpCode opc, VarnodeData *outvar, Varn
 
     pvec.push_back(fd->cloneop_lite(op));
 
+#if 0
     if (d->is_adr(addr)) {
         vn->set_pc_constant(vn->get_offset());
         vn->flags.from_pc = 1;
     }
+#endif
 
     prevp = op;
 
@@ -971,7 +973,7 @@ funcdata::funcdata(const char *nm, const Address &a, int siz, dobc *d1)
     bblocks(this),
     name(nm),
     alias(nm),
-    searchvn(0, Address(Address::m_minimal)),
+    searchvn(this, 0, Address(Address::m_minimal)),
     pf(this)
 {
     emitter.fd = this;
@@ -1041,7 +1043,7 @@ varnode*    funcdata::new_varnode(int s, const Address &m)
 
 varnode*    funcdata::create_vn(int s, const Address &m)
 {
-    varnode *vn = new varnode(s, m);
+    varnode *vn = new varnode(this, s, m);
 
     vn->create_index = vbank.create_index++;
     vn->lociter = loc_tree.insert(vn).first;
@@ -1051,7 +1053,7 @@ varnode*    funcdata::create_vn(int s, const Address &m)
 
 varnode*    funcdata::create_def(int s, const Address &m, pcodeop *op)
 {
-    varnode *vn = new varnode(s, m);
+    varnode *vn = new varnode(this, s, m);
     vn->create_index = vbank.create_index++;
     vn->set_def(op);
 
@@ -2067,16 +2069,25 @@ void        funcdata::collect_edges()
         case CPUI_CBRANCH:
             if (op->flags.itblock) {
                 list<pcodeop *>::const_iterator it = iter, next_it, it1;
-                pcodeop *p, *p1;
+                pcodeop *p;
 
 combine_it_label:
+                /*
+.text:0003E712 368 01 BF       ITTTT EQ
+.text:0003E714 368 24 99       LDREQ           R1, [SP,#0x360+var_2D0]
+.text:0003E716 368 08 68       LDREQ           R0, [R1]
+.text:0003E718 368 00 BA       REVEQ           R0, R0
+
+合并IT block种的指令为一个block
+                */
                 for (; (it != deadlist.end()) && (*it)->flags.itblock; it = next_it) {
                     p = *it;
                     next_it = ++it;
 
                     if (p->opcode == CPUI_CBRANCH) {
-                        if (cmp_itblock_cbranch_conditions(op, p))
+                        if (cmp_itblock_cbranch_conditions(op, p)) {
                             break;
+                        }
                         else {
                             op_unset_input(op, 0);
                             op_set_input(op, clone_varnode(p->get_in(0)), 0);
@@ -2101,16 +2112,16 @@ combine_it_label:
 我们把3e712开始的it块指令，全部粘合在了一起，结果发现下面的3E71E它也是一个it块，而这个it块的条件和上面一个
 IT块是完全一样的，这个时候我们需要把3E720 - 3E726的代码，和上面的 3E714-3E71A的指令粘合在一起
                 */
-                p = *it;
-                p1 = *++it;
-                if (p1 && p1->flags.itblock) {
-                    it1 = it;
-                    while (p1->opcode != CPUI_CBRANCH) p1 = *++it1;
 
-                    if (0 == cmp_itblock_cbranch_conditions(op, p1)) {
-                        it = it1;
+                p = NULL;
+                if (it != deadlist.end()) it++;
+                if (it != deadlist.end()) p = *it;
+
+                if (p && p->flags.itblock) {
+                    while (p->opcode != CPUI_CBRANCH) p = *++it;
+
+                    if (0 == cmp_itblock_cbranch_conditions(op, p))
                         goto combine_it_label;
-                    }
                 }
             }
 
@@ -2799,13 +2810,13 @@ pcodeop_lite*    funcdata::cloneop_lite(pcodeop *op)
     lite->opcode = op->opcode;
 
     if (op->output) {
-        vn = new varnode(op->output->size, op->output->get_addr());
+        vn = new varnode(this, op->output->size, op->output->get_addr());
 
         lite->output = vn;
     }
 
     for (int i = 0; i < sz; i++) {
-        varnode *vn = new varnode(op->get_in(i)->size, op->get_in(i)->get_addr());
+        varnode *vn = new varnode(this, op->get_in(i)->size, op->get_in(i)->get_addr());
 
         lite->inrefs[i] = vn;
     }
@@ -3452,9 +3463,37 @@ pcodeop*    funcdata::store_query(pcodeop *load, flowblock *b, varnode *pos, pco
 			if (p->flags.uncalculated_store) continue;
 
             varnode *a = p->get_in(1);
+            pcodeop *def, *def1;
+
+            def = a->def;
 
             if (a->type.height == a_top) {
-                if (b->fd == this) *maystore = p;
+                /* 判断是否在同一个函数内 */
+                if (b->fd == this) {
+                    def1 = load ? load->get_in(1)->def:NULL;
+                    /* 判断是否对同一个space在做操作 
+
+                    r1.5 = T
+                    
+                    store [r1.5], r2
+
+                    r0 = load r1
+
+                    在这里即使r1的值不可计算，也是可以关联的 
+                    */
+                    if (!def1 || (def1->get_in(0) != def->get_in(0))) {
+                        *maystore = p;
+                    }
+                    /* 
+
+                    FIXME: 后面要增加stack子空间的算法，这个只是临时处理下，为了应对libmetasec_ml:0x4fc58
+                    */
+                    else if ((def->opcode == def1->opcode) && def1->get_in(1)->is_constant() && def->get_in(1)->is_constant() 
+                        && (def1->get_in(1)->get_val() == def->get_in(1)->get_val())) {
+                        return p;
+                    }
+                }
+
                 return NULL;
             }
 
@@ -4345,6 +4384,11 @@ void        dobc::build_arm()
     ng_addr = trans->getRegister("NG").getAddr();
     ov_addr = trans->getRegister("OV").getAddr();
     pc_addr = trans->getRegister("pc").getAddr();
+
+    tzr_addr = trans->getRegister("tmpZR").getAddr();
+    tcy_addr = trans->getRegister("tmpCY").getAddr();
+    tng_addr = trans->getRegister("tmpNG").getAddr();
+    tov_addr = trans->getRegister("tmpOV").getAddr();
 
     argument_regs.push_back(&r0_addr);
     argument_regs.push_back(&r1_addr);

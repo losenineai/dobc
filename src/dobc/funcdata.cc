@@ -471,6 +471,10 @@ void        funcdata::place_multiequal(void)
             safevn = 1;
         }
 
+        static int trace = 0;
+
+        trace++;
+
         max = collect(addr, size, readvars, writevars, inputvars, flags);
 
 
@@ -483,8 +487,12 @@ void        funcdata::place_multiequal(void)
         后期我们要改成对simd类型指令，为8字节访问
         对普通寄存器，改成wordsize访问
         */
-        if (!BIT0(flags)) {
-#if 1
+#define IS_READ_WRITE_NOT_SAME(f)          !BIT0(f)
+
+        if (writevars.empty())
+            continue;
+
+        if (IS_READ_WRITE_NOT_SAME(flags)) {
             if (refinement(addr, max, readvars, writevars, inputvars)) {
                 iter = disjoint.find(addr);
                 size = (*iter).second.size;
@@ -493,7 +501,6 @@ void        funcdata::place_multiequal(void)
                 inputvars.clear();
                 collect(addr, size, readvars, writevars, inputvars, flags);
             }
-#endif
         }
 
         /* 我们在插入phi节点的时候，有些节点是不需要计算phi节点的 
@@ -510,9 +517,8 @@ void        funcdata::place_multiequal(void)
         if (readvars.empty() && writevars.empty() )
             continue;
 
-        if (!d->is_cpu_reg(addr) && !BIT1(flags) && !safevn) {
+        if (!d->is_cpu_reg(addr) && !BIT1(flags) && !safevn)
             continue;
-        }
 
         if (!BIT1(flags))
             calc_phi_placement2(writevars);
@@ -1049,6 +1055,8 @@ int         funcdata::ollvm_detect_frameworkinfo()
 
     printf("search maybe safezone alias start...\n");
     /* FIXME:后面要改成递归收集所有的load */
+
+#if 1
     pcodeop_set poss_set, visit;
     for (i = 0; i < ollvm.heads.size(); i++) {
         ollvmhead *head = ollvm.heads[i];
@@ -1080,7 +1088,7 @@ int         funcdata::ollvm_detect_frameworkinfo()
     }
     printf("search maybe safezone alias end...\n");
 
-
+#endif
     ollvm_copy_expand_all_vmhead();
 
     return 0;
@@ -1275,7 +1283,7 @@ int         funcdata::ollvm_on_unconst_def(pcodeop *p1, flowblock *pre, flowbloc
     if (p1->flags.mark_cond_copy_prop) return  ERR_NOT_DETECT_PROPCHAIN;
 
     pcodeop *p2;
-    vector<varnode *> defs;
+    vector<varnode *> defs, tdefs;
     int top, dfnum;
 
     if (p1->opcode == CPUI_COPY) {
@@ -1316,7 +1324,7 @@ int         funcdata::ollvm_on_unconst_def(pcodeop *p1, flowblock *pre, flowbloc
     }
 
 cond_copy_label:
-    top = collect_all_const_defs(p1, defs, dfnum);
+    top = collect_all_const_defs(p1, defs, tdefs, dfnum);
     p1->flags.mark_cond_copy_prop = 1;
 
     if (defs.size() > 1) {
@@ -1516,10 +1524,10 @@ int         funcdata::ollvm_detect_fsm2(ollvmhead *oh)
 
     /* 2个数都不是常数，需要递归扫描sub指令的 常数定义 */
     if (!in0->is_constant() && !in1->is_constant()) {
-        vector<varnode *> defs;
+        vector<varnode *> defs, tdefs;
 
         if (in0->def && (in0->def->opcode == CPUI_MULTIEQUAL)) {
-            collect_all_const_defs(in0->def, defs, dfnum);
+            collect_all_const_defs(in0->def, defs, tdefs, dfnum);
 
             if (defs.size() > 1) {
                 oh->st1 = in0->get_addr();
@@ -2188,7 +2196,8 @@ int funcdata::collect(Address addr, int size, vector<varnode *> &read, vector<va
         else if (vn->flags.input)
             input.push_back(vn);
 
-        if (prev && prev != vn->size) BIT0_CLR(flags);
+        if (prev && prev != vn->size) 
+            BIT0_CLR(flags);
         prev = vn->size;
     }
 
@@ -2894,14 +2903,14 @@ int         funcdata::cond_copy_propagation(varnode *phi)
 int         funcdata::cond_copy_expand(pcodeop *p, flowblock *b, int outslot)
 {
     flowblock *b1, *b2, *pb1, *pb2, *outb;
-    vector<varnode *> defs;
+    vector<varnode *> defs, tdefs;
     int i, have_top, dfnum;
     varnode *def;
     assert(p->opcode == CPUI_COPY || p->opcode == CPUI_LOAD || p->opcode == CPUI_MULTIEQUAL);
     assert(outslot >= 0);
     outb = b->get_out(outslot);
 
-    have_top = collect_all_const_defs(p, defs, dfnum);
+    have_top = collect_all_const_defs(p, defs, tdefs, dfnum);
 
     if (defs.size() == 0)
         return -1;
@@ -2949,7 +2958,7 @@ int         funcdata::cond_copy_expand(pcodeop *p, flowblock *b, int outslot)
 
 int         funcdata::ollvm_do_copy_expand(pcodeop *p, flowblock *b, int outslot)
 {
-    vector<varnode *> defs;
+    vector<varnode *> defs, tdefs;
     int top, dfnum;
 
     /*
@@ -2968,7 +2977,7 @@ int         funcdata::ollvm_do_copy_expand(pcodeop *p, flowblock *b, int outslot
     if (p->inrefs.size() != 2) return -1;
     if (p->parent->out.size() != 1) return -1;
 
-    top = collect_all_const_defs(p, defs, dfnum);
+    top = collect_all_const_defs(p, defs, tdefs, dfnum);
     if (top)
         return -1;
 
@@ -2983,14 +2992,14 @@ int         funcdata::ollvm_do_copy_expand(pcodeop *p, flowblock *b, int outslot
     return 0;
 }
 
-int         funcdata::collect_all_const_defs(pcodeop *start, vector<varnode *> &defs, int &dfnum)
+int         funcdata::collect_all_const_defs(pcodeop *start, vector<varnode *> &defs, vector<varnode *> &tdefs, int &dfnum, int keepsame)
 {
     pcodeop *p, *def;
     pcodeop_set visit;
     pcodeop_set::iterator it;
     vector<pcodeop *> q;
     varnode *in;
-    int i, j, have_top_def = 0;
+    int i, j, have_top_def = 0, not_visited;
 
     dfnum = 0;
 
@@ -3002,18 +3011,25 @@ int         funcdata::collect_all_const_defs(pcodeop *start, vector<varnode *> &
 
 #define cad_push_def(in)        do { \
             def = (in)->def; \
+            not_visited = (def && (visit.find(def) == visit.end())); \
             if (in->is_constant()) { \
                 dfnum++; \
-                for (j = 0; j < defs.size(); j++) { \
-                    if (defs[j]->get_val() == in->get_val()) break; \
+                if (!keepsame) { \
+                    for (j = 0; j < defs.size(); j++) { \
+                        if (defs[j]->get_val() == in->get_val()) break; \
+                    } \
+                    if (j == defs.size()) defs.push_back(in); \
                 } \
-                if (j == defs.size()) defs.push_back(in); \
+                else \
+                    defs.push_back(in); \
             } \
-            else if (def && (visit.find(def) == visit.end()) && ((def->opcode == CPUI_COPY) || (def->opcode == CPUI_MULTIEQUAL) || (def->opcode == CPUI_LOAD) || (def->opcode == CPUI_STORE))) { \
+            else if (not_visited && ((def->opcode == CPUI_COPY) || (def->opcode == CPUI_MULTIEQUAL) || (def->opcode == CPUI_LOAD) || (def->opcode == CPUI_STORE))) { \
                 q.push_back(def); \
                 visit.insert(def); \
             } \
-            else have_top_def = 1; \
+            else if (not_visited) { \
+                tdefs.push_back(in); \
+            } \
         } while (0)
 
         if (p->opcode == CPUI_COPY) {
@@ -3026,17 +3042,23 @@ int         funcdata::collect_all_const_defs(pcodeop *start, vector<varnode *> &
                 cad_push_def(in);
             }
         }
-        else if ((p->opcode == CPUI_LOAD) && (in = p->get_virtualnode()) && in->def && (in->def->opcode == CPUI_STORE)) {
-            in = in->def->get_in(2);
-            cad_push_def(in);
+        else if ((p->opcode == CPUI_LOAD)) {
+            if ((in = p->get_virtualnode()) && in->def && (in->def->opcode == CPUI_STORE)) {
+                in = in->def->get_in(2);
+                cad_push_def(in);
+            }
+            else
+                tdefs.push_back(p->output);
         }
         else if ((p->opcode == CPUI_STORE)) {
             in = p->get_in(2);
             cad_push_def(in);
         }
+        else
+            tdefs.push_back(p->output);
     }
 
-    return have_top_def;
+    return tdefs.size();
 }
 
 int         funcdata::cut_const_defs_on_condition(pcodeop *start, vector<varnode *> &defs)
@@ -3671,6 +3693,8 @@ int         funcdata::try_to_completion_function()
         loop++;
     }
 
+    exit(0);
+
     return 0;
 }
 
@@ -3696,4 +3720,24 @@ bool        funcdata::is_complete_function()
     }
 
     return true;
+}
+
+int         funcdata::zr0_lead_to_unreachable_edge(pcodeop *op, blockedge *&e)
+{
+    pcodeop *p;
+    if (poa(op) == d->tzr_addr) {
+        p = op->output->uses.front();
+        if (poa(p) == d->zr_addr) {
+            p = p->output->uses.front();
+            if (p && (p->opcode == CPUI_INT_NOTEQUAL) && p->get_in(1)->is_val(0)) {
+                p = p->output->uses.front();
+                if (p && (p->opcode == CPUI_CBRANCH)) {
+                    e = p->parent->get_true_edge();
+                    return 0;
+                }
+            }
+        }
+    }
+
+    return -1;
 }

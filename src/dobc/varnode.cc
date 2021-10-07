@@ -2,12 +2,13 @@
 #include "dobc.hh"
 #include "varnode.hh"
 
-varnode::varnode(int s, const Address &m)
+varnode::varnode(funcdata *f, int s, const Address &m)
     : loc(m)
 {
     if (!m.getSpace())
         return;
 
+    fd = f;
     size = s;
 
     spacetype tp = m.getSpace()->getType();
@@ -215,3 +216,24 @@ intb            varnode::get_val(void) const
 {
     return type.v;
 }
+
+void            varnode::collect_all_const_defs()
+{
+    int dfnum;
+
+#if 0
+    if (fd->heritage_times == heritage_ver)
+        return;
+#endif
+
+    const_defs.clear();
+    top_defs.clear();
+
+    if (is_gen_constant())
+        const_defs.push_back(this);
+
+    fd->collect_all_const_defs(def, const_defs, top_defs, dfnum, 1);
+
+    heritage_ver = fd->heritage_times;
+}
+

@@ -312,6 +312,7 @@ public:
     bool noreturn(void);
     /* 当一个block末尾是cbranch时， 一般它的比较条件是来自于cmp 
     cmp指令会产生一个sub指令，返回这个sub指令，假如没有，就返回NULL
+
     */
     pcodeop*    get_cbranch_sub_from_cmp(pcodeop *&less);
     pcodeop*    get_core_cmp() {
@@ -394,6 +395,7 @@ public:
     */
     bool            is_direct_connect_to(flowblock *to);
     int             update_cond();
+
 };
 
 class blockgraph {
@@ -528,6 +530,8 @@ public:
     的结果
     */
     void        mark_dynamic_reachability();
+    /* 从某一条边开始收集，唯一只能被条边到达的node */
+    void        collect_unidirect_connected_block(blockedge *e, vector<flowblock *> &blks);
 };
 
 

@@ -224,6 +224,12 @@ public:
     Address     ng_addr;
     Address     ov_addr;
     Address     pc_addr;
+
+    Address     tzr_addr;
+    Address     tcy_addr;
+    Address     tng_addr;
+    Address     tov_addr;
+
     set<Address> cpu_regs;
 	/* r0-sp */
     set<Address> liveout_regs;

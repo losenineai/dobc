@@ -83,7 +83,11 @@ public:
             后面一种opcode，我们假设alloc出的内存空间值都是0，这个是有问题的?
             */
         unsigned val_from_sp_alloc : 1;     // 这个load的值并非来自于store，而是来自于sp的内存分配行为
-		unsigned uncalculated_store : 1;	// 这个store节点是不可计算的
+        /* 这个store节点是无法计算的，它的无法计算是来自于被混淆或vmp以前本身就是无法计算，而不是 
+        因为混淆本身导致的
+        
+        NOTE:这个分析可能是错的 */
+		unsigned uncalculated_store : 1;	
         unsigned itblock : 1;
         unsigned mark_cond_copy_prop: 1;    
 

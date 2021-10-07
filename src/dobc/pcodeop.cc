@@ -332,13 +332,13 @@ int             pcodeop::on_cond_MULTIEQUAL2()
 
     funcdata *fd = parent->fd;
     pcodeop *topp;
-    vector<varnode *> defs;
+    vector<varnode *> defs, tdefs;
     int ret, dfnum;
 
     if ((parent->in.size() != 2) || all_inrefs_is_constant() || all_inrefs_is_top() )
         return TOP;
 
-    ret = fd->collect_all_const_defs(this, defs, dfnum);
+    ret = fd->collect_all_const_defs(this, defs, tdefs, dfnum);
     /* 假如当前phi节点的常量定义都是不一样的，则不计算  */
     if (ret || (defs.size() == dfnum))
         return ret;
@@ -897,7 +897,7 @@ int             pcodeop::compute(int inslot, flowblock **branch)
 
         NOTE:这样写的pattern会不会太死了？改成递归收集a的所有常数定义，但是这样会不会效率太低了。
         */
-        else if (in1->is_constant()  && (in1->get_val() == 0)
+        else if (in1->is_val(0)
             && (op = in0->def) && (op->opcode == CPUI_INT_SUB)
             && (op->get_in(0)->is_constant() || op->get_in(1)->is_constant())) {
             _in0 = op->get_in(0);
@@ -909,7 +909,7 @@ int             pcodeop::compute(int inslot, flowblock **branch)
             int equal = 0, notequal = 0;  // 2:top, 1:equal, 0:notequal
 
             output->set_top();
-            if (phi && (phi->opcode == CPUI_MULTIEQUAL)) {
+            if (phi && (phi->opcode == CPUI_MULTIEQUAL) && phi->all_inrefs_is_constant()) {
                 for (i = 0; i < phi->inrefs.size(); i++) {
                     vn = phi->get_in(i);
                     if (!vn->is_constant()) break;
@@ -923,9 +923,88 @@ int             pcodeop::compute(int inslot, flowblock **branch)
                 else if (equal == phi->inrefs.size())   
                     output->set_val(1);
             }
+        /*
+        libmetasec_ml.so:0x4f928
+
+        p1189 [ T ]:(%r0.343:4) = COPY (r4fa8c.0:4)    5fbea978 [u:1192 1478
+
+        p1192 [ T ]:(u94900.69:4) = INT_SUB (%r1.17:4) (%r0.343:4) T [u:1194] [d:399 1189]
+        p1194 [ T ]:(%tmpZR.222:1) = INT_EQUAL (u94900.69:4) (#0:4)
+        p1196 [ T ]:(%ZR.185:1) = COPY (%tmpZR.224:1)  
+
+        p1199 [ T ]:(u82200.57:1) = INT_NOTEQUAL (%ZR.185:1) (#0:1)
+        p1200 [ T ]:CBRANCH (r501a2.-1:1) (u82200.57:1)
+
+
+        情况1:上图中，r0的值是常量，r1.17的所有值收集完毕以后，没有等于r0的，那么虽然我们不知道 u94900 的具体值，
+        但是我们知道tmpZR一定为0，因为 u94900 一定不为0
+
+        情况2: 还有一种情况是，虽然我们在r1.17里面找到了等于r0.343的值，但是因为这个tmpZR会导致p1200的cbranch某个
+        分支为死，而那个定值来自于为死的那个分支，那么u94900也一定不为0
+
+
+        */
+            //else if (_in1->is_constant()) 
+            else if (0) 
+            {
+                _in0->collect_all_const_defs();
+
+                vector<varnode *> toplist = _in0->top_defs;
+                vector<flowblock *> blks;
+                blockedge *e;
+
+                /* 判断当前这个pcode可以导致cbranch走向不同的分支，假如是的话，获取倒那个无法走向的分支(neg branch)，
+                然后收集neg branch可以唯一到达的快, blks*/
+                if (0 == fd->zr0_lead_to_unreachable_edge(this, e)) {
+                    fd->bblocks.collect_unidirect_connected_block(e, blks);
+                }
+
+                /* 把在toplist中，定义在blks中的节点删除 */
+                if (blks.size()) {
+                    while (toplist.size()) {
+                        vn = toplist[0];
+                        b = vn->def ? vn->def->parent : NULL;
+                        if (!b) break;
+
+                        for (i = 0; i < blks.size(); i++) {
+                            if (blks[i] == b)
+                                break;
+                        }
+
+                        if (i == blks.size()) break;
+
+                        toplist.erase(toplist.begin());
+                    }
+                }
+
+                if (toplist.size())
+                    goto compute_exit_label;
+
+                for (i = 0; i < _in0->const_defs.size(); i++) {
+                    vn = _in0->const_defs[i];
+                    b = vn->def ? vn->def->parent : NULL;
+                    if (vn->type == _in1->type) {
+                        if (b) {
+                            for (i = 0; i < blks.size(); i++) {
+                                if (blks[i] == b)
+                                    break;
+                            }
+
+                        /* 当我们发现存在某个常量在比较列表中，但是在不可达快中，那么继续扫描 */
+                            if (i < blks.size())
+                                continue;
+                        }
+                        break;
+                    }
+                }
+
+                if ((i == _in0->const_defs.size()))
+                    output->set_val(0);
+            }
         }
-        else
+        else {
             output->set_top();
+        }
         break;
 
     case CPUI_INT_NOTEQUAL:
@@ -1452,6 +1531,8 @@ int             pcodeop::compute(int inslot, flowblock **branch)
         break;
     }
 
+
+compute_exit_label:
     /* 返回跳转地址 */
     if ((this == parent->last_op()) && (parent->out.size() == 1))
         *branch = parent->get_out(0);
