@@ -3,6 +3,7 @@
 
 -s ../../../Processors/ARM/data/languages/ARM8_le.sla -st 360free -I ../../../data/vmp/360_1/libjiagu.so
 
+-c  ../../../Ghidra  -i  ../../../data/斗鱼/edfc5f175821c4605ebb11399953054/libmakeurl2.4.9.so -sd -da 0x342d 0x407d 0x367d 0x15521 0x366f5
 -c  ../../../Ghidra  -i  ../../../data/斗鱼/edfc5f175821c4605ebb11399953054/libmakeurl2.4.9.so -sd -da 0x342d 0x407d 0x367d
 -c  ../../../Ghidra  -i  ../../../data/斗鱼/edfc5f175821c4605ebb11399953054/libmakeurl2.4.9.so -sd -da 0x407d
 -c  ../../../Ghidra  -i  ../../../data/斗鱼/edfc5f175821c4605ebb11399953054/libmakeurl2.4.9.so -sd -da 0x367d
